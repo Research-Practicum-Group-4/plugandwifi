@@ -1,0 +1,83 @@
+# ==========================================
+# Operating System Files
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ==========================================
+# IDEs and Editors
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ==========================================
+# Environment Variables & Secrets (CRITICAL)
+# ==========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+credentials.json
+
+# ==========================================
+# Node.js & React (Frontend Web & Mobile)
+# ==========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+/frontend-web/build/
+/frontend-web/dist/
+/frontend-mobile/.expo/
+/frontend-mobile/web-build/
+*.tsbuildinfo
+
+# ==========================================
+# Python & Flask (Backend)
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+.Python
+.pytest_cache/
+instance/
+.webassets-cache
+
+# ==========================================
+# Data Science & Machine Learning (Data-ML)
+# ==========================================
+.ipynb_checkpoints/
+# Ignore large dataset files to prevent repository bloating
+*.csv
+*.dat
+*.out
+*.parquet
+# Ignore locally generated ML models
+*.pkl
+*.h5
+*.joblib
+
+# ==========================================
+# Logs and Local Databases
+# ==========================================
+*.log
+*.sqlite3
+*.db
+
+# ==========================================
+# Docker
+# ==========================================
+.docker-ignore
