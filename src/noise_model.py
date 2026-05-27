@@ -109,7 +109,7 @@ VENUE_HOUR_OVERRIDES: dict[str, dict[int, float]] = {
 }
 
 # Weekend amplifier
-WEEKEND_FACTOR = 1.15 
+WEEKEND_FACTOR = 1.15
 WEEKDAY_FACTOR = 1.00
 
 
@@ -160,7 +160,7 @@ def apply_to_venues(db_path: str = "data/processed/venues.db") -> pd.DataFrame:
     print(f"Applying noise model to {len(venues):,} venues...")
 
     venues["noise_score"] = venues["cuisine_type"].apply(
-        lambda c: noise_score(c, hour=14, weekday=1) 
+        lambda c: noise_score(c, hour=14, weekday=1)
     )
     venues["noise_level"] = venues["noise_score"].apply(noise_label)
     venues["best_hours_for_work"] = venues["cuisine_type"].apply(

@@ -148,12 +148,16 @@ if __name__ == "__main__":
 
     save(df)
 
-    # Runnig noise_model.py
-    print("\nApplying noise model...")
     import sys
     sys.path.insert(0, "src")
-    from noise_model import apply_to_venues
-    apply_to_venues(OUTPUT_DB)
+
+    print("\nApplying noise model...")
+    from noise_model import apply_to_venues as apply_noise
+    apply_noise(OUTPUT_DB)
+
+    print("\nApplying wifi model...")
+    from wifi_model import apply_to_venues as apply_wifi
+    apply_wifi(OUTPUT_DB)
 
     print("\nSample:")
     con = sqlite3.connect(OUTPUT_DB)
