@@ -4,20 +4,20 @@ import sqlite3
 import pandas as pd
 
 
-WIFI_INFERRED: dict[str, bool | None] = {
-    "Coffee/Tea": True,
-    "Hotel Lobby": True,
-    "Bakery Products/Desserts": None,
-    "Restaurant": None,
+wifi_inferred = {
+    "cafe": True,
+    "hotel": True,
+    "bakery": None,
+    "restaurant": None,
 }
 
 
-def infer_wifi(cuisine: str) -> bool | None:
-    return WIFI_INFERRED.get(cuisine)
+def infer_wifi(cuisine):
+    return wifi_inferred.get(cuisine)
 
 
-def apply_to_venues(db_path: str = "data/processed/venues.db") -> pd.DataFrame:
-    con    = sqlite3.connect(db_path)
+def apply_to_venues(db_path: str = "data/processed/venues.db"):
+    con = sqlite3.connect(db_path)
     venues = pd.read_sql("SELECT * FROM venues", con)
 
     venues["inferred_wifi"] = venues["cuisine_type"].apply(infer_wifi).astype("boolean")
@@ -27,11 +27,6 @@ def apply_to_venues(db_path: str = "data/processed/venues.db") -> pd.DataFrame:
     venues.to_csv("data/processed/nyc_venues.csv", index=False)
     con.close()
 
-    confirmed = venues["has_wifi"].notna().sum()
-    inferred  = venues["inferred_wifi"].notna().sum()
-    print(f"OSM-confirmed wifi: {confirmed:,} venues")
-    print(f"Inferred wifi: {inferred:,} venues")
-    print(f"Unknown: {(venues['inferred_wifi'].isna() & venues['has_wifi'].isna()).sum():,} venues")
     return venues
 
 
