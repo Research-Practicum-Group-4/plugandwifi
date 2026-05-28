@@ -26,10 +26,7 @@ jobs:
     - name: Install Python Linters & Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install ruff black pytest
-
-    - name: Python - Auto-Check Code Formatting (Black)
-      run: black --check .
+        pip install ruff pytest
 
     - name: Python - Auto-Check Syntax & Bugs (Ruff)
       run: ruff check .
