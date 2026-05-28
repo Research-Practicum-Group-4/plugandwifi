@@ -12,7 +12,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Download the project source code
     - name: Checkout Code
       uses: actions/checkout@v4
 
@@ -29,13 +28,13 @@ jobs:
         python -m pip install --upgrade pip
         pip install ruff black pytest
 
-    - name: [Python] Auto-Check Code Formatting (Black)
+    - name: Python - Auto-Check Code Formatting (Black)
       run: black --check .
 
-    - name: [Python] Auto-Check Syntax & Bugs (Ruff)
+    - name: Python - Auto-Check Syntax & Bugs (Ruff)
       run: ruff check .
 
-    - name: [Python] Run Base Environment Test (Flexible)
+    - name: Python - Run Base Environment Test (Flexible)
       run: pytest || echo "No tests found or test directory missing, skipping..."
 
     # ========================================================
@@ -46,8 +45,8 @@ jobs:
       with:
         node-version: '18'
 
-    - name: [React] Install Prettier Globally
+    - name: React - Install Prettier Globally
       run: npm install -g prettier
 
-    - name: [React] Auto-Check Code Formatting (Prettier)
+    - name: React - Auto-Check Code Formatting (Prettier)
       run: prettier --check "**/*.{js,jsx,ts,tsx,json,css,md}"
