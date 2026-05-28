@@ -140,7 +140,7 @@ if __name__ == "__main__":
     df       = parse_elements(elements)
     df       = assign_borough(df)
 
-    print(f"\nVenue breakdown:")
+    print("\nVenue breakdown:")
     print(df["cuisine_type"].value_counts().to_string())
 
     print(f"\nWiFi data available for {df['has_wifi'].notna().sum()} venues")
