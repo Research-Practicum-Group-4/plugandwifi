@@ -1,0 +1,24 @@
+
+Plug&Wifi -- DoR & DoD
+Definition of Ready & Definition of Done
+Definition of Ready (DoR)
+A user story can be pulled into a sprint only when it meets all checkboxes: Structured format: "As a [User Role], I want to [Perform an Action] so that
+[Value/Goal is Achieved]." Granular Gherkin criteria: At least 2 distinct Given / When / Then scenarios. Team hour estimate: Estimated in development hours (no story > 20h without
+being split). Dependency mapping: Dependencies and external API touchpoints
+documented. UX/UI artefacts available: Wireframes/screens/interactions available. Scope alignment check: Reviewed for MVP alignment by Product & UX lead.
+Definition of Done (DoD)
+A user story is complete and demo-ready only when: Staging verification: All acceptance criteria pass in staging. Responsive fluidity: Works on desktop (1280px) and mobile (375px). Peer code review: Reviewed by at least one teammate. Zero regression impact: No automated tests fail and no regressions
+introduced. API payload integrity: Endpoints follow REST; correct HTTP codes +
+validation errors. DB consistency: Referential integrity preserved; no orphan rows.
+
+Plug&Wifi -- DoR & DoD
+
+1
+
+Backlog sync: Marked closed in the tracking board by Scrum Master. Visual sign-off: Product & UX lead confirms match to wireframes. Docs updated: Architecture/models/API wiki updated for changes.
+
+Plug&Wifi -- DoR & DoD
+
+2
+
+
