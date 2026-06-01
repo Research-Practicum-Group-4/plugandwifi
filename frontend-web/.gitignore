@@ -38,6 +38,4 @@ vite.config.ts.timestamp-*
 *.jpg
 
 # Personal
-_contexts/
 .prompts.md
-pandoc_convertor.sh

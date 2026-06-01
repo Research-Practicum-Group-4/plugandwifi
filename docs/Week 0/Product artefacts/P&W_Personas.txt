@@ -1,0 +1,44 @@
+
+Plug&Wifi -- Personas
+User personas
+Three user personas were developed from primary problem research, field observations, competitive market analysis, and team ideation. They represent the primary customer archetypes the minimum viable product (MVP) must satisfy.
+Persona 1: Daniel Moreira
+Role: International Business Traveller
+Age / Location: 42 · Based in Lisbon (travels across major US hubs)
+Quote: "I just need a quiet corner with Wi-Fi and a plug for 90 minutes -- without paying for a full-day pass."
+Core Goal: Find a reliable, professional, and quiet workspace for 1­2 hours between scattered client meetings without overpaying or wasting time searching on foot.
+Pain Points: Faced with awkward schedule gaps. Loud cafés lack guaranteed power outlets, while traditional coworking day passes (35+) are costprohibitive for a brief stay. Typically wastes 20­30 minutes searching on arrival.
+Behaviours: Books all travel, logistics, and work tools in advance via mobile. Heavily checks Google Maps but finds a lack of real-time workspace metrics. Expense-reports workspace costs directly to clients. Highly loyal to specific hospitality venues that work.
+Key Scenario: Daniel has a 100-minute gap before his next afternoon meeting in Barcelona. He opens the Flexible Space Finder web app on his mobile browser, filters for quiet + plug + WiFi , selects an authorized hotel lobby 5 minutes away, instantly books a 90-minute slot, and arrives to find his seat secured.
+
+Plug&Wifi -- Personas
+
+1
+
+Persona 2: Aoife Kelly
+Role: Freelance UX Designer
+Age / Location: 31 · New York
+Quote: "Home is full of distractions and coworking is too expensive unless I'm there all day."
+Core Goal: Access a reliable, plugged-in workspace near wherever she happens to be for 2­3 hour focus blocks, at a price point that makes sense for standalone single sessions.
+Pain Points: Cannot justify a full 35 day pass for a brief work window. Neighborhood café Wi-Fi is unpredictable, and she feels guilty or is asked to move on by staff when staying too long ("laptop squatting"). Balances tight project deadlines around childcare and school runs.
+Behaviours: Executes frequent short bursts of focused work. Highly pricesensitive. Prefers independent neighborhood cafés and local hospitality gems over corporate hotel lobbies. Frequently searches for workspace last-minute at 9:00 AM.
+Key Scenario: Aoife has a critical client presentation to finalize before 1:00 PM. She needs exactly 2 hours of isolated focus with reliable Wi-Fi and power. She opens the app, sorts by proximity and "no time limit", locates an authorized partner café 8 minutes away, and books a 9:30 AM ­ 11:30 AM table slot for a flat fee of 9.
+Persona 3: Lars Eriksson
+Role: Tech Founder / Remote-First Team Lead
+Age / Location: 38 · New York
+Quote: "My team is scattered across the city. I need somewhere we can actually meet and work without booking a whole meeting room."
+Core Goal: Book a micro-workspace or dedicated table layout for 2­3 team members in a relaxed, professional venue for informal working sessions and lightweight team catch-ups.
+
+Plug&Wifi -- Personas
+
+2
+
+Pain Points: Traditional meeting rooms are expensive overkill for lightweight syncs. Regular public cafés cannot guarantee a large cohesive group table. No existing platform displays layout capacity or live ambient noise levels before arrival.
+Behaviours: Plans team sessions 2­3 days in advance. Coordinates heavily using Slack, Notion, and digital calendars. Willing to pay a premium for reliable comfort. Values venues that offer high-quality coffee and a collaborative, relaxed working atmosphere.
+Key Scenario: Lars wants to organize a 3-hour collaborative working block with two local contractors on Thursday afternoon. He applies filters for quiet + group-friendly + plug access on the platform, finds an authorized hotel lounge featuring a large communal table, and safely books a 14:00­17:00 slot for 3 confirmed seats.
+
+Plug&Wifi -- Personas
+
+3
+
+

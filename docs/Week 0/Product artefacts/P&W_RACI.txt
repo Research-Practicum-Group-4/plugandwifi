@@ -1,0 +1,172 @@
+
+Plug&Wifi -- Team roles & RACI
+
+Team roles & RACI matrix
+
+Core team roles & responsibilities
+1. Product & UX Lead Responsibilities: Owns scope, refines requirements, designs wireframes, design sign-off.
+2. Scrum Master / Project Manager Responsibilities: Defines roles, sets up tools, manages p&p requests on Github facilitates ceremonies, tracks velocity, manages backlog, removes blockers.
+3. Web Frontend Lead Responsibilities: Builds responsive React UI, state handling, component integration with APIs.
+4. Backend & Database Lead Responsibilities: Flask logic, JWT auth, SQLAlchemy + MySQL schema, availability validation, mapping APIs.
+5. Data & ML Lead Responsibilities: Seed data, suitability scoring (0­100), model evaluation vs baselines.
+6. QA / Testing Lead Responsibilities: Automated tests, cross-platform verification, bug management, criteria validation.
+
+RACI definitions
+ R (Responsible): Executes the work  A (Accountable): Final sign-off / decision-making (one per activity)  C (Consulted): Provides input  I (Informed): Kept up to date
+
+Team RACI matrix
+
+Activity / Deliverable
+Backlog creation & MoSCoW prioritization
+Responsive UI/UX wireframes
+
+Product & UX Lead
+
+Scrum Master
+
+Web Frontend Lead
+
+Backend & DB Lead
+
+Data & ML Lead
+
+QA / Testing Lead
+
+ A /  R  A/  R  C
+
+ C
+
+ C
+
+ I
+
+ A /  R  A/  R  R
+
+ I
+
+ I
+
+ C
+
+Plug&Wifi -- Team roles & RACI
+
+1
+
+Activity / Deliverable
+
+Product & UX Lead
+
+Frontend
+
+ components &
+mobile search
+
+I
+
+layout
+
+Flask REST endpoints &
+
+ I
+
+JWT auth
+
+ MySQL schema
+
+design & data
+
+I
+
+seeding
+
+Suitability scoring &
+
+ C
+
+ranking
+
+End-to-end integration
+
+ C
+
+testing
+
+Cloud
+
+deployment (Vercel &
+
+ I
+
+Render)
+
+Final MVP
+
+demo &
+
+(Define)
+
+documentation
+
+Scrum Master
+ C  C  I  I  C  I
+(Define)
+
+Web Frontend Lead
+
+Backend & DB Lead
+
+Data & ML Lead
+
+QA / Testing Lead
+
+ A /  R  C
+
+ I
+
+ R
+
+ C
+
+ A /  R  I
+
+ R
+
+ I
+
+ A /  R  R
+
+ I
+
+ I
+
+ C
+
+ A /  R  R
+
+ R
+
+ R
+
+ R
+
+ A /  R
+
+ R
+
+ A /  R  I
+
+ C
+
+(Define)
+
+(Define)
+
+(Define)
+
+(Define)
+
+Plug&Wifi -- Team roles & RACI
+
+2
+
+
