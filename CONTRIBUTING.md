@@ -29,7 +29,7 @@ Our repository follows a structured branching model to protect the production co
 
 To ensure seamless integration with modern AI agent tools (e.g., Cursor, GitHub Copilot) inside the repository, we enforce a strict file naming format:
 
-* **Strict Rule:** **NEVER use spaces** in any filename or documentation filename. Spaces break the `@` file-tagging auto-complete function in AI developer interfaces and cause unexpected script parsing errors.
+* **Strict Rule:** **NEVER use spaces** in any filename or documentation filename. Spaces break the symbol-tagging auto-complete function in various developer tools and cause unexpected script parsing errors during cross-platform execution.
 * **Format:** All file names, documentation files under `/docs`, and script assets MUST use **`snake_case`** (lowercase letters connected by underscores).
 * *Examples:*
     * ❌ `Sprint 1 Report.md` ➡️ 🎯 `sprint_1_report.md`
