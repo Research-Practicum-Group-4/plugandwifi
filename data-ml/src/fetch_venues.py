@@ -139,3 +139,6 @@ if __name__ == "__main__":
 
     from rating_model import apply_to_venues as apply_ratings
     apply_ratings(DB)
+
+    from pricing_model import apply_to_venues as apply_prices
+    apply_prices(DB)
