@@ -7,7 +7,7 @@ base_level= {
     "bakery": 0.5,
     "hotel": 0.3,
     "restaurant": 0.65,
-}
+    }
 
 default_noise= 0.5 
 

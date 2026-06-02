@@ -89,7 +89,6 @@ def parse_elements(elements):
             "best_hours_for_work": None,
             "hourly_profile": None,
             "partner": False,
-            "data_source": "openstreetmap",
         })
 
     df = pd.DataFrame(rows)
@@ -134,3 +133,6 @@ if __name__ == "__main__":
 
     from transit_model import apply_to_venues as apply_transit
     apply_transit(DB)
+
+    from plug_model import apply_to_venues as apply_plug
+    apply_plug(DB)

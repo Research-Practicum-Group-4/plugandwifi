@@ -21,7 +21,7 @@ def apply_to_venues(db_path: str = "data/processed/venues.db"):
     venues = pd.read_sql("SELECT * FROM venues", con)
 
     venues["inferred_wifi"] = venues["cuisine_type"].apply(infer_wifi).astype("boolean")
-    venues["wifi_user_reported"] = pd.array([pd.NA] * len(venues), dtype="boolean")
+    venues["wifi_user_reported"] = None
 
     venues.to_sql("venues", con, if_exists="replace", index=False)
     venues.to_csv("data/processed/nyc_venues.csv", index=False)
