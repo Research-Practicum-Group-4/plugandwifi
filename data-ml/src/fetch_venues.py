@@ -136,3 +136,6 @@ if __name__ == "__main__":
 
     from plug_model import apply_to_venues as apply_plug
     apply_plug(DB)
+
+    from rating_model import apply_to_venues as apply_ratings
+    apply_ratings(DB)
