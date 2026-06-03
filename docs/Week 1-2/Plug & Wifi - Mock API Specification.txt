@@ -1,39 +1,0 @@
-Plug & Wifi - Mock API Specification (Sprint 1)
-Authentication
-POST /api/auth/login
-Request
-{ "email": "sunmin@test.com", "password": "123456" }
-Response
-{ "access_token": "mock_jwt_token", "user": { "id": 1, "full_name": "Sunmin Lee", "email": "sunmin@test.com", "role": "user" } }
-Venue List
-GET /api/venues
-Response
-[ { "id": 1, "venue_name": "UCD Library", "category": "Library", "distance_km": 1.2, "wifi": true, "plug_access": true, "quietness_score": 5, "workspace_score": 96, "availability": true,
-1
-
-"hourly_price": 3.0 }, { "id": 2, "venue_name": "Starbucks Ranelagh", "category": "Cafe", "distance_km": 0.8, "wifi": true, "plug_access": true, "quietness_score": 3, "workspace_score": 72, "availability": true, "hourly_price": 5.0 } ]
-Venue Detail
-GET /api/venues/{id}
-Response
-{ "id": 1, "venue_name": "UCD Library", "category": "Library", "address": "University College Dublin, Dublin 4", "latitude": 53.3078, "longitude": -6.2230, "wifi": true, "plug_access": true, "quietness_score": 5, "workspace_score": 96, "rating": 4.8, "opening_hours": "08:00 - 22:00", "description": "Quiet study environment with reliable Wi-Fi and power outlets." }
-Availability
-GET /api/venues/{id}/availability
-Response
-2
-
-{ "venue_id": 1, "available_slots": [ {
-"slot_id": 1, "start_time": "09:00", "end_time": "10:00", "available": true }, { "slot_id": 2, "start_time": "10:00", "end_time": "11:00", "available": true } ] }
-Booking
-POST /api/bookings
-Request
-{ "venue_id": 1, "slot_id": 1, "duration_hours": 1 }
-Response
-{ "booking_id": 101, "status": "confirmed", "message": "Booking created successfully." }
-3
-
-Recommendations
-GET /api/recommendations
-Response [ { "rank": 1, "venue_id": 1, "venue_name": "UCD Library", "workspace_score": 96 }, { "rank": 2, "venue_id": 2, "venue_name": "Starbucks Ranelagh", "workspace_score": 72 } ]
-4
-
-
