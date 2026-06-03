@@ -1,9 +1,11 @@
-# Plug & Wifi - Mock API Specification (Sprint 1)
+# Plug & Wifi - Mock API Specification (Sprint 1 Final)
 
-## Design Principles
+---
+
+# Design Principles
 
 * Use collected feature names whenever possible.
-* Avoid unnecessary renaming between Data Collection → Database → Backend → Frontend.
+* Avoid unnecessary renaming between Data Collection, Database, Backend, Frontend, and ML.
 * Separate features into:
 
   * Display
@@ -15,6 +17,7 @@
   * Generated Features
   * Future Features
 * Exclude public holiday logic from Sprint 1.
+* Use mock values where real data is not yet available.
 
 ---
 
@@ -22,7 +25,7 @@
 
 ## 1. Display
 
-The feature is shown to users on the screen.
+The feature is shown to users on the screen to provide information.
 
 ### Directly Collected
 
@@ -61,7 +64,7 @@ The feature is shown to users on the screen.
 
 The feature is used to narrow down search results.
 
-### Supported Filters
+### Sprint 1
 
 * cuisine_type
 * borough
@@ -70,7 +73,7 @@ The feature is used to narrow down search results.
 * opening_now
 * noise_level
 
-### Future Filters
+### Future
 
 * nearest_subway_m
 * nearest_bus_m
@@ -81,9 +84,9 @@ The feature is used to narrow down search results.
 
 ## 3. Machine Learning
 
-The feature is used for venue ranking and recommendation.
+The feature is used to improve recommendations and help provide more suitable venues to users.
 
-### ML Features
+### Sprint 1
 
 * cuisine_type
 * cuisine_detail
@@ -98,7 +101,7 @@ The feature is used for venue ranking and recommendation.
 * seats_avail
 * total_seats
 
-### Future ML Features
+### Future
 
 * nearest_subway_m
 * nearest_bus_m
@@ -111,7 +114,283 @@ The feature is used for venue ranking and recommendation.
 
 ---
 
-# Venue List API
+# Database Schema
+
+## users
+
+```sql
+CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
+    full_name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT DEFAULT 'user',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+## providers
+
+```sql
+CREATE TABLE providers (
+    provider_id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(user_id),
+
+    company_name TEXT,
+    contact_email TEXT,
+    contact_phone TEXT,
+
+    verified BOOLEAN DEFAULT FALSE,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+## venues
+
+```sql
+CREATE TABLE venues (
+    venue_id TEXT PRIMARY KEY,
+
+    name TEXT,
+    osm_type TEXT,
+
+    cuisine_type TEXT,
+    cuisine_detail TEXT,
+
+    phone TEXT,
+    website TEXT,
+
+    building_number TEXT,
+    street TEXT,
+    zipcode TEXT,
+
+    borough TEXT,
+
+    lat DECIMAL(9,6),
+    lon DECIMAL(9,6),
+
+    opening_hours TEXT,
+    opening_now BOOLEAN,
+
+    has_wifi BOOLEAN,
+    wifi_free BOOLEAN,
+
+    hotel_stars TEXT,
+
+    noise_score DECIMAL(4,3),
+    noise_level TEXT,
+
+    hourly_profile JSONB,
+    best_hours_for_work JSONB,
+
+    distance_km DECIMAL(5,2),
+
+    seats_avail INTEGER,
+    total_seats INTEGER
+);
+```
+
+---
+
+## availability_slots
+
+```sql
+CREATE TABLE availability_slots (
+    slot_id SERIAL PRIMARY KEY,
+
+    venue_id TEXT REFERENCES venues(venue_id),
+
+    start_time TIMESTAMP,
+    end_time TIMESTAMP,
+
+    available BOOLEAN DEFAULT TRUE
+);
+```
+
+---
+
+## bookings
+
+```sql
+CREATE TABLE bookings (
+    booking_id SERIAL PRIMARY KEY,
+
+    user_id INTEGER REFERENCES users(user_id),
+
+    venue_id TEXT REFERENCES venues(venue_id),
+
+    slot_id INTEGER REFERENCES availability_slots(slot_id),
+
+    duration_hours INTEGER,
+
+    booking_status TEXT DEFAULT 'confirmed',
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+# Authentication APIs
+
+## POST /api/auth/register
+
+### Request
+
+```json
+{
+  "full_name": "Sunmin Lee",
+  "email": "sunmin@test.com",
+  "password": "123456"
+}
+```
+
+### Response
+
+```json
+{
+  "message": "User created successfully"
+}
+```
+
+---
+
+## POST /api/auth/login
+
+### Request
+
+```json
+{
+  "email": "sunmin@test.com",
+  "password": "123456"
+}
+```
+
+### Response
+
+```json
+{
+  "access_token": "mock_jwt_token",
+  "user": {
+    "user_id": 1,
+    "full_name": "Sunmin Lee",
+    "email": "sunmin@test.com",
+    "role": "user"
+  }
+}
+```
+
+---
+
+## POST /api/auth/logout
+
+### Response
+
+```json
+{
+  "message": "Logged out successfully"
+}
+```
+
+---
+
+# User APIs
+
+## GET /api/users/me
+
+### Response
+
+```json
+{
+  "user_id": 1,
+  "full_name": "Sunmin Lee",
+  "email": "sunmin@test.com",
+  "role": "user"
+}
+```
+
+---
+
+## GET /api/users/me/bookings
+
+### Response
+
+```json
+[
+  {
+    "booking_id": 101,
+    "venue_name": "Starbucks Ranelagh",
+    "date": "2026-06-03",
+    "start_time": "09:00",
+    "end_time": "10:00",
+    "status": "confirmed"
+  }
+]
+```
+
+---
+
+# Provider APIs
+
+## GET /api/providers/me
+
+### Response
+
+```json
+{
+  "provider_id": 1,
+  "company_name": "Starbucks Dublin",
+  "contact_email": "provider@test.com",
+  "contact_phone": "+353100000000",
+  "verified": true
+}
+```
+
+---
+
+## GET /api/providers/me/venues
+
+### Response
+
+```json
+[
+  {
+    "venue_id": "osm_12345",
+    "name": "Starbucks Ranelagh",
+    "seats_avail": 12,
+    "total_seats": 20
+  }
+]
+```
+
+---
+
+## PATCH /api/providers/venues/{venue_id}
+
+### Request
+
+```json
+{
+  "seats_avail": 15
+}
+```
+
+### Response
+
+```json
+{
+  "message": "Venue updated successfully"
+}
+```
+
+---
+
+# Venue APIs
 
 ## GET /api/venues
 
@@ -129,7 +408,9 @@ The feature is used for venue ranking and recommendation.
 
 ### Example
 
+```http
 GET /api/venues?has_wifi=true&opening_now=true
+```
 
 ### Response
 
@@ -153,8 +434,6 @@ GET /api/venues?has_wifi=true&opening_now=true
 
 ---
 
-# Venue Detail API
-
 ## GET /api/venues/{venue_id}
 
 ### Response
@@ -173,7 +452,8 @@ GET /api/venues?has_wifi=true&opening_now=true
 
   "building_number": "12",
   "street": "Main Street",
-  "zipcode": "D06 ABC1",
+  "zipcode": "D06ABC1",
+
   "borough": "Dublin South",
 
   "lat": 53.309,
@@ -212,9 +492,11 @@ GET /api/venues?has_wifi=true&opening_now=true
 
 ---
 
-# Availability API
+# Availability APIs
 
 ## GET /api/venues/{venue_id}/availability
+
+### Response
 
 ```json
 {
@@ -222,9 +504,15 @@ GET /api/venues?has_wifi=true&opening_now=true
   "available_slots": [
     {
       "slot_id": 1,
-      "start_time": "09:00",
-      "end_time": "10:00",
+      "start_time": "2026-06-03T09:00:00",
+      "end_time": "2026-06-03T10:00:00",
       "available": true
+    },
+    {
+      "slot_id": 2,
+      "start_time": "2026-06-03T10:00:00",
+      "end_time": "2026-06-03T11:00:00",
+      "available": false
     }
   ]
 }
@@ -232,7 +520,7 @@ GET /api/venues?has_wifi=true&opening_now=true
 
 ---
 
-# Booking API
+# Booking APIs
 
 ## POST /api/bookings
 
@@ -252,13 +540,43 @@ GET /api/venues?has_wifi=true&opening_now=true
 {
   "booking_id": 101,
   "status": "confirmed",
-  "message": "Booking created successfully."
+  "message": "Booking created successfully"
 }
 ```
 
 ---
 
-# Future Features (Not Included in Sprint 1)
+## GET /api/bookings/{booking_id}
+
+### Response
+
+```json
+{
+  "booking_id": 101,
+  "user_id": 1,
+  "venue_id": "osm_12345",
+  "slot_id": 1,
+  "duration_hours": 1,
+  "booking_status": "confirmed"
+}
+```
+
+---
+
+## DELETE /api/bookings/{booking_id}
+
+### Response
+
+```json
+{
+  "booking_id": 101,
+  "status": "cancelled"
+}
+```
+
+---
+
+# Future Features
 
 ## Transportation
 
@@ -277,10 +595,13 @@ GET /api/venues?has_wifi=true&opening_now=true
 * rating
 * rating_user_reported
 
-## WiFi & Plug Crowdsourcing
+## User Crowdsourced Data
 
 * wifi_user_reported
 * plug_user_reported
+
+## ML Generated
+
 * inferred_wifi
 
 ## Infrastructure
@@ -300,31 +621,3 @@ GET /api/venues?has_wifi=true&opening_now=true
 | noise_level         | noise_score             |
 | hourly_profile      | cuisine_type            |
 | best_hours_for_work | hourly_profile          |
-
----
-
-# Directly Collected Features
-
-* venue_id
-* name
-* osm_type
-* cuisine_type
-* cuisine_detail
-* phone
-* website
-* building_number
-* street
-* zipcode
-* lat
-* lon
-* opening_hours
-* has_wifi
-* wifi_free
-* hotel_stars
-
----
-
-# Provider Features
-
-* seats_avail
-* total_seats
