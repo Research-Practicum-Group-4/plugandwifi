@@ -35,11 +35,13 @@ class VenueResponse(
 
     name: str
 
-    cuisine_type: str
+    cuisine_type: str | None = None
 
     lat: float
 
     lon: float
+
+    has_wifi: bool | None = None
 
     noise_level: str
 
@@ -50,6 +52,8 @@ class VenueResponse(
     plug_access: int
 
     hourly_price: float
+
+    borough: str
 
     class Config:
 

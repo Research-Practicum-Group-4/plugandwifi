@@ -8,11 +8,15 @@ from .database import (
     Base , 
     get_db
 )
-from .models import User
+from .models import (
+    User,
+    Venue
+)
 from sqlalchemy.orm import Session
 from .schemas import (
     UserRegister,
-    UserLogin
+    UserLogin,
+    VenueResponse
 )
 from .auth import (
     hash_password, 
@@ -116,3 +120,60 @@ def login_user(
             "email": user.email
         }
     }
+
+@app.get(
+    "/api/venues",
+    response_model = list[VenueResponse] 
+)
+def get_venues(
+
+    wifi: bool | None = None,
+
+    plug_access: int | None = None,
+
+    noise_level: str | None = None,
+
+    max_price: float | None = None,
+
+    borough: str | None = None,
+
+    limit: int = 20,
+
+    db: Session = Depends(get_db)
+):
+    query = db.query(Venue)
+    
+    if wifi is not None:
+
+        query = query.filter(
+            Venue.has_wifi == wifi
+        )
+
+    if plug_access is not None:
+
+        query = query.filter(
+            Venue.plug_access == plug_access
+        )
+
+    if noise_level:
+
+        query = query.filter(
+            Venue.noise_level == noise_level
+        )
+
+    if max_price is not None:
+
+        query = query.filter(
+            Venue.hourly_price <= max_price
+        )
+    
+    if borough:
+        query = query.filter(
+            Venue.borough == borough
+        )
+    
+    venues = query.limit(
+        limit
+    ).all()
+
+    return venues
