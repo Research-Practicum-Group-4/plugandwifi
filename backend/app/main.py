@@ -19,7 +19,6 @@ from .auth import (
     verify_password,
     create_access_token
 )
->>>>>>> Stashed changes
 
 Base.metadata.create_all(bind=engine)
 
