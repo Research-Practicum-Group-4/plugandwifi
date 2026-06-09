@@ -5,3 +5,4 @@ python-dotenv==1.2.2
 python-jose[cryptography]
 SQLAlchemy==2.0.28
 uvicorn
+email-validator
