@@ -6,15 +6,16 @@ from scipy.spatial import cKDTree
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 NYC_BBOX     = "40.477,-74.259,40.917,-73.700"
+TRANSIT_BBOX = "40.45,-74.30,40.95,-73.65"
 
 
 def fetch_transit_stops():
 
-    resp = requests.post(OVERPASS_URL, data={"data": f'[out:json][timeout:90];node["railway"="station"]["station"="subway"]({NYC_BBOX});out body;'}, headers={"User-Agent": "Adam"}, timeout=180)
+    resp = requests.post(OVERPASS_URL, data={"data": f'[out:json][timeout:90];node["railway"="station"]["station"="subway"]({TRANSIT_BBOX});out body;'}, headers={"User-Agent": "Adam"}, timeout=180)
     resp.raise_for_status()
     subway_elements = resp.json().get("elements", [])
 
-    resp = requests.post(OVERPASS_URL, data={"data": f'[out:json][timeout:90];node["highway"="bus_stop"]({NYC_BBOX});out body;'}, headers={"User-Agent": "Adam"}, timeout=180)
+    resp = requests.post(OVERPASS_URL, data={"data": f'[out:json][timeout:90];node["highway"="bus_stop"]({TRANSIT_BBOX});out body;'}, headers={"User-Agent": "Adam"}, timeout=180)
     resp.raise_for_status()
     bus_elements = resp.json().get("elements", [])
 
@@ -52,7 +53,7 @@ def build_tree(stops):
     return cKDTree(stops[["lat", "lon"]].values)
 
 
-def nearest_stop_info(lat, lon, tree: cKDTree, stops):
+def nearest_stop_info(lat, lon, tree, stops):
     if stops.empty:
         return None, None
     _, index = tree.query([lat, lon])
@@ -61,7 +62,7 @@ def nearest_stop_info(lat, lon, tree: cKDTree, stops):
     return nearest["name"], dist
 
 
-def apply_to_venues(db_path: str = "data/processed/venues.db"):
+def apply_to_venues(db_path):
     subway_df, bus_df = fetch_transit_stops()
 
     subway_tree = build_tree(subway_df)
@@ -85,4 +86,4 @@ def apply_to_venues(db_path: str = "data/processed/venues.db"):
 
 
 if __name__ == "__main__":
-    df = apply_to_venues()
+    df = apply_to_venues("data/processed/venues.db")

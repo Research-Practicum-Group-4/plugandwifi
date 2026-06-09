@@ -8,7 +8,7 @@ NYC_BBOX     = "40.477,-74.259,40.917,-73.700"
 DB  = "data/processed/venues.db"
 CSV_out = "data/processed/nyc_venues.csv"
 
-def fetch_from_osm() -> list[dict]:
+def fetch_from_osm():
     query = f"""
     [out:json][timeout:60];
     (
@@ -80,11 +80,7 @@ def parse_elements(elements):
             "lon": float(lon),
             "opening_hours": tags.get("opening_hours", None),
             "has_wifi": has_wifi,
-            "wifi_free": wifi_free,
-            "outdoor_seating": tags.get("outdoor_seating", None),
-            "hotel_stars": tags.get("stars", None),   
-            "outlet_density":  None,   
-            "noise_level": None,   
+            "noise_level": None,
             "noise_score": None,
             "best_hours_for_work": None,
             "hourly_profile": None,
