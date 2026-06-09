@@ -25,9 +25,33 @@ from .auth import (
     create_access_token
 )
 
+from fastapi.middleware.cors import CORSMiddleware
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+# 🚨 Define CORS Allowed Origins (Whitelist)
+origins = [
+    # 1. Local development ports for the frontend (Vite: 5173, CRA: 3000)
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    
+    # 2. Production frontend domains (GCP Cloud Run with custom domain)
+    "https://plugandwifi.xyz",
+    "https://www.plugandwifi.xyz",
+]
+
+# Inject CORSMiddleware into the FastAPI application
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,          # Restrict cross-origin access to the specified whitelist
+    allow_credentials=True,         # Allow cookies, session headers, or Authorization headers
+    allow_methods=["*"],            # Allow all standard HTTP methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],            # Allow all incoming HTTP headers (e.g., Bearer JWT tokens)
+)
 
 @app.get("/")
 def home():
