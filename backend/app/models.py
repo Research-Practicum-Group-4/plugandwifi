@@ -152,3 +152,50 @@ class AvailabilitySlot(Base):
         Integer,
         nullable=False
     )
+
+class Booking(Base):
+
+    __tablename__ = "bookings"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    venue_id = Column(
+        String,
+        ForeignKey("venues.venue_id"),
+        nullable=False
+    )
+
+    booking_date = Column(
+        Date,
+        nullable=False
+    )
+
+    start_time = Column(
+        Time,
+        nullable=False
+    )
+
+    end_time = Column(
+        Time,
+        nullable=False
+    )
+
+    seats_reserved = Column(
+        Integer,
+        nullable=False
+    )
+
+    status = Column(
+        String,
+        default="confirmed"
+    )

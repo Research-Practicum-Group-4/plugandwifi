@@ -11,14 +11,17 @@ from .database import (
 from .models import (
     User,
     Venue,
-    AvailabilitySlot
+    AvailabilitySlot,
+    Booking
 )
 from sqlalchemy.orm import Session
 from .schemas import (
     UserRegister,
     UserLogin,
     VenueResponse,
-    VenueDetailResponse
+    VenueDetailResponse,
+    BookingCreate,
+    BookingResponse
 )
 from .auth import (
     hash_password, 
@@ -256,3 +259,109 @@ def get_venue_by_id(
         )
     
     return venue
+
+@app.post(
+    "/api/bookings",
+    response_model = BookingResponse
+)
+def create_booking(
+    payload: BookingCreate,
+    db: Session = Depends(get_db)
+):
+    
+    user = db.query(User).filter(
+        User.id == payload.user_id
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code = 404,
+            detail = "User not found"
+        )
+    
+    venue = db.query(Venue).filter(
+        Venue.venue_id == payload.venue_id
+    ).first()
+
+    if not venue:
+        raise HTTPException(
+            status_code=404,
+            detail="Venue not found"
+        )
+
+    slot = (
+    db.query(AvailabilitySlot)
+    .filter(
+        AvailabilitySlot.venue_id == payload.venue_id
+    )
+    .filter(
+        AvailabilitySlot.date == payload.booking_date
+    )
+    .filter(
+        AvailabilitySlot.start_time <= payload.start_time
+    )
+    .filter(
+        AvailabilitySlot.end_time >= payload.end_time
+    )
+    .filter(
+        AvailabilitySlot.available.is_(True)
+    )
+    .first()
+    )
+
+    if not slot:
+        raise HTTPException(
+            status_code=400,
+            detail="Requested time slot not available"
+        )
+
+    if payload.seats_reserved > slot.available_seats:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Not enough seats available"
+    )
+
+    overlapping_booking = (
+    db.query(Booking)
+    .filter(
+        Booking.venue_id == payload.venue_id
+    )
+    .filter(
+        Booking.booking_date == payload.booking_date
+    )
+    .filter(
+        Booking.start_time < payload.end_time
+    )
+    .filter(
+        Booking.end_time > payload.start_time
+    )
+    .first()
+    )
+
+    if overlapping_booking:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Time slot already booked"
+        )
+
+
+    slot.available_seats -= payload.seats_reserved
+    
+    booking = Booking(
+        user_id=payload.user_id,
+        venue_id=payload.venue_id,
+        booking_date=payload.booking_date,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
+        seats_reserved=payload.seats_reserved
+    )
+
+    db.add(booking)
+
+    db.commit()
+
+    db.refresh(booking)
+
+    return booking
