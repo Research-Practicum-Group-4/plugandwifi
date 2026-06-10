@@ -116,8 +116,19 @@ def save(df):
 
 if __name__ == "__main__":
     elements = fetch_from_osm()
+<<<<<<< HEAD
     df = parse_elements(elements)
     df = assign_borough(df)
+=======
+    df       = parse_elements(elements)
+    df       = assign_borough(df)
+
+    print("\nVenue breakdown:")
+    print(df["cuisine_type"].value_counts().to_string())
+
+    print(f"\nWiFi data available for {df['has_wifi'].notna().sum()} venues")
+    print(f"Opening hours available for {df['opening_hours'].notna().sum()} venues")
+>>>>>>> origin/develop
 
     save(df)
 

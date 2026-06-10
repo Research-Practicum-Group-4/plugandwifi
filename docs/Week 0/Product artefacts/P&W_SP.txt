@@ -1,0 +1,27 @@
+
+Plug&Wifi -- Sprint plan
+Sprint plan (8-week timeline)
+The development cycle operates on a strict two-week sprint cadence spanning an 8-week delivery timeline (Sprints 1 through 4). Sprint 0 (Discovery, Ideation, and Initial Wireframing) is completed.
+Sprint timeline & deliverables
+Sprint 1 (Weeks 1­2) -- Data & Architecture Foundation
+Focus: Technical setup, environment bootstrapping, CI pipeline deployment. No user-facing functional stories prioritized.
+Deliverables: MySQL schema finalized/deployed; Flask API routing skeleton; React layout scaffold; seeded datasets prepared; mobile transaction flows diagrammed.
+Sprint 2 (Weeks 3­4) -- Core End-to-End Booking Loop
+Focus: Basic transaction pipeline, connecting client interfaces to DB entities. User stories: US-01, US-02, US-05, US-06, US-07, US-10, US-11, US-12, US13, US-14, US-17, US-18, US-23, US-24, US-28, US-29, US-32, US-33, US-35.
+Deliverables: Registration/auth, venue search+filters, venue details, simulated booking, responsive UI, rule-based ranking live.
+Sprint 3 (Weeks 5­6) -- Account, Persistence & Service Integration Focus: Expand user utilities, maps, ML quality checks.
+User stories: US-03, US-08, US-09, US-19, US-20, US-25, US-26, US-30, US34. Deliverables: Reservation logs, cancellation, provider dashboards, maps integration, ML baseline validation report, payload verification.
+
+Plug&Wifi -- Sprint plan
+
+1
+
+Sprint 4 (Weeks 7­8) -- System Polish, Cloud Deployment & Demo Preparation Focus: Deployment, bug fixes, usability testing, demo packaging. User stories: US-15, US-16, US-21, US-27, US-31. Deliverables: Live deployment (Vercel + Render), reviews widget, provider analytics, interactive demo scripts.
+Velocity & capacity summary
+Team allocation: 6 dedicated technical team members. Time commitment: ~20 development hours per team member, per week. Sprint capacity ceiling: ~240 person-hours per 2-week sprint. Total capacity (Sprints 1­4): ~960 hours. Estimated backlog volume: ~590 hours. Project buffer: ~370 hours for bugs, rework, or stretch goals.
+
+Plug&Wifi -- Sprint plan
+
+2
+
+

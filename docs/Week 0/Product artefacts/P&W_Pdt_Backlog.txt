@@ -1,0 +1,102 @@
+
+Plug&Wifi -- Product backlog
+Product backlog
+Priority rankings utilize the strict MoSCoW framework:
+ Must Have: Critical for the core MVP loop.  Should Have: High value, near-MVP requirement.  Could Have: Desirable stretch goal if velocity allows.  Won't Have: Out of scope for the current MVP release.
+Epic 1: User Authentication & Account
+ US-01 -- Register ( Must, 4h, S2) -- Account created, JWT issued, confirmation
+displayed safely.
+ US-02 -- Login ( Must, 3h, S2) -- Correct credentials grant access; wrong
+inputs return a clear error.
+ US-03 -- View/edit profile ( Should, 3h, S3) -- Name, email, and work
+preferences are editable and saved to DB.
+ US-04 -- Reset password ( Should, 4h, S3) -- Reset link sent within 60s; new
+password accepted on next login.
+ US-05 -- Logout ( Must, 1h, S2) -- JWT token invalidated; user immediately
+redirected to landing page.
+Epic 2: Venue Discovery & Search
+ US-06 -- Location-based search ( Must, 6h, S2) -- Results within configurable
+radius; sorted by proximity.
+ US-07 -- Filters ( Must, 6h, S2) -- Filters apply correctly; results update
+smoothly without page reload.
+
+Plug&Wifi -- Product backlog
+
+1
+
+ US-08 -- Suitability score ( Should, 8h, S3) -- Score (0­100) displayed;
+computed from WiFi, plugs, noise, distance.
+ US-09 -- Map view ( Should, 8h, S3) -- Pins for all results; clicking a pin opens
+venue summary.
+ US-10 -- At-a-glance card info ( Must, 5h, S2) -- WiFi, plug, noise, distance,
+price visible on card.
+ US-11 -- Duration filter ( Must, 4h, S2) -- Returns venues with unbooked blocks
+matching duration.
+ US-12 -- Opening hours ( Must, 2h, S2) -- Cleanly shown on listing cards and
+detail pages.
+Epic 3: Venue Detail
+ US-13 -- Detailed venue page ( Must, 5h, S2) -- Attributes, description, photos;
+high-res photo renders if available.
+ US-14 -- Verified ratings ( Must, 3h, S2) -- WiFi, plug, quietness scores
+displayed.
+ US-15 -- Community reviews ( Could, 5h, S4) -- Loads 3 most recent text
+entries with submission dates.
+ US-16 -- Floor plan / layout ( Could, 10h, S4) -- Interactive 2D zone layout
+rendered when provided.
+Epic 4: Booking
+ US-17 -- Create booking ( Must, 8h, S2) -- Booking written; slot flagged
+occupied.
+ US-18 -- Confirmation screen ( Must, 3h, S2) -- Venue, date, time, duration,
+order ID shown.
+ US-19 -- Cancel booking ( Must, 4h, S3) -- Status to 'cancelled'; slot freed for
+search.
+ US-20 -- Booking history ( Must, 4h, S3) -- Dashboard categorized
+chronologically with status.
+ US-21 -- Extend session ( Could, 6h, S4) -- Verifies adjacent slot availability;
+updates end time.
+
+Plug&Wifi -- Product backlog
+
+2
+
+ US-22 -- QR code check-in ( Won't, Post-MVP) -- Deferred to v1.1.
+Epic 5: Provider / Venue Management
+ US-23 -- Provider registers venue ( Must, 6h, S2) -- Discoverable within 5
+minutes of valid submission.
+ US-24 -- Provider sets time slots ( Must, 6h, S2) -- Blocks created; only
+verified windows appear.
+ US-25 -- Provider views bookings ( Should, 5h, S3) -- Live calendar feed with
+guest names, timings, durations.
+ US-26 -- Provider updates live attributes ( Should, 4h, S3) -- Updates persist
+and reflect within 60 seconds.
+ US-27 -- Provider analytics ( Could, 8h, S4) -- Charts utilization + revenue
+metrics.
+Epic 6: ML Recommendation
+ US-28 -- Rank results by suitability ( Must, 10h, S2) -- Ordered by score; rule-
+based fallback.
+ US-29 -- Generate suitability score ( Must, 8h, S2) -- Weights from WiFi, plugs,
+noise, distance.
+ US-30 -- Compare ML vs rule-based ( Should, 8h, S3) -- precision@3
+evaluation script and benchmarks.
+ US-31 -- Personalized suggestions ( Could, 12h, S4) -- Home widget for
+accounts with 3+ orders.
+Epic 7: Mobile & Responsive UX
+ US-32 -- Responsive web app ( Must, 10h, S2) -- Flows work on 375px
+viewports.
+ US-33 -- Touch-friendly UI ( Must, 6h, S2) -- 44px targets; no horizontal
+scrolling.
+ US-34 -- Collapsible filter sheet ( Should, 5h, S3) -- Bottom-sheet overlay
+slides; collapses after use.
+
+Plug&Wifi -- Product backlog
+
+3
+
+ US-35 -- Card info on mobile ( Must, 4h, S2) -- Telemetry legible within
+standard card layout.
+
+Plug&Wifi -- Product backlog
+
+4
+
+

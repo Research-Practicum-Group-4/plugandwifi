@@ -1,0 +1,52 @@
+
+Plug&Wifi -- Acceptance criteria
+Acceptance criteria -- key user stories
+Detailed acceptance criteria follow strict Gherkin syntax (Given / When / Then).
+US-06 -- Location-based venue search
+AC-1 (Happy path proximity search):
+Given I am an authenticated or guest user loading the primary marketplace search interface, When I enter a valid target city name or explicit permission is granted to access my device's native browser coordinates,
+Then the backend queries the location database and displays authorized workspace providers within a fixed 2km radius, prioritized nearest to farthest. AC-2 (Zero results out of bounds):
+Given no active host venues exist within the designated boundaries,
+When I trigger a location search query, Then the system outputs: "No workspace venues found within your current radius. Try manually expanding your search boundary or entering a different location."
+AC-3 (Location access denied fallback): Given I deny browser access to coordinates,
+When the discovery page finishes loading,
+Then auto geo-query is blocked safely and a manual city/neighborhood entry box is shown.
+
+Plug&Wifi -- Acceptance criteria
+
+1
+
+US-07 -- Advanced filtering capabilities
+AC-1 (Single attribute selection): Given I am looking at an active workspace feed list, When I check Verified , WiFi Then only venues with a verified Wi-Fi badge appear.
+AC-2 (Multi-criteria combination): Given I am refining my focus constraints, When I select + + , WiFi Dedicated Plug Access Quiet Ambience Tier Then only venues matching all three constraints are surfaced.
+AC-3 (No matching filters): Given no venue matches the selected combination, When I apply filters, Then the UI shows: "No workspaces match your exact combination of filters," plus a reset-filters button.
+AC-4 (State persistence): Given I applied filters and opened a venue detail page, When I click 'Back to Search', Then the previous filter + scroll state remains cached.
+US-17 -- Core workspace booking execution
+AC-1 (Successful path): Given I am logged in and selected an unreserved slot, When I click 'Confirm Booking', Then availability is validated, a booking row is created, the slot is marked taken, and a confirmation layout is shown.
+AC-2 (Race condition): Given another user reserves the slot right before I submit,
+
+Plug&Wifi -- Acceptance criteria
+
+2
+
+When I confirm booking, Then the backend rejects the insert, rolls back safely, warns "This time slot has just been reserved," and refreshes availability. AC-3 (Anonymous checkout intervention): Given I am browsing anonymously, When I click 'Book Now', Then the choice is cached, I am redirected to auth, and returned after login. AC-4 (Confirmation payload): Given the booking write succeeds, When the confirmation page loads, Then it shows venue name, date, start/end time, duration, fee, and reservation reference.
+US-19 -- Reservation cancellation engine
+AC-1 (Valid future cancellation): Given I have a verified upcoming booking, When I click 'Cancel Reservation' and confirm, Then status becomes cancelled , the slot is freed, and a success banner shows.
+AC-2 (Past record protection): Given a booking is in the past, When I view my account history, Then cancellation is disabled and a locked status badge is shown.
+AC-3 (Idempotent reinforcement): Given a booking is already cancelled, When I refresh the record,
+
+Plug&Wifi -- Acceptance criteria
+
+3
+
+Then the UI shows a static Cancelled badge and hides additional actions.
+US-23 -- Provider venue onboarding registration
+AC-1 (Successful onboarding): Given I am logged in as a verified host and completed the form, When I submit, Then the system validates, writes to venues , geocodes the address, and makes the venue discoverable within 5 minutes.
+AC-2 (Missing required telemetry): Given I omit required fields (e.g., street address), When I submit, Then submission is blocked and the UI shows: "Physical venue address is strictly required for consumer search mapping."
+AC-3 (Duplicate guarding): Given a venue with the same name + coordinates exists, When I submit an identical registration, Then the system prevents creation and shows: "A property with this name and location is already registered on our network,"
+
+Plug&Wifi -- Acceptance criteria
+
+4
+
+
