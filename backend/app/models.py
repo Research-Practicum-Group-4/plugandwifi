@@ -4,7 +4,10 @@ from sqlalchemy import (
     String,
     Float,
     Boolean,
-    Text
+    Text,
+    ForeignKey,
+    Date,
+    Time
 )
 
 from .database import Base
@@ -107,3 +110,45 @@ class Venue(Base):
     hourly_price = Column(Float)
 
     actual_hourly_price = Column(Float)
+
+
+class AvailabilitySlot(Base):
+
+    __tablename__ = "availability_slots"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    venue_id = Column(
+        String,
+        ForeignKey("venues.venue_id"),
+        nullable=False
+    )
+
+    date = Column(
+        Date,
+        nullable=False
+    )
+
+    start_time = Column(
+        Time,
+        nullable=False
+    )
+
+    end_time = Column(
+        Time,
+        nullable=False
+    )
+
+    available = Column(
+        Boolean,
+        nullable=False
+    )
+
+    available_seats = Column(
+        Integer,
+        nullable=False
+    )

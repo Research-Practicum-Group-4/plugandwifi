@@ -10,7 +10,8 @@ from .database import (
 )
 from .models import (
     User,
-    Venue
+    Venue,
+    AvailabilitySlot
 )
 from sqlalchemy.orm import Session
 from .schemas import (
@@ -24,6 +25,7 @@ from .auth import (
     verify_password,
     create_access_token
 )
+from datetime import date, time
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -162,11 +164,38 @@ def get_venues(
 
     borough: str | None = None,
 
+    date: date | None = None,
+
+    start_time: time | None = None,
+
+    end_time: time | None = None,
+
     limit: int = 20,
 
     db: Session = Depends(get_db)
 ):
     query = db.query(Venue)
+
+    if date and start_time and end_time:
+
+        query = (
+            query.join(
+                AvailabilitySlot,
+                Venue.venue_id == AvailabilitySlot.venue_id
+            )
+            .filter(
+                AvailabilitySlot.date == date
+            )
+            .filter(
+                AvailabilitySlot.start_time <= start_time
+            )
+            .filter(
+                AvailabilitySlot.end_time >= end_time
+            )
+            .filter(
+                AvailabilitySlot.available == True
+            )
+        )
     
     if wifi is not None:
 
