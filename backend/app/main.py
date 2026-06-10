@@ -193,7 +193,7 @@ def get_venues(
                 AvailabilitySlot.end_time >= end_time
             )
             .filter(
-                AvailabilitySlot.available == True
+                AvailabilitySlot.available.is_(True)
             )
         )
     
