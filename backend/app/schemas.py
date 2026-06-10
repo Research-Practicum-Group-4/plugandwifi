@@ -58,3 +58,72 @@ class VenueResponse(
     class Config:
 
         from_attributes = True
+
+
+class VenueDetailResponse(BaseModel):
+    venue_id: str
+
+    name: str
+
+    osm_type: str | None = None
+
+    cuisine_type: str | None = None
+
+    cuisine_detail: str | None = None
+
+    phone: str | None = None
+
+    website: str | None = None
+
+    building_number: str | None = None
+
+    street: str | None = None
+
+    zipcode: str | None = None
+
+    lat: float
+
+    lon: float
+
+    opening_hours: str | None = None
+
+    has_wifi: bool | None = None
+
+    noise_level: str
+
+    noise_score: float
+
+    best_hours_for_work: str | None = None
+
+    hourly_profile: str | None = None
+
+    partner: int | None = None
+
+    borough: str | None = None
+
+    inferred_wifi: bool | None = None
+
+    wifi_user_reported: bool | None = None
+
+    nearest_subway: str | None = None
+
+    nearest_subway_m: int | None = None
+
+    nearest_bus: str | None = None
+
+    nearest_bus_m: int | None = None
+
+    plug_access: int | None = None
+
+    plug_user_reported: bool | None = None
+
+    rating: float | None = None
+
+    rating_user_reported: float | None = None
+
+    hourly_price: float | None = None
+    
+    actual_hourly_price: float | None = None
+
+    class Config:
+        from_attributes = True
