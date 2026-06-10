@@ -16,7 +16,8 @@ from sqlalchemy.orm import Session
 from .schemas import (
     UserRegister,
     UserLogin,
-    VenueResponse
+    VenueResponse,
+    VenueDetailResponse
 )
 from .auth import (
     hash_password, 
@@ -177,3 +178,28 @@ def get_venues(
     ).all()
 
     return venues
+
+@app.get(
+    "/api/venues/{venue_id}",
+    response_model = VenueDetailResponse
+)
+def get_venue_by_id(
+    venue_id: str,
+    db: Session = Depends(get_db)
+):
+    venue = (
+        db.query(Venue)
+        .filter(
+            Venue.venue_id == venue_id
+        )
+        .first()
+    )
+
+    if venue is None:
+        
+        raise HTTPException(
+            status_code = 404,
+            detail = "Venue not found"
+        )
+    
+    return venue
