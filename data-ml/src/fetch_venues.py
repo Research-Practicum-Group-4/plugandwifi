@@ -59,12 +59,6 @@ def parse_elements(elements):
         else:
             has_wifi = None
 
-        wifi_free = None
-        if tags.get("internet_access:fee", "").lower() == "no":
-            wifi_free = True
-        elif tags.get("internet_access:fee", "").lower() == "yes":
-            wifi_free = False
-
         rows.append({
             "venue_id": f"osm_{el['id']}",
             "name": tags.get("name", "Unnamed"),
