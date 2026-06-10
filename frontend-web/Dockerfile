@@ -1,0 +1,40 @@
+# --------------------------- Stage 1: Build -----------------------------
+# Use node:20-alpine as a lightweight build environment
+FROM node:20-alpine AS build-stage
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy only the package files so npm can install dependencies
+COPY package*.json ./
+
+# Install dependencies exactly as specified in package-lock.json
+RUN npm ci
+
+# Copy the rest of the source code (node_modules will be ignored by .dockerignore)
+COPY . .
+
+# Build the Vite (React) application â output will be in /app/dist
+RUN npm run build
+
+# --------------------------- Stage 2: Production ------------------------
+# Use the minimal nginx image to serve static files
+FROM nginx:stable-alpine AS production-stage
+
+# Copy the built files from the build-stage into nginx's web root
+COPY --from=build-stage /app/dist /usr/share/nginx/html
+
+# Configure nginx to support clientâside routing (React Router)
+RUN echo '\
+server { \
+    listen 80; \
+    root /usr/share/nginx/html; \
+    index index.html; \
+    try_files $uri $uri/ /index.html; \
+}' > /etc/nginx/conf.d/default.conf
+
+# Expose port 80 â Cloud Run will map this to the service
+EXPOSE 80
+
+# Start nginx in the foreground
+CMD ["nginx", "-g", "daemon off;"]
