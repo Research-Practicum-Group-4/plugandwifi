@@ -31,15 +31,15 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-# 🚨 Define CORS Allowed Origins (Whitelist)
+# CORS Whitelist
 origins = [
-    # 1. Local development ports for the frontend (Vite: 5173, CRA: 3000)
+    # Local development ports for the frontend
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     
-    # 2. Production frontend domains (GCP Cloud Run with custom domain)
+    # Production frontend domains 
     "https://plugandwifi.xyz",
     "https://www.plugandwifi.xyz",
 ]
