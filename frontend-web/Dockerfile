@@ -14,7 +14,7 @@ RUN npm ci
 # Copy the rest of the source code (node_modules will be ignored by .dockerignore)
 COPY . .
 
-# Build the Vite (React) application â output will be in /app/dist
+# Build the Vite (React) application - output will be in /app/dist
 RUN npm run build
 
 # --------------------------- Stage 2: Production ------------------------
@@ -24,16 +24,18 @@ FROM nginx:stable-alpine AS production-stage
 # Copy the built files from the build-stage into nginx's web root
 COPY --from=build-stage /app/dist /usr/share/nginx/html
 
-# Configure nginx to support clientâside routing (React Router)
+# Configure nginx to support client-side routing (React Router)
 RUN echo '\
 server { \
     listen 80; \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    try_files $uri $uri/ /index.html; \
+    location / { \
+        root /usr/share/nginx/html; \
+        index index.html; \
+        try_files $uri $uri/ /index.html; \
+    } \
 }' > /etc/nginx/conf.d/default.conf
 
-# Expose port 80 â Cloud Run will map this to the service
+# Expose port 80 - Cloud Run will map this to the service
 EXPOSE 80
 
 # Start nginx in the foreground
