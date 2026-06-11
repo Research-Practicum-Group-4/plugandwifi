@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
@@ -7,67 +7,70 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Label } from "../components/ui/label";
 import { Slider } from "../components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Search, MapPin, Star, Phone, Volume2, Filter } from "lucide-react";
+import { Search, MapPin, Star, Wifi, Volume2, Filter } from "lucide-react";
+import { api } from "../../services/api";
+import { Venue } from "../../types/api";
 
 export function SearchPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState({
-    callsAllowed: false,
+    freeWifi: false,
     noLoudMusic: false,
     fourPlusStars: false,
   });
   const [priceRange, setPriceRange] = useState([1, 10]);
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const venues = [
-    {
-      id: 1,
-      name: "The Grand Hotel Lobby",
-      type: "Hotel Lobby",
-      distance: 0.5,
-      rating: 4.8,
-      reviews: 142,
-      price: 5,
-      availability: "2 PM - 4 PM",
-      amenities: ["WiFi", "Power Outlets", "Quiet"],
-      image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400",
-    },
-    {
-      id: 2,
-      name: "Cafe Moderna",
-      type: "Cafe",
-      distance: 0.8,
-      rating: 4.6,
-      reviews: 89,
-      price: 3,
-      availability: "3 PM - 6 PM",
-      amenities: ["WiFi", "Power Outlets", "Beverages"],
-      image: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400",
-    },
-    {
-      id: 3,
-      name: "Downtown Business Lounge",
-      type: "Business Lounge",
-      distance: 1.2,
-      rating: 4.9,
-      reviews: 203,
-      price: 7,
-      availability: "Now - 5 PM",
-      amenities: ["WiFi", "Power Outlets", "Quiet", "Meeting Rooms"],
-      image: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400",
-    },
-    {
-      id: 4,
-      name: "Riverside Coffee House",
-      type: "Cafe",
-      distance: 1.5,
-      rating: 4.4,
-      reviews: 67,
-      price: 4,
-      availability: "1 PM - 7 PM",
-      amenities: ["WiFi", "Power Outlets", "Outdoor Seating"],
-      image: "https://images.unsplash.com/photo-1445116572660-236099ec97a0?w=400",
-    },
-  ];
+  useEffect(() => {
+    setLoading(true);
+    api.getVenues({
+      noise_level: filters.noLoudMusic ? "quiet" : undefined,
+      wifi_free: filters.freeWifi ? true : undefined,
+    })
+      .then((data) => {
+        let result = [...data];
+        
+        // Local filtering
+        if (searchQuery) {
+          result = result.filter(v => v.name.toLowerCase().includes(searchQuery.toLowerCase()));
+        }
+        if (filters.fourPlusStars) {
+          result = result.filter(v => v.rating >= 4.0);
+        }
+        
+        // Filter by price range
+        result = result.filter(v => v.hourly_price >= priceRange[0] && v.hourly_price <= priceRange[1]);
+        
+        setVenues(result);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch venues:", err);
+        setLoading(false);
+      });
+  }, [filters, searchQuery, priceRange]);
+
+  const getVenueImage = (venueId: string) => {
+    const images: Record<string, string> = {
+      "osm_12345": "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400",
+      "osm_12346": "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400",
+      "osm_12347": "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400",
+      "osm_12348": "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400",
+      "osm_12349": "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400",
+    };
+    return images[venueId] || "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400";
+  };
+
+  const getAmenities = (venue: Venue) => {
+    const amenities = [];
+    if (venue.has_wifi) amenities.push("WiFi");
+    if (venue.wifi_free) amenities.push("Free WiFi");
+    if (venue.noise_level === "quiet") amenities.push("Quiet Space");
+    if (venue.seats_avail > 0) amenities.push(`${venue.seats_avail} seats left`);
+    return amenities;
+  };
+
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -97,15 +100,15 @@ export function SearchPage() {
 
               <div className="flex items-center space-x-2">
                 <Checkbox
-                  id="callsAllowed"
-                  checked={filters.callsAllowed}
+                  id="freeWifi"
+                  checked={filters.freeWifi}
                   onCheckedChange={(checked) =>
-                    setFilters({ ...filters, callsAllowed: checked as boolean })
+                    setFilters({ ...filters, freeWifi: checked as boolean })
                   }
                 />
-                <Label htmlFor="callsAllowed" className="flex items-center gap-2 cursor-pointer">
-                  <Phone className="size-4" />
-                  Calls Allowed
+                <Label htmlFor="freeWifi" className="flex items-center gap-2 cursor-pointer">
+                  <Wifi className="size-4" />
+                  Free Wi-Fi
                 </Label>
               </div>
 
@@ -170,64 +173,72 @@ export function SearchPage() {
                   {venues.length} spaces available
                 </p>
 
-                {venues.map((venue) => (
-                  <Card key={venue.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                    <div className="grid md:grid-cols-[250px_1fr] gap-4">
-                      <div className="aspect-video md:aspect-square overflow-hidden">
-                        <img
-                          src={venue.image}
-                          alt={venue.name}
-                          className="w-full h-full object-cover"
-                        />
+                {loading ? (
+                  <div className="text-center py-12 text-muted-foreground">Loading workspaces...</div>
+                ) : venues.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">No spaces found matching filters.</div>
+                ) : (
+                  venues.map((venue) => (
+                    <Card key={venue.venue_id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                      <div className="grid md:grid-cols-[250px_1fr] gap-4">
+                        <div className="aspect-video md:aspect-square overflow-hidden">
+                          <img
+                            src={getVenueImage(venue.venue_id)}
+                            alt={venue.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <CardContent className="pt-4">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <h3 className="mb-1">{venue.name}</h3>
+                              <p className="text-muted-foreground">
+                                {venue.cuisine_type} • {venue.distance_km} km away
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
+                              <span>{venue.rating}</span>
+                              <span className="text-muted-foreground">
+                                ({venue.seats_avail * 3 + 12})
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {getAmenities(venue).map((amenity) => (
+                              <span
+                                key={amenity}
+                                className="px-2 py-1 bg-secondary text-secondary-foreground rounded text-sm"
+                              >
+                                {amenity}
+                              </span>
+                            ))}
+                          </div>
+
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="text-muted-foreground">Status</p>
+                              <p className={venue.opening_now ? "text-green-600" : "text-red-500"}>
+                                {venue.opening_now ? "Open Now" : "Closed"}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <p className="text-2xl" style={{ color: '#2f8a64' }}>
+                                ${venue.hourly_price}/hr
+                              </p>
+                              <Link to={`/venue/${venue.venue_id}`}>
+                                <Button style={{ backgroundColor: '#253c50' }}>
+                                  Book a Space
+                                </Button>
+                              </Link>
+                            </div>
+                          </div>
+                        </CardContent>
                       </div>
-                      <CardContent className="pt-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <h3 className="mb-1">{venue.name}</h3>
-                            <p className="text-muted-foreground">
-                              {venue.type} • {venue.distance} km away
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
-                            <span>{venue.rating}</span>
-                            <span className="text-muted-foreground">
-                              ({venue.reviews})
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {venue.amenities.map((amenity) => (
-                            <span
-                              key={amenity}
-                              className="px-2 py-1 bg-secondary text-secondary-foreground rounded text-sm"
-                            >
-                              {amenity}
-                            </span>
-                          ))}
-                        </div>
-
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <p className="text-muted-foreground">Available</p>
-                            <p>{venue.availability}</p>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <p className="text-2xl" style={{ color: '#2f8a64' }}>
-                              ${venue.price}/hr
-                            </p>
-                            <Link to={`/venue/${venue.id}`}>
-                              <Button style={{ backgroundColor: '#253c50' }}>
-                                Book a Space
-                              </Button>
-                            </Link>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  ))
+                )}
               </TabsContent>
 
               <TabsContent value="map">
@@ -238,38 +249,44 @@ export function SearchPage() {
                       alt="Manhattan Map"
                       className="w-full h-full object-contain"
                     />
-                    {venues.map((venue, idx) => (
-                      <div
-                        key={venue.id}
-                        className="absolute cursor-pointer group"
-                        style={{
-                          left: `${20 + idx * 18}%`,
-                          top: `${30 + idx * 15}%`,
-                        }}
-                      >
-                        <div className="relative">
-                          <div
-                            className="size-12 rounded-full flex items-center justify-center shadow-lg transition-transform group-hover:scale-110"
-                            style={{ backgroundColor: '#253c50' }}
-                          >
-                            <MapPin className="size-6 text-white" />
-                          </div>
-                          <div className="absolute top-14 left-1/2 -translate-x-1/2 bg-white p-3 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 min-w-[200px]">
-                            <p className="font-medium mb-1">{venue.name}</p>
-                            <p className="text-sm text-muted-foreground mb-2">${venue.price}/hour</p>
-                            <Link to={`/venue/${venue.id}`}>
-                              <Button
-                                size="sm"
-                                className="w-full"
-                                style={{ backgroundColor: '#2f8a64' }}
-                              >
-                                Book a Space
-                              </Button>
-                            </Link>
+                    {loading ? (
+                      <div className="absolute inset-0 bg-white/80 flex items-center justify-center text-muted-foreground">
+                        Loading map markers...
+                      </div>
+                    ) : (
+                      venues.map((venue, idx) => (
+                        <div
+                          key={venue.venue_id}
+                          className="absolute cursor-pointer group"
+                          style={{
+                            left: `${20 + idx * 12}%`,
+                            top: `${30 + idx * 10}%`,
+                          }}
+                        >
+                          <div className="relative">
+                            <div
+                              className="size-12 rounded-full flex items-center justify-center shadow-lg transition-transform group-hover:scale-110"
+                              style={{ backgroundColor: '#253c50' }}
+                            >
+                              <MapPin className="size-6 text-white" />
+                            </div>
+                            <div className="absolute top-14 left-1/2 -translate-x-1/2 bg-white p-3 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 min-w-[200px]">
+                              <p className="font-medium mb-1">{venue.name}</p>
+                              <p className="text-sm text-muted-foreground mb-2">${venue.hourly_price}/hour</p>
+                              <Link to={`/venue/${venue.venue_id}`}>
+                                <Button
+                                  size="sm"
+                                  className="w-full"
+                                  style={{ backgroundColor: '#2f8a64' }}
+                                >
+                                  Book a Space
+                                </Button>
+                              </Link>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </Card>
               </TabsContent>

@@ -1,12 +1,55 @@
-import { Link } from "react-router";
+import { Link, useNavigate, useLocation } from "react-router";
+import { useState } from "react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Separator } from "../../components/ui/separator";
-import { MapPin } from "lucide-react";
+import { MapPin, Loader2 } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
+import { toast } from "sonner";
 
 export function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Redirect back to original path if specified, else home page
+  const fromPath = (location.state as any)?.from || "/";
+  const bookingData = (location.state as any)?.bookingData;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await login(email, password);
+      toast.success("Welcome back!", {
+        description: "Logged in successfully.",
+      });
+      navigate(fromPath, {
+        replace: true,
+        state: bookingData
+      });
+    } catch (err: any) {
+      console.error("Login page submit failed:", err);
+      const errorMsg = err.response?.data?.detail || "Invalid email or password";
+      toast.error("Login failed", {
+        description: errorMsg,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-12 flex items-center justify-center min-h-[calc(100vh-200px)]">
       <Card className="w-full max-w-md">
@@ -20,14 +63,17 @@ export function LoginPage() {
           <CardDescription>Sign in to your Plug & Wifi account</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <form className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
                 placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             <div className="space-y-2">
@@ -40,10 +86,24 @@ export function LoginPage() {
                   Forgot password?
                 </Link>
               </div>
-              <Input id="password" type="password" required />
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={loading}
+              />
             </div>
-            <Button type="submit" className="w-full" size="lg">
-              Sign In
+            <Button type="submit" className="w-full" size="lg" disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing In...
+                </>
+              ) : (
+                "Sign In"
+              )}
             </Button>
           </form>
 
@@ -55,8 +115,8 @@ export function LoginPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Button variant="outline">Google</Button>
-            <Button variant="outline">Apple</Button>
+            <Button variant="outline" disabled={loading}>Google</Button>
+            <Button variant="outline" disabled={loading}>Apple</Button>
           </div>
 
           <p className="text-center text-sm text-muted-foreground">
@@ -70,3 +130,4 @@ export function LoginPage() {
     </div>
   );
 }
+

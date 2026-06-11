@@ -10,6 +10,7 @@ import { SignupPage } from "./pages/auth/SignupPage";
 import { ProviderDashboard } from "./pages/provider/ProviderDashboard";
 import { OfferSpacePage } from "./pages/provider/OfferSpacePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 export const router = createBrowserRouter([
   {
@@ -17,14 +18,22 @@ export const router = createBrowserRouter([
     Component: MainLayout,
     children: [
       { index: true, Component: HomePage },
-      { path: "search", Component: SearchPage },
-      { path: "venue/:id", Component: VenueDetailPage },
-      { path: "checkout", Component: CheckoutPage },
-      { path: "saved", Component: SavedPlacesPage },
       { path: "login", Component: LoginPage },
       { path: "signup", Component: SignupPage },
-      { path: "provider/dashboard", Component: ProviderDashboard },
-      { path: "provider/offer-space", Component: OfferSpacePage },
+      
+      // Protected pages
+      {
+        element: <ProtectedRoute />,
+        children: [
+          { path: "search", Component: SearchPage },
+          { path: "venue/:id", Component: VenueDetailPage },
+          { path: "checkout", Component: CheckoutPage },
+          { path: "saved", Component: SavedPlacesPage },
+          { path: "provider/dashboard", Component: ProviderDashboard },
+          { path: "provider/offer-space", Component: OfferSpacePage },
+        ],
+      },
+      
       { path: "*", Component: NotFoundPage },
     ],
   },
