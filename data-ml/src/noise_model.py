@@ -127,10 +127,6 @@ def apply_to_venues(db_path: str = "data/processed/venues.db"):
     con = sqlite3.connect(db_path)
     venues = pd.read_sql("SELECT * FROM venues", con)
 
-    venues["noise_score"] = venues["cuisine_type"].apply(lambda c: noise_score(c, hour=14, weekday=1))
-
-    venues["noise_level"] = venues["noise_score"].apply(noise_label)
-
     venues["best_hours_for_work"] = venues["cuisine_type"].apply(lambda c: json.dumps(best_hours_for_work(c)))
 
     venues["hourly_profile"]= venues["cuisine_type"].apply(lambda c: json.dumps(hourly_profile(c)))
@@ -139,7 +135,6 @@ def apply_to_venues(db_path: str = "data/processed/venues.db"):
     venues.to_csv("data/processed/nyc_venues.csv", index=False)
     con.close()
 
-    print(venues["noise_level"].value_counts().to_string())
     return venues
 
 
