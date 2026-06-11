@@ -15,7 +15,7 @@ RUN npm ci --legacy-peer-deps
 COPY . .
 
 # real backend URL for production
-ENV VITE_API_BASE_URL=https://api.plugandwifi.xyz
+ENV VITE_API_BASE_URL=https://api.plugandwifi.xyz/api
 
 # Build the Vite (React) application - output will be in /app/dist
 RUN npm run build
