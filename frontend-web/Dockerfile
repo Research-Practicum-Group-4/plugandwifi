@@ -14,6 +14,9 @@ RUN npm ci --legacy-peer-deps
 # Copy the rest of the source code (node_modules will be ignored by .dockerignore)
 COPY . .
 
+# real backend URL for production
+ENV VITE_API_BASE_URL=https://api.plugandwifi.xyz
+
 # Build the Vite (React) application - output will be in /app/dist
 RUN npm run build
 
