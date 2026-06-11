@@ -32,6 +32,8 @@ from datetime import date, time
 
 from fastapi.middleware.cors import CORSMiddleware
 
+import uuid
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
@@ -350,6 +352,9 @@ def create_booking(
     slot.available_seats -= payload.seats_reserved
     
     booking = Booking(
+        order_id=f"ORD-{uuid.uuid4().hex[:8]}",
+        payment_status="paid",
+
         user_id=payload.user_id,
         venue_id=payload.venue_id,
         booking_date=payload.booking_date,

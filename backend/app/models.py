@@ -199,3 +199,14 @@ class Booking(Base):
         String,
         default="confirmed"
     )
+
+    order_id = Column(
+        String,
+        unique = True,
+        nullable = False
+    )
+
+    payment_status = Column(
+        String,
+        default = "paid"
+    )

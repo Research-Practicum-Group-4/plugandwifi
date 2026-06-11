@@ -167,6 +167,10 @@ class BookingResponse(BaseModel):
 
     status: str
 
+    order_id: str
+
+    payment_status: str
+
     class Config:
 
         from_attributes = True
