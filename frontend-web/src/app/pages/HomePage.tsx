@@ -6,50 +6,51 @@ import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popove
 import { Calendar } from "../components/ui/calendar";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Search, Volume2, Phone, Star, MapPin, LayoutGrid, Map } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
+import { api } from "../../services/api";
+import { Venue } from "../../types/api";
+import { useAuth } from "../contexts/AuthContext";
 
 export function HomePage() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const suggestions = [
-    {
-      id: 1,
-      name: "The Grand Hotel Lobby",
-      distance: "5 mins away",
-      availability: "2 PM - 4 PM",
-      rating: 4.8,
-      price: 5,
-      image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400",
-      lat: 40.7589,
-      lng: -73.9851,
-    },
-    {
-      id: 2,
-      name: "Cafe Moderna",
-      distance: "8 mins away",
-      availability: "3 PM - 6 PM",
-      rating: 4.6,
-      price: 3,
-      image: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400",
-      lat: 40.7614,
-      lng: -73.9776,
-    },
-    {
-      id: 3,
-      name: "Downtown Business Lounge",
-      distance: "12 mins away",
-      availability: "Now - 5 PM",
-      rating: 4.9,
-      price: 7,
-      image: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400",
-      lat: 40.7549,
-      lng: -73.9840,
-    },
-  ];
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setVenues([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    api.getVenues()
+      .then((data) => {
+        setVenues(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch venues:", err);
+        setLoading(false);
+      });
+  }, [isAuthenticated]);
+
+  const getVenueImage = (venueId: string) => {
+    const images: Record<string, string> = {
+      "osm_12345": "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400",
+      "osm_12346": "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400",
+      "osm_12347": "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400",
+      "osm_12348": "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400",
+      "osm_12349": "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400",
+    };
+    return images[venueId] || "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400";
+  };
+
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -80,8 +81,8 @@ export function HomePage() {
               <Calendar mode="single" selected={date} onSelect={setDate} />
             </PopoverContent>
           </Popover>
-          <Link to="/search">
-            <Button size="lg" className="h-12 px-8" style={{ backgroundColor: '#2f8a64' }}>
+          <Link to={isAuthenticated ? "/search" : "#"} className={!isAuthenticated ? "pointer-events-none opacity-50" : ""}>
+            <Button size="lg" className="h-12 px-8" style={{ backgroundColor: '#2f8a64' }} disabled={!isAuthenticated}>
               Search
             </Button>
           </Link>
@@ -123,13 +124,22 @@ export function HomePage() {
       <div className="mb-12">
         <h2 className="mb-6">Available Near You</h2>
 
-        {viewMode === "grid" ? (
+        {!isAuthenticated ? (
+          <div className="text-center py-12 border border-dashed rounded-xl bg-card p-6">
+            <p className="text-muted-foreground mb-4">Please log in to view and book workspaces in your area.</p>
+            <Link to="/login">
+              <Button style={{ backgroundColor: '#2f8a64' }} className="cursor-pointer">Sign In</Button>
+            </Link>
+          </div>
+        ) : loading ? (
+          <div className="text-center py-12 text-muted-foreground">Loading workspaces...</div>
+        ) : viewMode === "grid" ? (
           <div className="grid md:grid-cols-3 gap-6">
-            {suggestions.map((venue) => (
-              <Card key={venue.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+            {venues.map((venue) => (
+              <Card key={venue.venue_id} className="overflow-hidden hover:shadow-lg transition-shadow">
                 <div className="aspect-video relative overflow-hidden">
                   <img
-                    src={venue.image}
+                    src={getVenueImage(venue.venue_id)}
                     alt={venue.name}
                     className="w-full h-full object-cover"
                   />
@@ -143,14 +153,14 @@ export function HomePage() {
                     </div>
                   </div>
                   <p className="text-muted-foreground">
-                    {venue.distance} • {venue.availability}
+                    {venue.distance_km} km away • {venue.cuisine_type}
                   </p>
                   <div className="flex items-center justify-between">
-                    <p style={{ color: '#2f8a64' }}>${venue.price}/hour</p>
+                    <p style={{ color: '#2f8a64' }}>${venue.hourly_price}/hour</p>
                     <Button
                       size="sm"
                       style={{ backgroundColor: '#253c50' }}
-                      onClick={() => navigate(`/venue/${venue.id}`)}
+                      onClick={() => navigate(`/venue/${venue.venue_id}`)}
                     >
                       Book a Space
                     </Button>
@@ -167,15 +177,15 @@ export function HomePage() {
                 alt="Manhattan Map"
                 className="w-full h-full object-contain"
               />
-              {suggestions.map((venue, idx) => (
+              {venues.map((venue, idx) => (
                 <div
-                  key={venue.id}
+                  key={venue.venue_id}
                   className="absolute cursor-pointer group"
                   style={{
-                    left: `${30 + idx * 20}%`,
-                    top: `${40 + idx * 10}%`,
+                    left: `${30 + idx * 12}%`,
+                    top: `${40 + idx * 8}%`,
                   }}
-                  onClick={() => navigate(`/venue/${venue.id}`)}
+                  onClick={() => navigate(`/venue/${venue.venue_id}`)}
                 >
                   <div className="relative">
                     <div
@@ -186,7 +196,7 @@ export function HomePage() {
                     </div>
                     <div className="absolute top-14 left-1/2 -translate-x-1/2 bg-white p-3 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
                       <p className="font-medium">{venue.name}</p>
-                      <p className="text-sm text-muted-foreground mb-2">${venue.price}/hour</p>
+                      <p className="text-sm text-muted-foreground mb-2">${venue.hourly_price}/hour</p>
                       <Button
                         size="sm"
                         className="w-full"

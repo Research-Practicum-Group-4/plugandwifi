@@ -1,32 +1,37 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Star, MapPin, Heart, Bell } from "lucide-react";
+import { api } from "../../services/api";
+import { Venue } from "../../types/api";
 
 export function SavedPlacesPage() {
-  const savedVenues = [
-    {
-      id: 1,
-      name: "The Grand Hotel Lobby",
-      type: "Hotel Lobby",
-      distance: 0.5,
-      rating: 4.8,
-      reviews: 142,
-      price: 5,
-      image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400",
-    },
-    {
-      id: 2,
-      name: "Cafe Moderna",
-      type: "Cafe",
-      distance: 0.8,
-      rating: 4.6,
-      reviews: 89,
-      price: 3,
-      image: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400",
-    },
-  ];
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getVenues()
+      .then((data) => {
+        // Mock saved places as the first two venues
+        setVenues(data.slice(0, 2));
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to load saved places:", err);
+        setLoading(false);
+      });
+  }, []);
+
+  const getVenueImage = (venueId: string) => {
+    const images: Record<string, string> = {
+      "osm_12345": "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400",
+      "osm_12346": "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400",
+      "osm_12347": "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400",
+    };
+    return images[venueId] || "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400";
+  };
 
   const alerts = [
     {
@@ -60,7 +65,9 @@ export function SavedPlacesPage() {
         </TabsList>
 
         <TabsContent value="saved" className="mt-6">
-          {savedVenues.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-12 text-muted-foreground">Loading saved workspaces...</div>
+          ) : venues.length === 0 ? (
             <Card>
               <CardContent className="pt-12 pb-12 text-center">
                 <Heart className="size-12 mx-auto mb-4 text-muted-foreground" />
@@ -75,12 +82,12 @@ export function SavedPlacesPage() {
             </Card>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {savedVenues.map((venue) => (
-                <Link key={venue.id} to={`/venue/${venue.id}`}>
+              {venues.map((venue) => (
+                <Link key={venue.venue_id} to={`/venue/${venue.venue_id}`}>
                   <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer">
                     <div className="aspect-video relative overflow-hidden">
                       <img
-                        src={venue.image}
+                        src={getVenueImage(venue.venue_id)}
                         alt={venue.name}
                         className="w-full h-full object-cover"
                       />
@@ -88,6 +95,11 @@ export function SavedPlacesPage() {
                         variant="secondary"
                         size="icon"
                         className="absolute top-2 right-2"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // Handle removal mock
+                        }}
                       >
                         <Heart className="size-4 fill-red-500 stroke-red-500" />
                       </Button>
@@ -101,9 +113,9 @@ export function SavedPlacesPage() {
                         </div>
                       </div>
                       <p className="text-muted-foreground mb-2">
-                        {venue.type} • {venue.distance} km away
+                        {venue.cuisine_type} • {venue.distance_km} km away
                       </p>
-                      <p style={{ color: '#2f8a64' }}>${venue.price}/hour</p>
+                      <p style={{ color: '#2f8a64' }}>${venue.hourly_price}/hour</p>
                     </CardContent>
                   </Card>
                 </Link>
