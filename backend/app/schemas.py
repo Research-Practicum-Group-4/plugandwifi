@@ -4,6 +4,11 @@ from pydantic import (
     Field
 )
 
+from datetime import (
+    date,
+    time
+)
+
 
 class UserRegister(
     BaseModel
@@ -126,4 +131,46 @@ class VenueDetailResponse(BaseModel):
     actual_hourly_price: float | None = None
 
     class Config:
+        from_attributes = True
+
+
+class BookingCreate(BaseModel):
+
+    user_id: int
+
+    venue_id: str
+
+    booking_date: date
+
+    start_time: time
+
+    end_time: time
+
+    seats_reserved: int
+
+
+class BookingResponse(BaseModel):
+
+    id: int
+
+    user_id: int
+
+    venue_id: str
+
+    booking_date: date
+
+    start_time: time
+
+    end_time: time
+
+    seats_reserved: int
+
+    status: str
+
+    order_id: str
+
+    payment_status: str
+
+    class Config:
+
         from_attributes = True
