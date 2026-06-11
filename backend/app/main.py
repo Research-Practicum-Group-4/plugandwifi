@@ -21,7 +21,6 @@ from .models import (
 from sqlalchemy.orm import Session
 from .schemas import (
     UserRegister,
-    UserLogin,
     VenueResponse,
     VenueDetailResponse,
     BookingCreate,
@@ -36,8 +35,6 @@ from .auth import (
 from datetime import date, time
 
 from fastapi.middleware.cors import CORSMiddleware
-
-from sqlalchemy.orm import Session
 
 import uuid
 
