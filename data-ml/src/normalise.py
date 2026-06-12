@@ -16,8 +16,8 @@ def normalise_bus(venues):
     high = dist.max()
     venues["bus_norm"] = (high - dist)/ (high - low)
 
-def normalise_train(venues):
-    dist = venues["nearest_train_m"].clip(upper=1200)
+def normalise_subway(venues):
+    dist = venues["nearest_subway_m"].clip(upper=1200)
     low = dist.min()
     high = dist.max()
     venues["train_norm"] = (high - dist)/ (high - low)
@@ -31,6 +31,7 @@ def apply_to_venues(db_path: str = "data/processed/venues.db"):
     normalise_wifi(venues)
     normalise_rating(venues)
     normalise_bus(venues)
+    normalise_subway(venues)
     
     venues.to_sql("venues", con, if_exists="replace", index=False)
     venues.to_csv("data/processed/nyc_venues.csv", index=False)

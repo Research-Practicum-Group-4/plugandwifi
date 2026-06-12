@@ -130,3 +130,6 @@ if __name__ == "__main__":
 
     from pricing_model import apply_to_venues as apply_prices
     apply_prices(DB)
+
+    from normalise import apply_to_venues as apply_normalisation
+    apply_normalisation(DB)
