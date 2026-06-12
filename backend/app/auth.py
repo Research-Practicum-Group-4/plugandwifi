@@ -1,11 +1,17 @@
 import os
 from passlib.context import CryptContext
-from jose import jwt
+from jose import (
+    jwt,
+    JWTError
+)
 from datetime import (
     datetime,
     timedelta
 )
 from dotenv import load_dotenv
+
+from fastapi import HTTPException
+
 
 load_dotenv()
 
@@ -64,3 +70,23 @@ def create_access_token(
     )
 
     return encoded_jwt
+
+def verify_access_token(
+    token: str
+):
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        return payload
+
+    except JWTError:
+
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )

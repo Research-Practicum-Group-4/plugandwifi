@@ -3,6 +3,10 @@ from fastapi import (
     Depends,
     HTTPException
 )
+from fastapi.security import (
+    OAuth2PasswordBearer,
+    OAuth2PasswordRequestForm
+)
 from .database import (
     engine, 
     Base , 
@@ -17,7 +21,6 @@ from .models import (
 from sqlalchemy.orm import Session
 from .schemas import (
     UserRegister,
-    UserLogin,
     VenueResponse,
     VenueDetailResponse,
     BookingCreate,
@@ -26,7 +29,8 @@ from .schemas import (
 from .auth import (
     hash_password, 
     verify_password,
-    create_access_token
+    create_access_token,
+    verify_access_token
 )
 from datetime import date, time
 
@@ -37,6 +41,36 @@ import uuid
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/api/auth/login"
+)
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+
+    payload = verify_access_token(
+        token
+    )
+
+    user = (
+        db.query(User)
+        .filter(
+            User.id == payload["user_id"]
+        )
+        .first()
+    )
+
+    if not user:
+
+        raise HTTPException(
+            status_code=401,
+            detail="User not found"
+        )
+
+    return user
 
 # CORS Whitelist
 origins = [
@@ -106,34 +140,34 @@ def register_user(
 
 @app.post("/api/auth/login")
 def login_user(
-    payload: UserLogin,
-    db:Session = Depends(get_db)
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
 ):
+
     user = db.query(User).filter(
-        User.email == payload.email
+        User.email == form_data.username
     ).first()
 
     if not user:
 
         raise HTTPException(
             status_code=401,
-            detail = "Invalid email or password"
+            detail="Invalid email or password"
         )
-    
+
     password_correct = verify_password(
-        payload.password,
+        form_data.password,
         user.password_hash
     )
 
     if not password_correct:
-        
-        raise HTTPException(
-            status_code = 401,
-            detail = "Invalid email or password"
-        )
-    
-    access_token = create_access_token(
 
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password"
+        )
+
+    access_token = create_access_token(
         {
             "user_id": user.id,
             "email": user.email
@@ -370,3 +404,21 @@ def create_booking(
     db.refresh(booking)
 
     return booking
+
+@app.get("/api/users/me")
+def get_me(
+    current_user: User = Depends(
+        get_current_user
+    )
+):
+    
+    return {
+
+        "user_id": current_user.id,
+
+        "full_name": current_user.full_name,
+
+        "email": current_user.email,
+
+        "role": "user"
+    }
