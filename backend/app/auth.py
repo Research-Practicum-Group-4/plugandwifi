@@ -19,14 +19,31 @@ SECRET_KEY = os.getenv(
     "SECRET_KEY"
 )
 
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY environment variable is missing!"
+    )
+
 ALGORITHM = os.getenv(
     "ALGORITHM"
 )
 
-ACCESS_TOKEN_EXPIRE_MINUTES = int(
-    os.getenv(
-        "ACCESS_TOKEN_EXPIRE_MINUTES"
+if not ALGORITHM:
+    raise RuntimeError(
+        "ALGORITHM environment variable is missing!"
     )
+
+access_token_expire_minutes = os.getenv(
+    "ACCESS_TOKEN_EXPIRE_MINUTES"
+)
+
+if not access_token_expire_minutes:
+    raise RuntimeError(
+        "ACCESS_TOKEN_EXPIRE_MINUTES environment variable is missing!"
+    )
+
+ACCESS_TOKEN_EXPIRE_MINUTES = int(
+    access_token_expire_minutes
 )
 
 pwd_context = CryptContext(

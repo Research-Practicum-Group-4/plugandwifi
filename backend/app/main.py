@@ -4,8 +4,7 @@ from fastapi import (
     HTTPException
 )
 from fastapi.security import (
-    OAuth2PasswordBearer,
-    OAuth2PasswordRequestForm
+    OAuth2PasswordBearer
 )
 from .database import (
     engine, 
@@ -21,6 +20,7 @@ from .models import (
 from sqlalchemy.orm import Session
 from .schemas import (
     UserRegister,
+    UserLogin,
     VenueResponse,
     VenueDetailResponse,
     BookingCreate,
@@ -140,12 +140,12 @@ def register_user(
 
 @app.post("/api/auth/login")
 def login_user(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    payload: UserLogin,
     db: Session = Depends(get_db)
 ):
 
     user = db.query(User).filter(
-        User.email == form_data.username
+        User.email == payload.email
     ).first()
 
     if not user:
@@ -156,7 +156,7 @@ def login_user(
         )
 
     password_correct = verify_password(
-        form_data.password,
+        payload.password,
         user.password_hash
     )
 
@@ -181,7 +181,7 @@ def login_user(
         "token_type": "bearer",
 
         "user": {
-            "id": user.id,
+            "user_id": user.id,
             "full_name": user.full_name,
             "email": user.email
         }
