@@ -10,11 +10,9 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { api } from "../../services/api";
 import { Venue } from "../../types/api";
-import { useAuth } from "../contexts/AuthContext";
 
 export function HomePage() {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
@@ -22,12 +20,6 @@ export function HomePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      setVenues([]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     api.getVenues()
       .then((data) => {
@@ -38,7 +30,7 @@ export function HomePage() {
         console.error("Failed to fetch venues:", err);
         setLoading(false);
       });
-  }, [isAuthenticated]);
+  }, []);
 
   const getVenueImage = (venueId: string) => {
     const images: Record<string, string> = {
@@ -81,8 +73,8 @@ export function HomePage() {
               <Calendar mode="single" selected={date} onSelect={setDate} />
             </PopoverContent>
           </Popover>
-          <Link to={isAuthenticated ? "/search" : "#"} className={!isAuthenticated ? "pointer-events-none opacity-50" : ""}>
-            <Button size="lg" className="h-12 px-8" style={{ backgroundColor: '#2f8a64' }} disabled={!isAuthenticated}>
+          <Link to="/search">
+            <Button size="lg" className="h-12 px-8" style={{ backgroundColor: '#2f8a64' }}>
               Search
             </Button>
           </Link>
@@ -124,14 +116,7 @@ export function HomePage() {
       <div className="mb-12">
         <h2 className="mb-6">Available Near You</h2>
 
-        {!isAuthenticated ? (
-          <div className="text-center py-12 border border-dashed rounded-xl bg-card p-6">
-            <p className="text-muted-foreground mb-4">Please log in to view and book workspaces in your area.</p>
-            <Link to="/login">
-              <Button style={{ backgroundColor: '#2f8a64' }} className="cursor-pointer">Sign In</Button>
-            </Link>
-          </div>
-        ) : loading ? (
+        {loading ? (
           <div className="text-center py-12 text-muted-foreground">Loading workspaces...</div>
         ) : viewMode === "grid" ? (
           <div className="grid md:grid-cols-3 gap-6">

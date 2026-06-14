@@ -326,7 +326,6 @@ export const api = {
     noise_level?: string;
     max_price?: number;
   }): Promise<Venue[]> => {
-    checkAuth();
     if (USE_MOCK) {
       await delay(400);
       let filtered = [...mockVenues];
@@ -388,7 +387,6 @@ export const api = {
 
   // 3. Get Venue Details
   getVenueDetail: async (venueId: string): Promise<VenueDetail> => {
-    checkAuth();
     if (USE_MOCK) {
       await delay(300);
       const venue = mockVenues.find(v => v.venue_id === venueId);
@@ -402,7 +400,6 @@ export const api = {
 
   // 4. Get Availability slots
   getAvailability: async (venueId: string): Promise<VenueAvailability> => {
-    checkAuth();
     if (USE_MOCK) {
       await delay(200);
       const slots = mockAvailability[venueId];
