@@ -4,6 +4,7 @@ from datetime import date, time
 
 # Environment isolation and path alignment
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["SECRET_KEY"] = "secret_key_for_testing"
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
