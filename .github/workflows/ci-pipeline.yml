@@ -47,6 +47,12 @@ jobs:
       with:
         node-version: '18'
 
+    - name: React - Install Dependencies and Run Build Verification
+      working-directory: ./frontend-web
+      run: |
+        npm ci
+        npm run build
+
     - name: React - Install Prettier Globally
       run: npm install -g prettier
 
