@@ -32,36 +32,32 @@ class UserLogin(
     password: str
 
 
-class VenueResponse(
-    BaseModel
-):
+class VenueResponse(BaseModel):
 
     venue_id: str
-
     name: str
-
-    cuisine_type: str | None = None
-
     lat: float
-
     lon: float
-
-    has_wifi: bool | None = None
-
-    noise_level: str
-
-    noise_score: float
-
-    rating: float
-
-    plug_access: int
-
-    hourly_price: float
-
     borough: str
 
-    class Config:
 
+    cuisine_type: str | None = None
+    has_wifi: bool | None = None
+    
+
+    noise_level: str | None = None
+    noise_score: float | None = None
+    
+
+    rating: float | None = None
+    
+
+    plug_access: int | None = None
+    
+
+    hourly_price: float | None = None
+
+    class Config:
         from_attributes = True
 
 
@@ -94,9 +90,9 @@ class VenueDetailResponse(BaseModel):
 
     has_wifi: bool | None = None
 
-    noise_level: str
+    noise_level: str | None = None
 
-    noise_score: float
+    noise_score: float | None = None
 
     best_hours_for_work: str | None = None
 
