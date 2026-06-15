@@ -74,8 +74,6 @@ def parse_elements(elements):
             "lon": float(lon),
             "opening_hours": tags.get("opening_hours", None),
             "has_wifi": has_wifi,
-            "noise_level": None,
-            "noise_score": None,
             "best_hours_for_work": None,
             "hourly_profile": None,
             "partner": False,
@@ -132,3 +130,6 @@ if __name__ == "__main__":
 
     from pricing_model import apply_to_venues as apply_prices
     apply_prices(DB)
+
+    from normalise import apply_to_venues as apply_normalisation
+    apply_normalisation(DB)

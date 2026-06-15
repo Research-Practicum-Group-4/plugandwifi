@@ -15,5 +15,5 @@ def apply_to_venues(db_path):
     venues["rating_user_reported"] = None
 
     venues.to_sql("venues", con, if_exists="replace", index=False)
-    venues.to_csv("data/processed/nyc_venues", index=False)
+    venues.to_csv("data/processed/nyc_venues.csv", index=False)
     con.close()
