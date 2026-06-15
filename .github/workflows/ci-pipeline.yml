@@ -45,7 +45,13 @@ jobs:
     - name: Set up Node.js Environment
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '22'
+
+    - name: React - Install Dependencies and Run Build Verification
+      working-directory: ./frontend-web
+      run: |
+        npm ci
+        npm run build
 
     - name: React - Install Prettier Globally
       run: npm install -g prettier
