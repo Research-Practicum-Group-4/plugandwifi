@@ -269,7 +269,28 @@ def get_venues(
         limit
     ).all()
 
-    return venues
+    return [
+        {
+            "venue_id": venue.venue_id,
+            "name": venue.name,
+            "lat": venue.lat,
+            "lon": venue.lon,
+            "borough": venue.borough,
+            "cuisine_type": venue.cuisine_type,
+            "has_wifi": venue.has_wifi,
+            "noise_level": venue.noise_level,
+            "noise_score": venue.noise_score,
+            "rating": venue.rating,
+            "plug_access": venue.plug_access,
+            "hourly_price": venue.hourly_price,
+            "plugs_available": venue.plug_access,
+            "hourly_fee": venue.hourly_price,
+            "availability_window": None,
+            "opening_hours_summary": venue.opening_hours,
+            "distance_km": None
+        }
+        for venue in venues
+    ]
 
 @app.get(
     "/api/venues/{venue_id}",
