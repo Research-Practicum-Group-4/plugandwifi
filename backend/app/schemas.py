@@ -71,6 +71,17 @@ class VenueResponse(BaseModel):
         from_attributes = True
 
 
+class VenueListResponse(BaseModel):
+
+    items: list[VenueResponse]
+
+    page: int
+
+    limit: int
+
+    has_more: bool
+
+
 class VenueDetailResponse(BaseModel):
     venue_id: str
 
