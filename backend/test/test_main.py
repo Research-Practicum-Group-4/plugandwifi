@@ -17,7 +17,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.database import Base, get_db
-from app.models import User, Venue, AvailabilitySlot 
+from app.models import User, Venue, AvailabilitySlot, Booking
 from app.auth import hash_password
 
 # SQLite test database configuration
@@ -88,11 +88,35 @@ def setup_and_seed_database():
             venue_id="osm_296568074",
             date=date(2026, 6, 15),
             start_time=time(9, 0, 0),
-            end_time=time(10, 0, 0),
+            end_time=time(12, 0, 0),
             available=True,
             available_seats=5
         )
         db.add(test_slot)
+
+        second_slot = AvailabilitySlot(
+            id=2,
+            venue_id="osm_296568075",
+            date=date(2026, 6, 15),
+            start_time=time(9, 0, 0),
+            end_time=time(12, 0, 0),
+            available=True,
+            available_seats=2
+        )
+        db.add(second_slot)
+
+        test_booking = Booking(
+            id=1,
+            user_id=1,
+            venue_id="osm_296568074",
+            booking_date=date(2026, 6, 15),
+            start_time=time(10, 0, 0),
+            end_time=time(11, 0, 0),
+            seats_reserved=2,
+            order_id="ORD-duration-test",
+            payment_status="paid"
+        )
+        db.add(test_booking)
         
         db.commit()
     finally:
@@ -174,6 +198,33 @@ def test_get_venues_requires_lat_and_lon_together():
 
     lon_only = client.get("/api/venues?lon=-6.2230")
     assert lon_only.status_code == 400
+
+def test_get_venues_duration_hours_respects_required_seats():
+    response = client.get(
+        "/api/venues?borough=Dublin South&date=2026-06-15&start_time=09:00:00&duration_hours=3&seats_required=3"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 1
+    assert data["items"][0]["venue_id"] == "osm_296568074"
+
+    unavailable_response = client.get(
+        "/api/venues?borough=Dublin South&date=2026-06-15&start_time=09:00:00&duration_hours=3&seats_required=4"
+    )
+    assert unavailable_response.status_code == 200
+    unavailable_data = unavailable_response.json()
+    assert len(unavailable_data["items"]) == 0
+
+def test_get_venues_duration_hours_requires_date_and_start_time():
+    missing_date = client.get(
+        "/api/venues?start_time=09:00:00&duration_hours=1"
+    )
+    assert missing_date.status_code == 400
+
+    missing_start_time = client.get(
+        "/api/venues?date=2026-06-15&duration_hours=1"
+    )
+    assert missing_start_time.status_code == 400
 
 def test_create_booking_success():
     booking_payload = {
