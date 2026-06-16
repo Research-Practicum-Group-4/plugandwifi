@@ -149,6 +149,32 @@ def test_get_venues_pagination_metadata():
     assert second_page_data["has_more"] is False
     assert len(second_page_data["items"]) == 1
 
+def test_get_venues_geospatial_sorting_and_radius():
+    response = client.get(
+        "/api/venues?borough=Dublin South&lat=53.3078&lon=-6.2230&radius=1"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 2
+    assert data["items"][0]["name"] == "UCD Library Shared Space"
+    assert data["items"][0]["distance_km"] == 0
+    assert data["items"][1]["distance_km"] > data["items"][0]["distance_km"]
+
+    narrow_response = client.get(
+        "/api/venues?borough=Dublin South&lat=53.3078&lon=-6.2230&radius=0.05"
+    )
+    assert narrow_response.status_code == 200
+    narrow_data = narrow_response.json()
+    assert len(narrow_data["items"]) == 1
+    assert narrow_data["items"][0]["name"] == "UCD Library Shared Space"
+
+def test_get_venues_requires_lat_and_lon_together():
+    lat_only = client.get("/api/venues?lat=53.3078")
+    assert lat_only.status_code == 400
+
+    lon_only = client.get("/api/venues?lon=-6.2230")
+    assert lon_only.status_code == 400
+
 def test_create_booking_success():
     booking_payload = {
         "user_id": 1,

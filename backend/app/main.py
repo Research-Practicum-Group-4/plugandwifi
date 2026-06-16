@@ -34,6 +34,7 @@ from .auth import (
     verify_access_token
 )
 from datetime import date, time
+from math import asin, cos, radians, sin, sqrt
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -72,6 +73,49 @@ def get_current_user(
         )
 
     return user
+
+def calculate_distance_km(
+    origin_lat: float,
+    origin_lon: float,
+    venue_lat: float,
+    venue_lon: float
+):
+    earth_radius_km = 6371.0
+
+    lat_delta = radians(
+        venue_lat - origin_lat
+    )
+    lon_delta = radians(
+        venue_lon - origin_lon
+    )
+
+    origin_lat_rad = radians(
+        origin_lat
+    )
+    venue_lat_rad = radians(
+        venue_lat
+    )
+
+    haversine_value = (
+        sin(
+            lat_delta / 2
+        ) ** 2
+        + cos(
+            origin_lat_rad
+        )
+        * cos(
+            venue_lat_rad
+        )
+        * sin(
+            lon_delta / 2
+        ) ** 2
+    )
+
+    return 2 * earth_radius_km * asin(
+        sqrt(
+            haversine_value
+        )
+    )
 
 # CORS Whitelist
 origins = [
@@ -220,8 +264,31 @@ def get_venues(
         ge=1
     ),
 
+    lat: float | None = Query(
+        None,
+        ge=-90,
+        le=90
+    ),
+
+    lon: float | None = Query(
+        None,
+        ge=-180,
+        le=180
+    ),
+
+    radius: float | None = Query(
+        None,
+        ge=0
+    ),
+
     db: Session = Depends(get_db)
 ):
+    if (lat is None) != (lon is None):
+        raise HTTPException(
+            status_code=400,
+            detail="Both lat and lon are required for geospatial filtering"
+        )
+
     query = db.query(Venue)
 
     if date and start_time and end_time:
@@ -274,25 +341,67 @@ def get_venues(
             Venue.borough == borough
         )
     
-    query = query.order_by(
-        Venue.venue_id
-    )
-
     offset = (
         page - 1
     ) * limit
 
-    venues = query.offset(
-        offset
-    ).limit(
-        limit + 1
-    ).all()
+    if lat is not None and lon is not None:
+        venues_with_distance = []
 
-    has_more = len(
-        venues
-    ) > limit
+        for venue in query.all():
+            if venue.lat is None or venue.lon is None:
+                continue
 
-    venues = venues[:limit]
+            distance_km = calculate_distance_km(
+                lat,
+                lon,
+                venue.lat,
+                venue.lon
+            )
+
+            if radius is not None and distance_km > radius:
+                continue
+
+            venues_with_distance.append(
+                (
+                    venue,
+                    distance_km
+                )
+            )
+
+        venues_with_distance.sort(
+            key=lambda venue_with_distance: venue_with_distance[1]
+        )
+
+        selected_venues = venues_with_distance[
+            offset: offset + limit + 1
+        ]
+
+        has_more = len(
+            selected_venues
+        ) > limit
+
+        selected_venues = selected_venues[:limit]
+    else:
+        venues = query.order_by(
+            Venue.venue_id
+        ).offset(
+            offset
+        ).limit(
+            limit + 1
+        ).all()
+
+        has_more = len(
+            venues
+        ) > limit
+
+        selected_venues = [
+            (
+                venue,
+                None
+            )
+            for venue in venues[:limit]
+        ]
 
     items = [
         {
@@ -312,9 +421,9 @@ def get_venues(
             "hourly_fee": venue.hourly_price,
             "availability_window": None,
             "opening_hours_summary": venue.opening_hours,
-            "distance_km": None
+            "distance_km": distance_km
         }
-        for venue in venues
+        for venue, distance_km in selected_venues
     ]
 
     return {
