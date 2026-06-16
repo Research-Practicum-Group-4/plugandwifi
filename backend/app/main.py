@@ -33,7 +33,7 @@ from .auth import (
     create_access_token,
     verify_access_token
 )
-from datetime import date, time
+from datetime import date, datetime, time, timedelta
 from math import asin, cos, radians, sin, sqrt
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -116,6 +116,135 @@ def calculate_distance_km(
             haversine_value
         )
     )
+
+def add_duration_to_time(
+    start_time_value: time,
+    duration_hours: float
+):
+    start_datetime = datetime.combine(
+        date.today(),
+        start_time_value
+    )
+
+    end_datetime = start_datetime + timedelta(
+        hours=duration_hours
+    )
+
+    return end_datetime.time()
+
+def has_required_contiguous_seats(
+    db: Session,
+    venue_id: str,
+    requested_date: date,
+    requested_start_time: time,
+    requested_end_time: time,
+    seats_required: int
+):
+    slots = (
+        db.query(AvailabilitySlot)
+        .filter(
+            AvailabilitySlot.venue_id == venue_id
+        )
+        .filter(
+            AvailabilitySlot.date == requested_date
+        )
+        .filter(
+            AvailabilitySlot.available.is_(True)
+        )
+        .filter(
+            AvailabilitySlot.end_time > requested_start_time
+        )
+        .filter(
+            AvailabilitySlot.start_time < requested_end_time
+        )
+        .all()
+    )
+
+    bookings = (
+        db.query(Booking)
+        .filter(
+            Booking.venue_id == venue_id
+        )
+        .filter(
+            Booking.booking_date == requested_date
+        )
+        .filter(
+            Booking.end_time > requested_start_time
+        )
+        .filter(
+            Booking.start_time < requested_end_time
+        )
+        .all()
+    )
+
+    boundaries = {
+        requested_start_time,
+        requested_end_time
+    }
+
+    for slot in slots:
+        if slot.start_time > requested_start_time:
+            boundaries.add(
+                slot.start_time
+            )
+
+        if slot.end_time < requested_end_time:
+            boundaries.add(
+                slot.end_time
+            )
+
+    for booking in bookings:
+        if booking.start_time > requested_start_time:
+            boundaries.add(
+                booking.start_time
+            )
+
+        if booking.end_time < requested_end_time:
+            boundaries.add(
+                booking.end_time
+            )
+
+    sorted_boundaries = sorted(
+        boundaries
+    )
+
+    for index in range(
+        len(sorted_boundaries) - 1
+    ):
+        segment_start = sorted_boundaries[index]
+        segment_end = sorted_boundaries[index + 1]
+
+        if segment_start >= segment_end:
+            continue
+
+        covering_slot = None
+
+        for slot in slots:
+            if (
+                slot.start_time <= segment_start
+                and slot.end_time >= segment_end
+            ):
+                covering_slot = slot
+                break
+
+        if covering_slot is None:
+            return False
+
+        reserved_seats = sum(
+            booking.seats_reserved
+            for booking in bookings
+            if (
+                booking.start_time < segment_end
+                and booking.end_time > segment_start
+            )
+        )
+
+        remaining_seats = covering_slot.available_seats - reserved_seats
+
+        if remaining_seats < seats_required:
+            return False
+
+    return True
 
 # CORS Whitelist
 origins = [
@@ -254,6 +383,16 @@ def get_venues(
 
     end_time: time | None = None,
 
+    duration_hours: float | None = Query(
+        None,
+        gt=0
+    ),
+
+    seats_required: int = Query(
+        1,
+        ge=1
+    ),
+
     limit: int = Query(
         20,
         ge=1
@@ -289,9 +428,15 @@ def get_venues(
             detail="Both lat and lon are required for geospatial filtering"
         )
 
+    if duration_hours is not None and (date is None or start_time is None):
+        raise HTTPException(
+            status_code=400,
+            detail="date and start_time are required when duration_hours is provided"
+        )
+
     query = db.query(Venue)
 
-    if date and start_time and end_time:
+    if duration_hours is None and date and start_time and end_time:
 
         query = (
             query.join(
@@ -339,6 +484,35 @@ def get_venues(
     if borough:
         query = query.filter(
             Venue.borough == borough
+        )
+
+    if duration_hours is not None:
+        requested_end_time = add_duration_to_time(
+            start_time,
+            duration_hours
+        )
+
+        available_venue_ids = []
+
+        for venue_id, in query.with_entities(
+            Venue.venue_id
+        ).all():
+            if has_required_contiguous_seats(
+                db,
+                venue_id,
+                date,
+                start_time,
+                requested_end_time,
+                seats_required
+            ):
+                available_venue_ids.append(
+                    venue_id
+                )
+
+        query = query.filter(
+            Venue.venue_id.in_(
+                available_venue_ids
+            )
         )
     
     offset = (
