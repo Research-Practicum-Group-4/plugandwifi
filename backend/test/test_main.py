@@ -66,6 +66,22 @@ def setup_and_seed_database():
         )
         db.add(test_venue)
 
+        second_venue = Venue(
+            venue_id="osm_296568075",
+            name="UCD Village Study Hub",
+            borough="Dublin South",
+            has_wifi=True,
+            noise_level="moderate",
+            hourly_price=4.0,
+            opening_hours="Mo-Fr 10:00-18:00",
+            lat=53.3069,
+            lon=-6.2218,
+            noise_score=0.35,
+            rating=4.4,
+            plug_access=1
+        )
+        db.add(second_venue)
+
         # C. Seed availability slot using explicit Python date/time objects
         test_slot = AvailabilitySlot(
             id=1,
@@ -98,8 +114,11 @@ def test_get_venues_with_data():
     response = client.get("/api/venues?borough=Dublin South")
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["name"] == "UCD Library Shared Space"
+    assert data["page"] == 1
+    assert data["limit"] == 20
+    assert data["has_more"] is False
+    assert len(data["items"]) == 2
+    assert data["items"][0]["name"] == "UCD Library Shared Space"
     required_fields = {
         "plugs_available",
         "noise_level",
@@ -108,10 +127,27 @@ def test_get_venues_with_data():
         "opening_hours_summary",
         "distance_km",
     }
-    assert required_fields.issubset(data[0].keys())
-    assert data[0]["plugs_available"] == 1
-    assert data[0]["hourly_fee"] == 3.5
-    assert data[0]["opening_hours_summary"] == "Mo-Fr 09:00-17:00"
+    assert required_fields.issubset(data["items"][0].keys())
+    assert data["items"][0]["plugs_available"] == 1
+    assert data["items"][0]["hourly_fee"] == 3.5
+    assert data["items"][0]["opening_hours_summary"] == "Mo-Fr 09:00-17:00"
+
+def test_get_venues_pagination_metadata():
+    first_page = client.get("/api/venues?borough=Dublin South&limit=1&page=1")
+    assert first_page.status_code == 200
+    first_page_data = first_page.json()
+    assert first_page_data["page"] == 1
+    assert first_page_data["limit"] == 1
+    assert first_page_data["has_more"] is True
+    assert len(first_page_data["items"]) == 1
+
+    second_page = client.get("/api/venues?borough=Dublin South&limit=1&page=2")
+    assert second_page.status_code == 200
+    second_page_data = second_page.json()
+    assert second_page_data["page"] == 2
+    assert second_page_data["limit"] == 1
+    assert second_page_data["has_more"] is False
+    assert len(second_page_data["items"]) == 1
 
 def test_create_booking_success():
     booking_payload = {

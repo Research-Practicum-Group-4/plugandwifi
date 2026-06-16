@@ -1,7 +1,8 @@
 from fastapi import (
     FastAPI ,
     Depends,
-    HTTPException
+    HTTPException,
+    Query
 )
 from fastapi.security import (
     OAuth2PasswordBearer
@@ -21,7 +22,7 @@ from sqlalchemy.orm import Session
 from .schemas import (
     UserRegister,
     UserLogin,
-    VenueResponse,
+    VenueListResponse,
     VenueDetailResponse,
     BookingCreate,
     BookingResponse
@@ -189,7 +190,7 @@ def login_user(
 
 @app.get(
     "/api/venues",
-    response_model = list[VenueResponse] 
+    response_model = VenueListResponse
 )
 def get_venues(
 
@@ -209,7 +210,15 @@ def get_venues(
 
     end_time: time | None = None,
 
-    limit: int = 20,
+    limit: int = Query(
+        20,
+        ge=1
+    ),
+
+    page: int = Query(
+        1,
+        ge=1
+    ),
 
     db: Session = Depends(get_db)
 ):
@@ -265,11 +274,27 @@ def get_venues(
             Venue.borough == borough
         )
     
-    venues = query.limit(
-        limit
+    query = query.order_by(
+        Venue.venue_id
+    )
+
+    offset = (
+        page - 1
+    ) * limit
+
+    venues = query.offset(
+        offset
+    ).limit(
+        limit + 1
     ).all()
 
-    return [
+    has_more = len(
+        venues
+    ) > limit
+
+    venues = venues[:limit]
+
+    items = [
         {
             "venue_id": venue.venue_id,
             "name": venue.name,
@@ -291,6 +316,13 @@ def get_venues(
         }
         for venue in venues
     ]
+
+    return {
+        "items": items,
+        "page": page,
+        "limit": limit,
+        "has_more": has_more
+    }
 
 @app.get(
     "/api/venues/{venue_id}",
