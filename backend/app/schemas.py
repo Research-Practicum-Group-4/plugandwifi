@@ -57,6 +57,16 @@ class VenueResponse(BaseModel):
 
     hourly_price: float | None = None
 
+    plugs_available: int | None = None
+
+    hourly_fee: float | None = None
+
+    availability_window: str | None = None
+
+    opening_hours_summary: str | bool | None = None
+
+    distance_km: float | None = None
+
     class Config:
         from_attributes = True
 

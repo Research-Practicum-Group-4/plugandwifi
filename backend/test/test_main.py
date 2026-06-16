@@ -57,6 +57,7 @@ def setup_and_seed_database():
             has_wifi=True,
             noise_level="quiet",
             hourly_price=3.5,
+            opening_hours="Mo-Fr 09:00-17:00",
             lat=53.3078,
             lon=-6.2230,
             noise_score=0.12,
@@ -99,6 +100,18 @@ def test_get_venues_with_data():
     data = response.json()
     assert len(data) == 1
     assert data[0]["name"] == "UCD Library Shared Space"
+    required_fields = {
+        "plugs_available",
+        "noise_level",
+        "hourly_fee",
+        "availability_window",
+        "opening_hours_summary",
+        "distance_km",
+    }
+    assert required_fields.issubset(data[0].keys())
+    assert data[0]["plugs_available"] == 1
+    assert data[0]["hourly_fee"] == 3.5
+    assert data[0]["opening_hours_summary"] == "Mo-Fr 09:00-17:00"
 
 def test_create_booking_success():
     booking_payload = {
