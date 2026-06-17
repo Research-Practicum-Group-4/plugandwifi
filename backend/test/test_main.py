@@ -134,6 +134,11 @@ def test_login_success():
     response = client.post("/api/auth/login", json=login_payload)
     assert response.status_code == 200
 
+def test_logout_success():
+    response = client.post("/api/auth/logout")
+    assert response.status_code == 200
+    assert response.json()["message"] == "Logged out successfully"
+
 def test_get_venues_with_data():
     response = client.get("/api/venues?borough=Dublin South")
     assert response.status_code == 200

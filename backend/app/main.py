@@ -361,6 +361,13 @@ def login_user(
         }
     }
 
+@app.post("/api/auth/logout")
+def logout_user():
+
+    return {
+        "message": "Logged out successfully"
+    }
+
 @app.get(
     "/api/venues",
     response_model = VenueListResponse
