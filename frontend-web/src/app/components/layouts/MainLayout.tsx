@@ -35,30 +35,19 @@ export function MainLayout() {
           <nav className="flex items-center gap-4">
             {!isProviderRoute && (
               <>
-                <Link
-                  to={isAuthenticated ? "/search" : "#"}
-                  className={!isAuthenticated ? "pointer-events-none opacity-50" : ""}
-                >
-                  <Button variant="ghost" disabled={!isAuthenticated}>
-                    Find Space
-                  </Button>
+                <Link to="/search">
+                  <Button variant="ghost">Find Space</Button>
                 </Link>
-                <Link
-                  to={isAuthenticated ? "/saved" : "#"}
-                  className={!isAuthenticated ? "pointer-events-none opacity-50" : ""}
-                >
-                  <Button variant="ghost" disabled={!isAuthenticated}>
-                    Saved
-                  </Button>
-                </Link>
+                {isAuthenticated && (
+                  <Link to="/saved">
+                    <Button variant="ghost">Saved</Button>
+                  </Link>
+                )}
               </>
             )}
 
-            <Link
-              to={isAuthenticated ? "/provider/dashboard" : "#"}
-              className={!isAuthenticated ? "pointer-events-none opacity-50" : ""}
-            >
-              <Button variant="ghost" size="icon" disabled={!isAuthenticated}>
+            <Link to="/provider/dashboard">
+              <Button variant="ghost" size="icon">
                 <Building2 className="size-5" />
               </Button>
             </Link>

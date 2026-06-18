@@ -23,14 +23,16 @@ To launch the local development environment:
 # 1. Navigate to the frontend directory
 cd frontend-web
 
-# 2. Replicate the local environment variables template
-cp .env.example .env.development.local
+# 2. Write a mock .env file, using mock mode
+touch .env.development.mock
+echo "VITE_USE_MOCK=true" >> .env.development.mock
+echo "VITE_API_BASE_URL=<ignored>" >> .env.development.mock
 
 # 3. Install dependencies
 npm install
 
 # 4. Start the Vite development server
-npm run dev
+npm run dev # Or `npm run dev:mock`
 ```
 
 Once started, open your browser and navigate to: **[http://localhost:5173](http://localhost:5173)**

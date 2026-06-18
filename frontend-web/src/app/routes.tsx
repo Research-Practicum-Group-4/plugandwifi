@@ -18,6 +18,8 @@ export const router = createBrowserRouter([
     Component: MainLayout,
     children: [
       { index: true, Component: HomePage },
+      { path: "search", Component: SearchPage },
+      { path: "venue/:id", Component: VenueDetailPage },
       { path: "login", Component: LoginPage },
       { path: "signup", Component: SignupPage },
       
@@ -25,8 +27,6 @@ export const router = createBrowserRouter([
       {
         element: <ProtectedRoute />,
         children: [
-          { path: "search", Component: SearchPage },
-          { path: "venue/:id", Component: VenueDetailPage },
           { path: "checkout", Component: CheckoutPage },
           { path: "saved", Component: SavedPlacesPage },
           { path: "provider/dashboard", Component: ProviderDashboard },
