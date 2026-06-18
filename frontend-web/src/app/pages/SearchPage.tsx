@@ -21,15 +21,22 @@ export function SearchPage() {
   const [priceRange, setPriceRange] = useState([1, 10]);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [limit] = useState(10);
+  const [hasMore, setHasMore] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     api.getVenues({
       noise_level: filters.noLoudMusic ? "quiet" : undefined,
       wifi_free: filters.freeWifi ? true : undefined,
+      max_price: priceRange[1],
+      page: currentPage,
+      limit: limit,
     })
       .then((data) => {
-        let result = [...data];
+        let result = [...data.items];
+        setHasMore(data.has_more);
         
         // Local filtering
         if (searchQuery) {
@@ -49,7 +56,7 @@ export function SearchPage() {
         console.error("Failed to fetch venues:", err);
         setLoading(false);
       });
-  }, [filters, searchQuery, priceRange]);
+  }, [filters, searchQuery, priceRange, currentPage, limit]);
 
   const getVenueImage = (venueId: string) => {
     const images: Record<string, string> = {
@@ -88,9 +95,10 @@ export function SearchPage() {
                 <Checkbox
                   id="noLoudMusic"
                   checked={filters.noLoudMusic}
-                  onCheckedChange={(checked) =>
-                    setFilters({ ...filters, noLoudMusic: checked as boolean })
-                  }
+                  onCheckedChange={(checked) => {
+                    setFilters({ ...filters, noLoudMusic: checked as boolean });
+                    setCurrentPage(1);
+                  }}
                 />
                 <Label htmlFor="noLoudMusic" className="flex items-center gap-2 cursor-pointer">
                   <Volume2 className="size-4" />
@@ -102,9 +110,10 @@ export function SearchPage() {
                 <Checkbox
                   id="freeWifi"
                   checked={filters.freeWifi}
-                  onCheckedChange={(checked) =>
-                    setFilters({ ...filters, freeWifi: checked as boolean })
-                  }
+                  onCheckedChange={(checked) => {
+                    setFilters({ ...filters, freeWifi: checked as boolean });
+                    setCurrentPage(1);
+                  }}
                 />
                 <Label htmlFor="freeWifi" className="flex items-center gap-2 cursor-pointer">
                   <Wifi className="size-4" />
@@ -116,9 +125,10 @@ export function SearchPage() {
                 <Checkbox
                   id="fourPlusStars"
                   checked={filters.fourPlusStars}
-                  onCheckedChange={(checked) =>
-                    setFilters({ ...filters, fourPlusStars: checked as boolean })
-                  }
+                  onCheckedChange={(checked) => {
+                    setFilters({ ...filters, fourPlusStars: checked as boolean });
+                    setCurrentPage(1);
+                  }}
                 />
                 <Label htmlFor="fourPlusStars" className="flex items-center gap-2 cursor-pointer">
                   <Star className="size-4" />
@@ -132,7 +142,10 @@ export function SearchPage() {
             <h4 className="mb-4">Price Range (per hour)</h4>
             <Slider
               value={priceRange}
-              onValueChange={setPriceRange}
+              onValueChange={(val) => {
+                setPriceRange(val);
+                setCurrentPage(1);
+              }}
               min={1}
               max={10}
               step={1}
@@ -144,7 +157,16 @@ export function SearchPage() {
             </div>
           </div>
 
-          <Button variant="outline" className="w-full">
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => {
+              setFilters({ freeWifi: false, noLoudMusic: false, fourPlusStars: false });
+              setPriceRange([1, 10]);
+              setSearchQuery("");
+              setCurrentPage(1);
+            }}
+          >
             Clear All Filters
           </Button>
         </aside>
@@ -157,7 +179,10 @@ export function SearchPage() {
               <Input
                 placeholder="Search by city or venue name..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="pl-10 h-12"
               />
             </div>
@@ -238,6 +263,37 @@ export function SearchPage() {
                       </div>
                     </Card>
                   ))
+                )}
+
+                {/* Pagination controls */}
+                {!loading && venues.length > 0 && (
+                  <div className="flex items-center justify-center gap-4 mt-8">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setCurrentPage(prev => Math.max(prev - 1, 1));
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      disabled={currentPage === 1}
+                      className="px-4 py-2"
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm font-semibold text-foreground bg-muted px-3 py-1.5 rounded-md">
+                      Page {currentPage}
+                    </span>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setCurrentPage(prev => prev + 1);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      disabled={!hasMore}
+                      className="px-4 py-2"
+                    >
+                      Next
+                    </Button>
+                  </div>
                 )}
               </TabsContent>
 

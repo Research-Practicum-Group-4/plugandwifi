@@ -15,7 +15,7 @@ export function SavedPlacesPage() {
     api.getVenues()
       .then((data) => {
         // Mock saved places as the first two venues
-        setVenues(data.slice(0, 2));
+        setVenues(data.items.slice(0, 2));
         setLoading(false);
       })
       .catch((err) => {

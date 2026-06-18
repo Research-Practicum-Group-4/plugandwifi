@@ -18,19 +18,23 @@ export function HomePage() {
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
   const [venues, setVenues] = useState<Venue[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [limit] = useState(6);
+  const [hasMore, setHasMore] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    api.getVenues()
+    api.getVenues({ page: currentPage, limit })
       .then((data) => {
-        setVenues(data);
+        setVenues(data.items);
+        setHasMore(data.has_more);
         setLoading(false);
       })
       .catch((err) => {
         console.error("Failed to fetch venues:", err);
         setLoading(false);
       });
-  }, []);
+  }, [currentPage, limit]);
 
   const getVenueImage = (venueId: string) => {
     const images: Record<string, string> = {
@@ -195,6 +199,37 @@ export function HomePage() {
               ))}
             </div>
           </Card>
+        )}
+
+        {/* Pagination controls */}
+        {!loading && (
+          <div className="flex items-center justify-center gap-4 mt-8">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCurrentPage(prev => Math.max(prev - 1, 1));
+                window.scrollTo({ top: 400, behavior: 'smooth' });
+              }}
+              disabled={currentPage === 1}
+              className="px-4 py-2"
+            >
+              Previous
+            </Button>
+            <span className="text-sm font-semibold text-foreground bg-muted px-3 py-1.5 rounded-md">
+              Page {currentPage}
+            </span>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCurrentPage(prev => prev + 1);
+                window.scrollTo({ top: 400, behavior: 'smooth' });
+              }}
+              disabled={!hasMore}
+              className="px-4 py-2"
+            >
+              Next
+            </Button>
+          </div>
         )}
       </div>
     </div>

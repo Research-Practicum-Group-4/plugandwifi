@@ -7,6 +7,7 @@ import {
   BookingRequest,
   BookingResponse,
   UserBooking,
+  VenueListResponse,
 } from "../types/api";
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
@@ -185,6 +186,198 @@ const mockVenues: VenueDetail[] = [
     rating: 4.6
   },
   {
+    venue_id: "osm_123495",
+    name: "Downtown Business Lounge",
+    osm_type: "office",
+    cuisine_type: "Co-working/Lounge",
+    cuisine_detail: "business_lounge",
+    phone: "+12125550177",
+    website: "https://downtownlounge.com",
+    building_number: "45",
+    street: "Wall Street",
+    zipcode: "10005",
+    borough: "Manhattan",
+    lat: 40.7549,
+    lon: -73.9840,
+    opening_hours: "Mo-Fr 08:00-19:00",
+    opening_now: true,
+    has_wifi: true,
+    wifi_free: false,
+    hotel_stars: null,
+    noise_score: 0.20,
+    noise_level: "quiet",
+    hourly_profile: {
+      "09": { score: 0.20, label: "quiet" },
+      "17": { score: 0.35, label: "moderate" }
+    },
+    best_hours_for_work: [9, 10, 11, 12, 13, 14, 15, 16, 17],
+    distance_km: 0.5,
+    seats_avail: 18,
+    total_seats: 40,
+    hourly_price: 8.0,
+    rating: 4.9
+  },
+  {
+    venue_id: "osm_12344",
+    name: "Downtown Business Lounge",
+    osm_type: "office",
+    cuisine_type: "Co-working/Lounge",
+    cuisine_detail: "business_lounge",
+    phone: "+12125550177",
+    website: "https://downtownlounge.com",
+    building_number: "45",
+    street: "Wall Street",
+    zipcode: "10005",
+    borough: "Manhattan",
+    lat: 40.7549,
+    lon: -73.9840,
+    opening_hours: "Mo-Fr 08:00-19:00",
+    opening_now: true,
+    has_wifi: true,
+    wifi_free: false,
+    hotel_stars: null,
+    noise_score: 0.20,
+    noise_level: "quiet",
+    hourly_profile: {
+      "09": { score: 0.20, label: "quiet" },
+      "17": { score: 0.35, label: "moderate" }
+    },
+    best_hours_for_work: [9, 10, 11, 12, 13, 14, 15, 16, 17],
+    distance_km: 0.5,
+    seats_avail: 18,
+    total_seats: 40,
+    hourly_price: 8.0,
+    rating: 4.9
+  },
+  {
+    venue_id: "osm_12343",
+    name: "Downtown Business Lounge",
+    osm_type: "office",
+    cuisine_type: "Co-working/Lounge",
+    cuisine_detail: "business_lounge",
+    phone: "+12125550177",
+    website: "https://downtownlounge.com",
+    building_number: "45",
+    street: "Wall Street",
+    zipcode: "10005",
+    borough: "Manhattan",
+    lat: 40.7549,
+    lon: -73.9840,
+    opening_hours: "Mo-Fr 08:00-19:00",
+    opening_now: true,
+    has_wifi: true,
+    wifi_free: false,
+    hotel_stars: null,
+    noise_score: 0.20,
+    noise_level: "quiet",
+    hourly_profile: {
+      "09": { score: 0.20, label: "quiet" },
+      "17": { score: 0.35, label: "moderate" }
+    },
+    best_hours_for_work: [9, 10, 11, 12, 13, 14, 15, 16, 17],
+    distance_km: 0.5,
+    seats_avail: 18,
+    total_seats: 40,
+    hourly_price: 8.0,
+    rating: 4.9
+  },
+  {
+    venue_id: "osm_12342",
+    name: "Downtown Business Lounge",
+    osm_type: "office",
+    cuisine_type: "Co-working/Lounge",
+    cuisine_detail: "business_lounge",
+    phone: "+12125550177",
+    website: "https://downtownlounge.com",
+    building_number: "45",
+    street: "Wall Street",
+    zipcode: "10005",
+    borough: "Manhattan",
+    lat: 40.7549,
+    lon: -73.9840,
+    opening_hours: "Mo-Fr 08:00-19:00",
+    opening_now: true,
+    has_wifi: true,
+    wifi_free: false,
+    hotel_stars: null,
+    noise_score: 0.20,
+    noise_level: "quiet",
+    hourly_profile: {
+      "09": { score: 0.20, label: "quiet" },
+      "17": { score: 0.35, label: "moderate" }
+    },
+    best_hours_for_work: [9, 10, 11, 12, 13, 14, 15, 16, 17],
+    distance_km: 0.5,
+    seats_avail: 18,
+    total_seats: 40,
+    hourly_price: 8.0,
+    rating: 4.9
+  },
+  {
+    venue_id: "osm_12341",
+    name: "Downtown Business Lounge",
+    osm_type: "office",
+    cuisine_type: "Co-working/Lounge",
+    cuisine_detail: "business_lounge",
+    phone: "+12125550177",
+    website: "https://downtownlounge.com",
+    building_number: "45",
+    street: "Wall Street",
+    zipcode: "10005",
+    borough: "Manhattan",
+    lat: 40.7549,
+    lon: -73.9840,
+    opening_hours: "Mo-Fr 08:00-19:00",
+    opening_now: true,
+    has_wifi: true,
+    wifi_free: false,
+    hotel_stars: null,
+    noise_score: 0.20,
+    noise_level: "quiet",
+    hourly_profile: {
+      "09": { score: 0.20, label: "quiet" },
+      "17": { score: 0.35, label: "moderate" }
+    },
+    best_hours_for_work: [9, 10, 11, 12, 13, 14, 15, 16, 17],
+    distance_km: 0.5,
+    seats_avail: 18,
+    total_seats: 40,
+    hourly_price: 8.0,
+    rating: 4.9
+  },
+  {
+    venue_id: "osm_12340",
+    name: "Downtown Business Lounge",
+    osm_type: "office",
+    cuisine_type: "Co-working/Lounge",
+    cuisine_detail: "business_lounge",
+    phone: "+12125550177",
+    website: "https://downtownlounge.com",
+    building_number: "45",
+    street: "Wall Street",
+    zipcode: "10005",
+    borough: "Manhattan",
+    lat: 40.7549,
+    lon: -73.9840,
+    opening_hours: "Mo-Fr 08:00-19:00",
+    opening_now: true,
+    has_wifi: true,
+    wifi_free: false,
+    hotel_stars: null,
+    noise_score: 0.20,
+    noise_level: "quiet",
+    hourly_profile: {
+      "09": { score: 0.20, label: "quiet" },
+      "17": { score: 0.35, label: "moderate" }
+    },
+    best_hours_for_work: [9, 10, 11, 12, 13, 14, 15, 16, 17],
+    distance_km: 0.5,
+    seats_avail: 18,
+    total_seats: 40,
+    hourly_price: 8.0,
+    rating: 4.9
+  },
+  {
     venue_id: "osm_12349",
     name: "Downtown Business Lounge",
     osm_type: "office",
@@ -325,7 +518,9 @@ export const api = {
     opening_now?: boolean;
     noise_level?: string;
     max_price?: number;
-  }): Promise<Venue[]> => {
+    page?: number;
+    limit?: number;
+  }): Promise<VenueListResponse> => {
     if (USE_MOCK) {
       await delay(400);
       let filtered = [...mockVenues];
@@ -354,22 +549,33 @@ export const api = {
         }
       }
 
+      const limit = filters?.limit ?? 20;
+      const page = filters?.page ?? 1;
+      const offset = (page - 1) * limit;
+      const paginatedItems = filtered.slice(offset, offset + limit);
+      const has_more = filtered.length > offset + limit;
+
       // Return a list of basic Venue items
-      return filtered.map((v) => ({
-        venue_id: v.venue_id,
-        name: v.name,
-        cuisine_type: v.cuisine_type,
-        distance_km: v.distance_km,
-        has_wifi: v.has_wifi,
-        wifi_free: v.wifi_free,
-        opening_now: v.opening_now,
-        noise_score: v.noise_score,
-        noise_level: v.noise_level,
-        seats_avail: v.seats_avail,
-        total_seats: v.total_seats,
-        hourly_price: v.hourly_price,
-        rating: v.rating
-      }));
+      return {
+        items: paginatedItems.map((v) => ({
+          venue_id: v.venue_id,
+          name: v.name,
+          cuisine_type: v.cuisine_type,
+          distance_km: v.distance_km,
+          has_wifi: v.has_wifi,
+          wifi_free: v.wifi_free,
+          opening_now: v.opening_now,
+          noise_score: v.noise_score,
+          noise_level: v.noise_level,
+          seats_avail: v.seats_avail,
+          total_seats: v.total_seats,
+          hourly_price: v.hourly_price,
+          rating: v.rating
+        })),
+        page,
+        limit,
+        has_more
+      };
     } else {
       // Map filters to backend query parameters
       const params: any = {};
@@ -379,8 +585,10 @@ export const api = {
         if (filters.noise_level) params.noise_level = filters.noise_level;
         if (filters.borough) params.borough = filters.borough;
         if (filters.max_price !== undefined) params.max_price = filters.max_price;
+        if (filters.page !== undefined) params.page = filters.page;
+        if (filters.limit !== undefined) params.limit = filters.limit;
       }
-      const response = await axiosInstance.get<Venue[]>("/venues", { params });
+      const response = await axiosInstance.get<VenueListResponse>("/venues", { params });
       return response.data;
     }
   },
