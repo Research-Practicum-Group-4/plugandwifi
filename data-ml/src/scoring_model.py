@@ -2,14 +2,6 @@ import json
 import sqlite3
 import pandas as pd
 
-DEFAULT_WEIGHTS = {
-    "wifi": 0.35,
-    "plug": 0.30,
-    "noise": 0.25,
-    "rating": 0.10,
-}
-
-
 def score_venue(venue, weights, hour):
     profile = json.loads(venue["hourly_profile"])
     noise_norm = 1 - profile[str(hour)]["score"]
@@ -32,7 +24,7 @@ if __name__ == "__main__":
     venues = pd.read_sql("SELECT * FROM venues", con)
     con.close()
 
-    weights = {**DEFAULT_WEIGHTS, "train": 0.20}
+    weights = {"wifi": 0.35, "plug": 0.30, "noise": 0.25, "rating": 0.10, "train": 0.20}
     hour = 9
 
     venues["work_score"] = venues.apply(
