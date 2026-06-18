@@ -56,7 +56,9 @@ const checkAuth = () => {
 // ==========================================
 // Mock Data Store (Matching Week 1-2 Specification)
 // ==========================================
-const mockVenues: VenueDetail[] = [
+const MOCK_VENUE_NUM = 30;
+
+const BASE_VENUES: VenueDetail[] = [
   {
     venue_id: "osm_12345",
     name: "Starbucks Ranelagh",
@@ -186,198 +188,6 @@ const mockVenues: VenueDetail[] = [
     rating: 4.6
   },
   {
-    venue_id: "osm_123495",
-    name: "Downtown Business Lounge",
-    osm_type: "office",
-    cuisine_type: "Co-working/Lounge",
-    cuisine_detail: "business_lounge",
-    phone: "+12125550177",
-    website: "https://downtownlounge.com",
-    building_number: "45",
-    street: "Wall Street",
-    zipcode: "10005",
-    borough: "Manhattan",
-    lat: 40.7549,
-    lon: -73.9840,
-    opening_hours: "Mo-Fr 08:00-19:00",
-    opening_now: true,
-    has_wifi: true,
-    wifi_free: false,
-    hotel_stars: null,
-    noise_score: 0.20,
-    noise_level: "quiet",
-    hourly_profile: {
-      "09": { score: 0.20, label: "quiet" },
-      "17": { score: 0.35, label: "moderate" }
-    },
-    best_hours_for_work: [9, 10, 11, 12, 13, 14, 15, 16, 17],
-    distance_km: 0.5,
-    seats_avail: 18,
-    total_seats: 40,
-    hourly_price: 8.0,
-    rating: 4.9
-  },
-  {
-    venue_id: "osm_12344",
-    name: "Downtown Business Lounge",
-    osm_type: "office",
-    cuisine_type: "Co-working/Lounge",
-    cuisine_detail: "business_lounge",
-    phone: "+12125550177",
-    website: "https://downtownlounge.com",
-    building_number: "45",
-    street: "Wall Street",
-    zipcode: "10005",
-    borough: "Manhattan",
-    lat: 40.7549,
-    lon: -73.9840,
-    opening_hours: "Mo-Fr 08:00-19:00",
-    opening_now: true,
-    has_wifi: true,
-    wifi_free: false,
-    hotel_stars: null,
-    noise_score: 0.20,
-    noise_level: "quiet",
-    hourly_profile: {
-      "09": { score: 0.20, label: "quiet" },
-      "17": { score: 0.35, label: "moderate" }
-    },
-    best_hours_for_work: [9, 10, 11, 12, 13, 14, 15, 16, 17],
-    distance_km: 0.5,
-    seats_avail: 18,
-    total_seats: 40,
-    hourly_price: 8.0,
-    rating: 4.9
-  },
-  {
-    venue_id: "osm_12343",
-    name: "Downtown Business Lounge",
-    osm_type: "office",
-    cuisine_type: "Co-working/Lounge",
-    cuisine_detail: "business_lounge",
-    phone: "+12125550177",
-    website: "https://downtownlounge.com",
-    building_number: "45",
-    street: "Wall Street",
-    zipcode: "10005",
-    borough: "Manhattan",
-    lat: 40.7549,
-    lon: -73.9840,
-    opening_hours: "Mo-Fr 08:00-19:00",
-    opening_now: true,
-    has_wifi: true,
-    wifi_free: false,
-    hotel_stars: null,
-    noise_score: 0.20,
-    noise_level: "quiet",
-    hourly_profile: {
-      "09": { score: 0.20, label: "quiet" },
-      "17": { score: 0.35, label: "moderate" }
-    },
-    best_hours_for_work: [9, 10, 11, 12, 13, 14, 15, 16, 17],
-    distance_km: 0.5,
-    seats_avail: 18,
-    total_seats: 40,
-    hourly_price: 8.0,
-    rating: 4.9
-  },
-  {
-    venue_id: "osm_12342",
-    name: "Downtown Business Lounge",
-    osm_type: "office",
-    cuisine_type: "Co-working/Lounge",
-    cuisine_detail: "business_lounge",
-    phone: "+12125550177",
-    website: "https://downtownlounge.com",
-    building_number: "45",
-    street: "Wall Street",
-    zipcode: "10005",
-    borough: "Manhattan",
-    lat: 40.7549,
-    lon: -73.9840,
-    opening_hours: "Mo-Fr 08:00-19:00",
-    opening_now: true,
-    has_wifi: true,
-    wifi_free: false,
-    hotel_stars: null,
-    noise_score: 0.20,
-    noise_level: "quiet",
-    hourly_profile: {
-      "09": { score: 0.20, label: "quiet" },
-      "17": { score: 0.35, label: "moderate" }
-    },
-    best_hours_for_work: [9, 10, 11, 12, 13, 14, 15, 16, 17],
-    distance_km: 0.5,
-    seats_avail: 18,
-    total_seats: 40,
-    hourly_price: 8.0,
-    rating: 4.9
-  },
-  {
-    venue_id: "osm_12341",
-    name: "Downtown Business Lounge",
-    osm_type: "office",
-    cuisine_type: "Co-working/Lounge",
-    cuisine_detail: "business_lounge",
-    phone: "+12125550177",
-    website: "https://downtownlounge.com",
-    building_number: "45",
-    street: "Wall Street",
-    zipcode: "10005",
-    borough: "Manhattan",
-    lat: 40.7549,
-    lon: -73.9840,
-    opening_hours: "Mo-Fr 08:00-19:00",
-    opening_now: true,
-    has_wifi: true,
-    wifi_free: false,
-    hotel_stars: null,
-    noise_score: 0.20,
-    noise_level: "quiet",
-    hourly_profile: {
-      "09": { score: 0.20, label: "quiet" },
-      "17": { score: 0.35, label: "moderate" }
-    },
-    best_hours_for_work: [9, 10, 11, 12, 13, 14, 15, 16, 17],
-    distance_km: 0.5,
-    seats_avail: 18,
-    total_seats: 40,
-    hourly_price: 8.0,
-    rating: 4.9
-  },
-  {
-    venue_id: "osm_12340",
-    name: "Downtown Business Lounge",
-    osm_type: "office",
-    cuisine_type: "Co-working/Lounge",
-    cuisine_detail: "business_lounge",
-    phone: "+12125550177",
-    website: "https://downtownlounge.com",
-    building_number: "45",
-    street: "Wall Street",
-    zipcode: "10005",
-    borough: "Manhattan",
-    lat: 40.7549,
-    lon: -73.9840,
-    opening_hours: "Mo-Fr 08:00-19:00",
-    opening_now: true,
-    has_wifi: true,
-    wifi_free: false,
-    hotel_stars: null,
-    noise_score: 0.20,
-    noise_level: "quiet",
-    hourly_profile: {
-      "09": { score: 0.20, label: "quiet" },
-      "17": { score: 0.35, label: "moderate" }
-    },
-    best_hours_for_work: [9, 10, 11, 12, 13, 14, 15, 16, 17],
-    distance_km: 0.5,
-    seats_avail: 18,
-    total_seats: 40,
-    hourly_price: 8.0,
-    rating: 4.9
-  },
-  {
     venue_id: "osm_12349",
     name: "Downtown Business Lounge",
     osm_type: "office",
@@ -410,6 +220,85 @@ const mockVenues: VenueDetail[] = [
     rating: 4.9
   }
 ];
+
+const generateMockVenues = (): VenueDetail[] => {
+  const venues = [...BASE_VENUES];
+  const randomChoose = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+  
+  const names = [
+    "Tech Space Cafe", "The Quiet Nook", "Study Corner Cafe",
+    "Borough Library Room", "Elite Business Lounge", "Metropolitan Lounge",
+    "Boutique Workspace", "Green Oasis Lounge", "Urban Study Hall", "The Hub",
+    "Corner Co-working Cafe", "Central Park Lounge"
+  ];
+  
+  const osmTypes = ["cafe", "library", "hotel", "office"];
+  const cuisineTypes = ["Coffee/Tea", "Library", "Hotel/Lounge", "Co-working/Lounge"];
+  const cuisineDetails = ["coffee_shop", "academic_library", "hotel_lobby", "modern_cafe", "business_lounge"];
+  const streets = ["Dame Street", "Grand Canal Dock", "Broadway", "Wall Street", "5th Avenue", "O'Connell Street"];
+  const boroughs = ["Manhattan", "Brooklyn", "Dublin South", "Dublin North", "Dublin Center"];
+  const zipcodes = ["D02XY23", "D06ABC1", "10001", "10005", "10016", "D04V1W8"];
+  const noiseLevels = ["quiet", "moderate", "loud"];
+
+  for (let i = 5; i < MOCK_VENUE_NUM; i++) {
+    const venue_id = `osm_123${50 + i}`;
+    const name = `${randomChoose(names)} ${i}`;
+    const osm_type = randomChoose(osmTypes);
+    const cuisine_type = randomChoose(cuisineTypes);
+    const cuisine_detail = randomChoose(cuisineDetails);
+    const street = randomChoose(streets);
+    const borough = randomChoose(boroughs);
+    const zipcode = randomChoose(zipcodes);
+    const noise_level = randomChoose(noiseLevels);
+    
+    const noise_score = Math.round((noise_level === "quiet" ? Math.random() * 0.3 : noise_level === "moderate" ? 0.3 + Math.random() * 0.4 : 0.7 + Math.random() * 0.3) * 100) / 100;
+    const rating = Math.round((3.8 + Math.random() * 1.2) * 10) / 10;
+    const hourly_price = Math.round((1.5 + Math.random() * 8) * 2) / 2;
+    const total_seats = randomChoose([15, 20, 25, 30, 40, 50, 100]);
+    const seats_avail = Math.floor(Math.random() * total_seats);
+    
+    const inDublin = Math.random() > 0.5;
+    const lat = inDublin ? 53.30 + Math.random() * 0.05 : 40.74 + Math.random() * 0.04;
+    const lon = inDublin ? -6.25 + Math.random() * 0.05 : -73.98 + Math.random() * 0.04;
+    const distance_km = Math.round((0.1 + Math.random() * 2.5) * 10) / 10;
+
+    venues.push({
+      venue_id,
+      name,
+      osm_type,
+      cuisine_type,
+      cuisine_detail,
+      phone: `+12125550${100 + i}`,
+      website: `https://example_${i}.com`,
+      building_number: `${Math.floor(Math.random() * 300) + 1}`,
+      street,
+      zipcode,
+      borough,
+      lat,
+      lon,
+      opening_hours: "Mo-Su 08:00-22:00",
+      opening_now: Math.random() > 0.1,
+      has_wifi: true,
+      wifi_free: Math.random() > 0.3,
+      hotel_stars: osm_type === "hotel" ? `${Math.floor(Math.random() * 2) + 4}` : null,
+      noise_score,
+      noise_level,
+      hourly_profile: {
+        "09": { score: Math.round(noise_score * 0.9 * 100) / 100, label: noise_level },
+        "15": { score: noise_score, label: noise_level }
+      },
+      best_hours_for_work: [9, 10, 11, 14, 15, 16],
+      distance_km,
+      seats_avail,
+      total_seats,
+      hourly_price,
+      rating
+    });
+  }
+  return venues;
+};
+
+const mockVenues: VenueDetail[] = generateMockVenues();
 
 const mockBookings: UserBooking[] = [
   {
@@ -422,8 +311,10 @@ const mockBookings: UserBooking[] = [
   }
 ];
 
-const mockAvailability: Record<string, VenueAvailability> = {
-  "osm_12345": {
+const generateMockAvailability = (venues: VenueDetail[]): Record<string, VenueAvailability> => {
+  const availability: Record<string, VenueAvailability> = {};
+  
+  availability["osm_12345"] = {
     venue_id: "osm_12345",
     available_slots: [
       { slot_id: 1, start_time: "2026-06-05T09:00:00", end_time: "2026-06-05T10:00:00", available: true },
@@ -431,37 +322,55 @@ const mockAvailability: Record<string, VenueAvailability> = {
       { slot_id: 3, start_time: "2026-06-05T11:00:00", end_time: "2026-06-05T12:00:00", available: true },
       { slot_id: 4, start_time: "2026-06-05T14:00:00", end_time: "2026-06-05T15:00:00", available: true }
     ]
-  },
-  "osm_12346": {
+  };
+  availability["osm_12346"] = {
     venue_id: "osm_12346",
     available_slots: [
       { slot_id: 5, start_time: "2026-06-05T09:00:00", end_time: "2026-06-05T10:00:00", available: true },
       { slot_id: 6, start_time: "2026-06-05T10:00:00", end_time: "2026-06-05T11:00:00", available: true },
       { slot_id: 7, start_time: "2026-06-05T11:00:00", end_time: "2026-06-05T12:00:00", available: true }
     ]
-  },
-  "osm_12347": {
+  };
+  availability["osm_12347"] = {
     venue_id: "osm_12347",
     available_slots: [
       { slot_id: 8, start_time: "2026-06-05T14:00:00", end_time: "2026-06-05T15:00:00", available: true },
       { slot_id: 9, start_time: "2026-06-05T15:00:00", end_time: "2026-06-05T16:00:00", available: true }
     ]
-  },
-  "osm_12348": {
+  };
+  availability["osm_12348"] = {
     venue_id: "osm_12348",
     available_slots: [
       { slot_id: 10, start_time: "2026-06-05T10:00:00", end_time: "2026-06-05T11:00:00", available: true },
       { slot_id: 11, start_time: "2026-06-05T11:00:00", end_time: "2026-06-05T12:00:00", available: true }
     ]
-  },
-  "osm_12349": {
+  };
+  availability["osm_12349"] = {
     venue_id: "osm_12349",
     available_slots: [
       { slot_id: 12, start_time: "2026-06-05T09:00:00", end_time: "2026-06-05T10:00:00", available: true },
       { slot_id: 13, start_time: "2026-06-05T10:00:00", end_time: "2026-06-05T11:00:00", available: true }
     ]
+  };
+
+  let slotId = 14;
+  for (const v of venues) {
+    if (!availability[v.venue_id]) {
+      availability[v.venue_id] = {
+        venue_id: v.venue_id,
+        available_slots: [
+          { slot_id: slotId++, start_time: "2026-06-05T09:00:00", end_time: "2026-06-05T10:00:00", available: Math.random() > 0.3 },
+          { slot_id: slotId++, start_time: "2026-06-05T10:00:00", end_time: "2026-06-05T11:00:00", available: Math.random() > 0.3 },
+          { slot_id: slotId++, start_time: "2026-06-05T11:00:00", end_time: "2026-06-05T12:00:00", available: Math.random() > 0.3 },
+          { slot_id: slotId++, start_time: "2026-06-05T14:00:00", end_time: "2026-06-05T15:00:00", available: Math.random() > 0.3 }
+        ]
+      };
+    }
   }
+  return availability;
 };
+
+const mockAvailability: Record<string, VenueAvailability> = generateMockAvailability(mockVenues);
 
 // ==========================================
 // API Implementation
