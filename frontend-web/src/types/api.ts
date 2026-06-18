@@ -103,3 +103,11 @@ export interface ProviderVenue {
   seats_avail: number;
   total_seats: number;
 }
+
+export interface VenueListResponse {
+  items: Venue[];
+  page: number;
+  limit: number;
+  has_more: boolean;
+}
+
