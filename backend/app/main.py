@@ -276,6 +276,21 @@ def home():
         "message": "Let's get A+!!"
     }
     
+    
+# =====================================================================
+# CLOUD RUN STARTUP PROBE ENDPOINT
+# =====================================================================
+@app.get("/api/ping", status_code=200)
+def ping():
+    """
+    Lightweight startup probe endpoint.
+    Returns 'healthy' status to confirm the ASGI server is live.
+    """
+    return {
+        "status": "healthy"
+    }
+    
+    
 # =============================================
 # SYSTEM INFRASTRUCTURE MONITORING ENDPOINTS
 # =============================================
