@@ -19,6 +19,7 @@ from .models import (
     Booking
 )
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from .schemas import (
     UserRegister,
     UserLogin,
@@ -274,7 +275,42 @@ def home():
     return {
         "message": "Let's get A+!!"
     }
+    
+# =============================================
+# SYSTEM INFRASTRUCTURE MONITORING ENDPOINTS
+# =============================================
+@app.get("/api/health", status_code=200)
+def health_check(db: Session = Depends(get_db)):
+    """
+    Production-ready system health check endpoint.
+    Executes a low-overhead 'SELECT 1' raw query via SQLAlchemy to explicitly 
+    verify database instance connection boundaries.
+    """
+    try:
+        # Perform explicit baseline relational connection execution check
+        db.execute(text("SELECT 1"))
+        
+        # Success payload confirming stable cross-tier networking operations
+        return {
+            "status": "healthy",
+            "database": "PostgreSQL connected successfully"
+        }
+    except Exception as database_error:
+        # Intercept any broken handshakes, pool starvation, or credential failures
+        # Instantly raise HTTP 500 to alert cloud infrastructure runtime handlers
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "status": "unhealthy",
+                "error": str(database_error),
+                "message": "Critical structural failure: Cloud SQL database is unreachable."
+            }
+        )
 
+
+# ==========================================
+# CORE AUTHENTICATION LOGIC INTERFACES
+# ==========================================
 
 @app.post("/api/auth/register")
 def register_user(
