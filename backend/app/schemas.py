@@ -8,6 +8,7 @@ from datetime import (
     date,
     time
 )
+from typing import Literal
 
 
 class UserRegister(
@@ -21,6 +22,8 @@ class UserRegister(
     password: str = Field(
         min_length=8
     )
+
+    role: Literal["user", "provider"] = "user"
 
 
 class UserLogin(
