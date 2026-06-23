@@ -111,6 +111,16 @@ class Venue(Base):
 
     actual_hourly_price = Column(Float)
 
+    plug_norm = Column(Float)
+
+    wifi_norm = Column(Float)
+
+    rating_norm = Column(Float)
+
+    bus_norm = Column(Float)
+
+    train_norm = Column(Float)
+
 
 class AvailabilitySlot(Base):
 
