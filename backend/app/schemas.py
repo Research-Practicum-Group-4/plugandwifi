@@ -194,3 +194,39 @@ class BookingResponse(BaseModel):
     class Config:
 
         from_attributes = True
+
+
+class UserBookingItem(BaseModel):
+
+    booking_id: int
+
+    venue_id: str
+
+    venue_name: str | None = None
+
+    booking_date: date
+
+    start_time: time
+
+    end_time: time
+
+    seats_reserved: int
+
+    status: str
+
+    order_id: str
+
+    payment_status: str
+
+    lat: float | None = None
+
+    lon: float | None = None
+
+
+class UserBookingsResponse(BaseModel):
+
+    upcoming: list[UserBookingItem]
+
+    completed: list[UserBookingItem]
+
+    cancelled: list[UserBookingItem]

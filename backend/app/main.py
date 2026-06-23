@@ -26,7 +26,8 @@ from .schemas import (
     VenueListResponse,
     VenueDetailResponse,
     BookingCreate,
-    BookingResponse
+    BookingResponse,
+    UserBookingsResponse
 )
 from .auth import (
     hash_password, 
@@ -132,6 +133,50 @@ def add_duration_to_time(
     )
 
     return end_datetime.time()
+
+
+def get_booking_category(
+    booking: Booking,
+    current_datetime: datetime
+):
+    status = (booking.status or "").lower()
+
+    if status in {"cancelled", "canceled"}:
+        return "cancelled"
+
+    booking_end = datetime.combine(
+        booking.booking_date,
+        booking.end_time
+    )
+
+    if status == "completed" or booking_end < current_datetime:
+        return "completed"
+
+    return "upcoming"
+
+
+def booking_datetime(booking: Booking):
+    return datetime.combine(
+        booking.booking_date,
+        booking.start_time
+    )
+
+
+def serialize_user_booking(booking: Booking, venue: Venue | None, status: str):
+    return {
+        "booking_id": booking.id,
+        "venue_id": booking.venue_id,
+        "venue_name": venue.name if venue else None,
+        "booking_date": booking.booking_date,
+        "start_time": booking.start_time,
+        "end_time": booking.end_time,
+        "seats_reserved": booking.seats_reserved,
+        "status": status,
+        "order_id": booking.order_id,
+        "payment_status": booking.payment_status,
+        "lat": venue.lat if venue else None,
+        "lon": venue.lon if venue else None
+    }
 
 def has_required_contiguous_seats(
     db: Session,
@@ -817,4 +862,63 @@ def get_me(
         "email": current_user.email,
 
         "role": current_user.role
+    }
+
+
+@app.get(
+    "/api/users/me/bookings",
+    response_model=UserBookingsResponse
+)
+def get_user_bookings(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    booking_rows = (
+        db.query(Booking, Venue)
+        .outerjoin(
+            Venue,
+            Booking.venue_id == Venue.venue_id
+        )
+        .filter(Booking.user_id == current_user.id)
+        .all()
+    )
+
+    current_datetime = datetime.now()
+    grouped_rows = {
+        "upcoming": [],
+        "completed": [],
+        "cancelled": []
+    }
+
+    for booking, venue in booking_rows:
+        category = get_booking_category(
+            booking,
+            current_datetime
+        )
+        grouped_rows[category].append(
+            (booking, venue)
+        )
+
+    grouped_rows["upcoming"].sort(
+        key=lambda row: booking_datetime(row[0])
+    )
+    grouped_rows["completed"].sort(
+        key=lambda row: booking_datetime(row[0]),
+        reverse=True
+    )
+    grouped_rows["cancelled"].sort(
+        key=lambda row: booking_datetime(row[0]),
+        reverse=True
+    )
+
+    return {
+        category: [
+            serialize_user_booking(
+                booking,
+                venue,
+                category
+            )
+            for booking, venue in rows
+        ]
+        for category, rows in grouped_rows.items()
     }
