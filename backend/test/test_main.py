@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import date, time
+from datetime import date, time, timedelta
 
 # Environment isolation and path alignment
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
@@ -369,3 +369,120 @@ def test_get_me_unauthorized():
     # Unauthenticated requests to private profile routes must return HTTP 401
     response = client.get("/api/users/me")
     assert response.status_code == 401
+
+
+def test_get_user_bookings_requires_authentication():
+    response = client.get("/api/users/me/bookings")
+    assert response.status_code == 401
+
+
+def test_get_user_bookings_groups_sorts_and_isolates_users():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    access_token = login_response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    db = TestingSessionLocal()
+    try:
+        db.query(Booking).delete()
+        other_user = User(
+            id=2,
+            full_name="Other User",
+            email="other@example.com",
+            password_hash=hash_password("00000000")
+        )
+        db.add(other_user)
+
+        today = date.today()
+        bookings = [
+            Booking(
+                id=10,
+                user_id=1,
+                venue_id="osm_296568074",
+                booking_date=today + timedelta(days=2),
+                start_time=time(10, 0),
+                end_time=time(11, 0),
+                seats_reserved=2,
+                status="confirmed",
+                order_id="ORD-upcoming-later",
+                payment_status="paid"
+            ),
+            Booking(
+                id=11,
+                user_id=1,
+                venue_id="osm_296568075",
+                booking_date=today + timedelta(days=1),
+                start_time=time(9, 0),
+                end_time=time(10, 0),
+                seats_reserved=1,
+                status="confirmed",
+                order_id="ORD-upcoming-sooner",
+                payment_status="paid"
+            ),
+            Booking(
+                id=12,
+                user_id=1,
+                venue_id="osm_296568074",
+                booking_date=today - timedelta(days=2),
+                start_time=time(9, 0),
+                end_time=time(10, 0),
+                seats_reserved=1,
+                status="confirmed",
+                order_id="ORD-completed-older",
+                payment_status="paid"
+            ),
+            Booking(
+                id=13,
+                user_id=1,
+                venue_id="osm_296568075",
+                booking_date=today - timedelta(days=1),
+                start_time=time(9, 0),
+                end_time=time(10, 0),
+                seats_reserved=1,
+                status="completed",
+                order_id="ORD-completed-recent",
+                payment_status="paid"
+            ),
+            Booking(
+                id=14,
+                user_id=1,
+                venue_id="osm_296568074",
+                booking_date=today + timedelta(days=3),
+                start_time=time(9, 0),
+                end_time=time(10, 0),
+                seats_reserved=1,
+                status="canceled",
+                order_id="ORD-cancelled",
+                payment_status="refunded"
+            ),
+            Booking(
+                id=15,
+                user_id=2,
+                venue_id="osm_296568074",
+                booking_date=today + timedelta(days=1),
+                start_time=time(9, 0),
+                end_time=time(10, 0),
+                seats_reserved=1,
+                status="confirmed",
+                order_id="ORD-other-user",
+                payment_status="paid"
+            )
+        ]
+        db.add_all(bookings)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/users/me/bookings", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert [item["booking_id"] for item in data["upcoming"]] == [11, 10]
+    assert [item["booking_id"] for item in data["completed"]] == [13, 12]
+    assert [item["booking_id"] for item in data["cancelled"]] == [14]
+    assert data["upcoming"][0]["venue_name"] == "UCD Village Study Hub"
+    assert data["upcoming"][0]["lat"] == 53.3069
+    assert data["upcoming"][0]["lon"] == -6.2218
+    assert data["cancelled"][0]["status"] == "cancelled"
