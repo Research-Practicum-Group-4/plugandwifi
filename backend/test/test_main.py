@@ -16,7 +16,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.main import app
-from app.database import Base, get_db
+from app.database import Base, build_engine_options, get_db
 from app.models import User, Venue, AvailabilitySlot, Booking
 from app.auth import hash_password
 
@@ -34,6 +34,46 @@ def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
+
+
+def test_sqlite_engine_options_exclude_postgresql_settings():
+    options = build_engine_options("sqlite:///:memory:")
+
+    assert options == {"pool_pre_ping": True}
+
+
+def test_postgresql_engine_options(monkeypatch):
+    setting_names = (
+        "DB_POOL_SIZE",
+        "DB_MAX_OVERFLOW",
+        "DB_POOL_RECYCLE",
+        "DB_POOL_TIMEOUT",
+        "DB_CONNECT_TIMEOUT",
+        "DB_KEEPALIVES_IDLE",
+        "DB_KEEPALIVES_INTERVAL",
+        "DB_KEEPALIVES_COUNT"
+    )
+
+    for setting_name in setting_names:
+        monkeypatch.delenv(setting_name, raising=False)
+
+    options = build_engine_options(
+        "postgresql+psycopg2://user:password@127.0.0.1:5433/database"
+    )
+
+    assert options["pool_pre_ping"] is True
+    assert options["pool_size"] == 5
+    assert options["max_overflow"] == 5
+    assert options["pool_recycle"] == 1800
+    assert options["pool_timeout"] == 30
+    assert options["connect_args"] == {
+        "connect_timeout": 10,
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 5
+    }
+
 
 @pytest.fixture(autouse=True)
 def setup_and_seed_database():
