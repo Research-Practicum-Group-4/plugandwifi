@@ -349,7 +349,8 @@ def register_user(
     new_user = User(
         full_name = payload.full_name,
         email = payload.email,
-        password_hash = hashed_pw
+        password_hash = hashed_pw,
+        role = payload.role
     )
 
     db.add(new_user)
@@ -408,7 +409,8 @@ def login_user(
         "user": {
             "user_id": user.id,
             "full_name": user.full_name,
-            "email": user.email
+            "email": user.email,
+            "role": user.role
         }
     }
 
@@ -814,5 +816,5 @@ def get_me(
 
         "email": current_user.email,
 
-        "role": "user"
+        "role": current_user.role
     }

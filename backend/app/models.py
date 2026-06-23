@@ -39,6 +39,13 @@ class User(Base):
         nullable=False
     )
 
+    role = Column(
+        String,
+        nullable=False,
+        default="user",
+        server_default="user"
+    )
+
 
 class Venue(Base):
 

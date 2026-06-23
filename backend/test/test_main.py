@@ -294,6 +294,54 @@ def test_register_flow():
     assert res2.status_code == 400
     assert res2.json()["detail"] == "Email already exists"
 
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": payload["email"], "password": payload["password"]}
+    )
+    assert login_response.status_code == 200
+    assert login_response.json()["user"]["role"] == "user"
+
+
+def test_provider_registration_flow():
+    payload = {
+        "full_name": "New Provider",
+        "email": "provider@ucd.ie",
+        "password": "password123",
+        "role": "provider"
+    }
+
+    register_response = client.post("/api/auth/register", json=payload)
+    assert register_response.status_code == 200
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": payload["email"], "password": payload["password"]}
+    )
+    assert login_response.status_code == 200
+    assert login_response.json()["user"]["role"] == "provider"
+
+    access_token = login_response.json()["access_token"]
+    me_response = client.get(
+        "/api/users/me",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
+    assert me_response.status_code == 200
+    assert me_response.json()["role"] == "provider"
+
+
+def test_registration_rejects_invalid_role():
+    response = client.post(
+        "/api/auth/register",
+        json={
+            "full_name": "Invalid Role",
+            "email": "invalid-role@ucd.ie",
+            "password": "password123",
+            "role": "admin"
+        }
+    )
+
+    assert response.status_code == 422
+
 # Test single venue retrieval and 404 error handling
 def test_get_venue_by_id():
     # Existing venue ID lookup
