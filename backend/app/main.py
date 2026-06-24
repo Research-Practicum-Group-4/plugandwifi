@@ -16,7 +16,8 @@ from .models import (
     User,
     Venue,
     AvailabilitySlot,
-    Booking
+    Booking,
+    RefreshSession
 )
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
@@ -28,13 +29,19 @@ from .schemas import (
     BookingCreate,
     BookingResponse,
     UserBookingsResponse,
-    BookingCancellationResponse
+    BookingCancellationResponse,
+    RefreshTokenRequest,
+    LogoutRequest
 )
 from .auth import (
     hash_password, 
     verify_password,
     create_access_token,
     verify_access_token
+)
+from .refresh_tokens import (
+    hash_refresh_token,
+    issue_refresh_session
 )
 from datetime import date, datetime, time, timedelta
 from math import asin, cos, radians, sin, sqrt
@@ -473,12 +480,23 @@ def login_user(
             "email": user.email
         }
     )
+    refresh_token, refresh_session = issue_refresh_session(
+        user_id=user.id,
+        remember_me=payload.remember_me
+    )
+
+    db.add(refresh_session)
+    db.commit()
 
     return {
 
         "access_token": access_token,
 
+        "refresh_token": refresh_token,
+
         "token_type": "bearer",
+
+        "refresh_token_expires_at": refresh_session.expires_at,
 
         "user": {
             "user_id": user.id,
@@ -488,8 +506,124 @@ def login_user(
         }
     }
 
+
+@app.post("/api/auth/refresh")
+def refresh_access_token(
+    payload: RefreshTokenRequest,
+    db: Session = Depends(get_db)
+):
+    current_time = datetime.utcnow()
+    token_hash = hash_refresh_token(
+        payload.refresh_token
+    )
+    refresh_session = (
+        db.query(RefreshSession)
+        .filter(RefreshSession.token_hash == token_hash)
+        .with_for_update()
+        .first()
+    )
+
+    if refresh_session is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid refresh token"
+        )
+
+    if refresh_session.revoked_at is not None:
+        (
+            db.query(RefreshSession)
+            .filter(
+                RefreshSession.family_id
+                == refresh_session.family_id
+            )
+            .filter(RefreshSession.revoked_at.is_(None))
+            .update(
+                {RefreshSession.revoked_at: current_time},
+                synchronize_session=False
+            )
+        )
+        db.commit()
+
+        raise HTTPException(
+            status_code=401,
+            detail="Refresh token reuse detected"
+        )
+
+    if refresh_session.expires_at <= current_time:
+        refresh_session.revoked_at = current_time
+        db.commit()
+
+        raise HTTPException(
+            status_code=401,
+            detail="Refresh token has expired"
+        )
+
+    user = db.query(User).filter(
+        User.id == refresh_session.user_id
+    ).first()
+
+    if user is None:
+        refresh_session.revoked_at = current_time
+        db.commit()
+
+        raise HTTPException(
+            status_code=401,
+            detail="Refresh token user not found"
+        )
+
+    new_refresh_token, new_session = issue_refresh_session(
+        user_id=user.id,
+        family_id=refresh_session.family_id,
+        expires_at=refresh_session.expires_at
+    )
+    refresh_session.revoked_at = current_time
+    refresh_session.replaced_by_token_hash = new_session.token_hash
+
+    db.add(new_session)
+    db.commit()
+
+    access_token = create_access_token(
+        {
+            "user_id": user.id,
+            "email": user.email
+        }
+    )
+
+    return {
+        "access_token": access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer",
+        "refresh_token_expires_at": new_session.expires_at
+    }
+
+
 @app.post("/api/auth/logout")
-def logout_user():
+def logout_user(
+    payload: LogoutRequest | None = None,
+    db: Session = Depends(get_db)
+):
+    if payload is not None:
+        token_hash = hash_refresh_token(
+            payload.refresh_token
+        )
+        refresh_session = db.query(RefreshSession).filter(
+            RefreshSession.token_hash == token_hash
+        ).first()
+
+        if refresh_session is not None:
+            (
+                db.query(RefreshSession)
+                .filter(
+                    RefreshSession.family_id
+                    == refresh_session.family_id
+                )
+                .filter(RefreshSession.revoked_at.is_(None))
+                .update(
+                    {RefreshSession.revoked_at: datetime.utcnow()},
+                    synchronize_session=False
+                )
+            )
+            db.commit()
 
     return {
         "message": "Logged out successfully"

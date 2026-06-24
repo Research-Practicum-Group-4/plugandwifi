@@ -17,8 +17,9 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.database import Base, build_engine_options, get_db
-from app.models import User, Venue, AvailabilitySlot, Booking
+from app.models import User, Venue, AvailabilitySlot, Booking, RefreshSession
 from app.auth import hash_password
+from app.refresh_tokens import hash_refresh_token
 
 # SQLite test database configuration
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -635,3 +636,121 @@ def test_cancel_booking_enforces_owner_and_deadline():
 
     ownership_response = client.patch("/api/bookings/12/cancel", headers=headers)
     assert ownership_response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("remember_me", "expected_days"),
+    [(False, 7), (True, 30)]
+)
+def test_login_creates_hashed_refresh_session(remember_me, expected_days):
+    response = client.post(
+        "/api/auth/login",
+        json={
+            "email": "test2@example.com",
+            "password": "00000000",
+            "remember_me": remember_me
+        }
+    )
+    assert response.status_code == 200
+
+    refresh_token = response.json()["refresh_token"]
+    db = TestingSessionLocal()
+    try:
+        session = db.query(RefreshSession).filter(
+            RefreshSession.token_hash == hash_refresh_token(refresh_token)
+        ).one()
+        lifetime = session.expires_at - session.created_at
+        assert session.token_hash != refresh_token
+        assert len(session.token_hash) == 64
+        assert lifetime == timedelta(days=expected_days)
+    finally:
+        db.close()
+
+
+def test_refresh_token_rotation_and_reuse_detection():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    first_token = login_response.json()["refresh_token"]
+
+    refresh_response = client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": first_token}
+    )
+    assert refresh_response.status_code == 200
+    second_token = refresh_response.json()["refresh_token"]
+    assert second_token != first_token
+
+    db = TestingSessionLocal()
+    try:
+        first_session = db.query(RefreshSession).filter(
+            RefreshSession.token_hash == hash_refresh_token(first_token)
+        ).one()
+        second_session = db.query(RefreshSession).filter(
+            RefreshSession.token_hash == hash_refresh_token(second_token)
+        ).one()
+        assert first_session.revoked_at is not None
+        assert first_session.replaced_by_token_hash == second_session.token_hash
+        assert first_session.family_id == second_session.family_id
+        assert first_session.expires_at == second_session.expires_at
+    finally:
+        db.close()
+
+    reuse_response = client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": first_token}
+    )
+    assert reuse_response.status_code == 401
+    assert reuse_response.json()["detail"] == "Refresh token reuse detected"
+
+    family_response = client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": second_token}
+    )
+    assert family_response.status_code == 401
+
+
+def test_logout_revokes_refresh_token_family():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    refresh_token = login_response.json()["refresh_token"]
+
+    logout_response = client.post(
+        "/api/auth/logout",
+        json={"refresh_token": refresh_token}
+    )
+    assert logout_response.status_code == 200
+
+    refresh_response = client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": refresh_token}
+    )
+    assert refresh_response.status_code == 401
+
+
+def test_expired_refresh_token_is_rejected():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    refresh_token = login_response.json()["refresh_token"]
+
+    db = TestingSessionLocal()
+    try:
+        session = db.query(RefreshSession).filter(
+            RefreshSession.token_hash == hash_refresh_token(refresh_token)
+        ).one()
+        session.expires_at = datetime.utcnow() - timedelta(seconds=1)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": refresh_token}
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Refresh token has expired"

@@ -7,8 +7,11 @@ from sqlalchemy import (
     Text,
     ForeignKey,
     Date,
-    Time
+    Time,
+    DateTime
 )
+
+from datetime import datetime
 
 from .database import Base
 
@@ -45,6 +48,52 @@ class User(Base):
         default="user",
         server_default="user"
     )
+
+
+class RefreshSession(Base):
+
+    __tablename__ = "refresh_sessions"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
+    token_hash = Column(
+        String(64),
+        unique=True,
+        nullable=False,
+        index=True
+    )
+
+    family_id = Column(
+        String(36),
+        nullable=False,
+        index=True
+    )
+
+    expires_at = Column(
+        DateTime,
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow
+    )
+
+    revoked_at = Column(DateTime)
+
+    replaced_by_token_hash = Column(String(64))
 
 
 class Venue(Base):
