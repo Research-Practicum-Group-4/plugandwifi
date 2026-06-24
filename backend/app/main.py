@@ -946,6 +946,7 @@ def create_booking(
     .filter(
         AvailabilitySlot.available.is_(True)
     )
+    .with_for_update()
     .first()
     )
 
@@ -955,45 +956,31 @@ def create_booking(
             detail="Requested time slot not available"
         )
 
-    if payload.seats_reserved > slot.available_seats:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Not enough seats available"
-    )
-
-    overlapping_booking = (
-    db.query(Booking)
-    .filter(
-        Booking.venue_id == payload.venue_id
-    )
-    .filter(
-        Booking.booking_date == payload.booking_date
-    )
-    .filter(
-        Booking.start_time < payload.end_time
-    )
-    .filter(
-        Booking.end_time > payload.start_time
-    )
-    .filter(
-        func.coalesce(
-            func.lower(Booking.status),
-            "confirmed"
-        ).notin_({"cancelled", "canceled"})
-    )
-    .first()
-    )
-
-    if overlapping_booking:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Time slot already booked"
+    reserved_seats = (
+        db.query(
+            func.coalesce(
+                func.sum(Booking.seats_reserved),
+                0
+            )
         )
+        .filter(Booking.venue_id == payload.venue_id)
+        .filter(Booking.booking_date == payload.booking_date)
+        .filter(Booking.start_time < payload.end_time)
+        .filter(Booking.end_time > payload.start_time)
+        .filter(
+            func.coalesce(
+                func.lower(Booking.status),
+                "confirmed"
+            ).notin_({"cancelled", "canceled"})
+        )
+        .scalar()
+    )
 
-
-    slot.available_seats -= payload.seats_reserved
+    if reserved_seats + payload.seats_reserved > slot.available_seats:
+        raise HTTPException(
+            status_code=409,
+            detail="Venue capacity exceeded for the requested time"
+        )
     
     booking = Booking(
         order_id=f"ORD-{uuid.uuid4().hex[:8]}",
@@ -1086,8 +1073,6 @@ def cancel_booking(
             detail="Booking inventory slot could not be restored"
         )
 
-    slot.available_seats += booking.seats_reserved
-    slot.available = True
     booking.status = "cancelled"
     booking.payment_status = "refund_pending"
 

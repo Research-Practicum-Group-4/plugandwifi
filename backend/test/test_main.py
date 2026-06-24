@@ -362,8 +362,55 @@ def test_booking_edge_cases():
         "start_time": "09:00:00", "end_time": "10:00:00", "seats_reserved": 10
     }
     res_bad = client.post("/api/bookings", json=bad_payload)
-    assert res_bad.status_code == 400
-    assert res_bad.json()["detail"] == "Not enough seats available"
+    assert res_bad.status_code == 409
+    assert res_bad.json()["detail"] == "Venue capacity exceeded for the requested time"
+
+
+def test_booking_capacity_allows_overlap_until_seat_limit():
+    first_payload = {
+        "user_id": 1,
+        "venue_id": "osm_296568074",
+        "booking_date": "2026-06-15",
+        "start_time": "10:00:00",
+        "end_time": "11:00:00",
+        "seats_reserved": 2
+    }
+    first_response = client.post("/api/bookings", json=first_payload)
+    assert first_response.status_code == 200
+
+    second_payload = {
+        **first_payload,
+        "seats_reserved": 2
+    }
+    second_response = client.post("/api/bookings", json=second_payload)
+    assert second_response.status_code == 409
+    assert second_response.json()["detail"] == (
+        "Venue capacity exceeded for the requested time"
+    )
+
+    db = TestingSessionLocal()
+    try:
+        slot = db.query(AvailabilitySlot).filter(
+            AvailabilitySlot.id == 1
+        ).one()
+        assert slot.available_seats == 5
+    finally:
+        db.close()
+
+
+def test_booking_rejects_non_positive_seat_count():
+    response = client.post(
+        "/api/bookings",
+        json={
+            "user_id": 1,
+            "venue_id": "osm_296568074",
+            "booking_date": "2026-06-15",
+            "start_time": "10:00:00",
+            "end_time": "11:00:00",
+            "seats_reserved": 0
+        }
+    )
+    assert response.status_code == 422
 
 # Verification of API firewall guards protecting user data endpoints
 def test_get_me_unauthorized():
@@ -515,8 +562,8 @@ def test_cancel_booking_restores_inventory_and_allows_rebooking():
             date=booking_start.date(),
             start_time=booking_start.time(),
             end_time=booking_end.time(),
-            available=False,
-            available_seats=3
+            available=True,
+            available_seats=5
         )
         booking = Booking(
             id=10,
