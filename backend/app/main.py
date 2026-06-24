@@ -19,7 +19,7 @@ from .models import (
     Booking
 )
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import func, text
 from .schemas import (
     UserRegister,
     UserLogin,
@@ -27,7 +27,8 @@ from .schemas import (
     VenueDetailResponse,
     BookingCreate,
     BookingResponse,
-    UserBookingsResponse
+    UserBookingsResponse,
+    BookingCancellationResponse
 )
 from .auth import (
     hash_password, 
@@ -40,7 +41,29 @@ from math import asin, cos, radians, sin, sqrt
 
 from fastapi.middleware.cors import CORSMiddleware
 
+import os
 import uuid
+
+
+def get_free_cancellation_hours():
+    raw_value = os.getenv("FREE_CANCELLATION_HOURS", "24")
+
+    try:
+        hours = int(raw_value)
+    except ValueError as exc:
+        raise RuntimeError(
+            "FREE_CANCELLATION_HOURS must be an integer."
+        ) from exc
+
+    if hours < 0:
+        raise RuntimeError(
+            "FREE_CANCELLATION_HOURS must be at least 0."
+        )
+
+    return hours
+
+
+FREE_CANCELLATION_HOURS = get_free_cancellation_hours()
 
 Base.metadata.create_all(bind=engine)
 
@@ -219,6 +242,12 @@ def has_required_contiguous_seats(
         )
         .filter(
             Booking.start_time < requested_end_time
+        )
+        .filter(
+            func.coalesce(
+                func.lower(Booking.status),
+                "confirmed"
+            ).notin_({"cancelled", "canceled"})
         )
         .all()
     )
@@ -813,6 +842,12 @@ def create_booking(
     .filter(
         Booking.end_time > payload.start_time
     )
+    .filter(
+        func.coalesce(
+            func.lower(Booking.status),
+            "confirmed"
+        ).notin_({"cancelled", "canceled"})
+    )
     .first()
     )
 
@@ -845,6 +880,93 @@ def create_booking(
     db.refresh(booking)
 
     return booking
+
+
+@app.patch(
+    "/api/bookings/{booking_id}/cancel",
+    response_model=BookingCancellationResponse
+)
+def cancel_booking(
+    booking_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    booking = (
+        db.query(Booking)
+        .filter(Booking.id == booking_id)
+        .filter(Booking.user_id == current_user.id)
+        .with_for_update()
+        .first()
+    )
+
+    if booking is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Booking not found"
+        )
+
+    current_status = (booking.status or "").lower()
+
+    if current_status in {"cancelled", "canceled"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Booking is already cancelled"
+        )
+
+    if current_status == "completed":
+        raise HTTPException(
+            status_code=409,
+            detail="Completed bookings cannot be cancelled"
+        )
+
+    booking_start = datetime.combine(
+        booking.booking_date,
+        booking.start_time
+    )
+    cancellation_deadline = booking_start - timedelta(
+        hours=FREE_CANCELLATION_HOURS
+    )
+
+    if datetime.now() > cancellation_deadline:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Booking can only be cancelled at least "
+                f"{FREE_CANCELLATION_HOURS} hours before the start time"
+            )
+        )
+
+    slot = (
+        db.query(AvailabilitySlot)
+        .filter(AvailabilitySlot.venue_id == booking.venue_id)
+        .filter(AvailabilitySlot.date == booking.booking_date)
+        .filter(AvailabilitySlot.start_time <= booking.start_time)
+        .filter(AvailabilitySlot.end_time >= booking.end_time)
+        .with_for_update()
+        .first()
+    )
+
+    if slot is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Booking inventory slot could not be restored"
+        )
+
+    slot.available_seats += booking.seats_reserved
+    slot.available = True
+    booking.status = "cancelled"
+    booking.payment_status = "refund_pending"
+
+    db.commit()
+    db.refresh(booking)
+
+    return {
+        "booking_id": booking.id,
+        "status": booking.status,
+        "payment_status": booking.payment_status,
+        "released_seats": booking.seats_reserved,
+        "message": "Booking cancelled successfully"
+    }
 
 @app.get("/api/users/me")
 def get_me(

@@ -230,3 +230,16 @@ class UserBookingsResponse(BaseModel):
     completed: list[UserBookingItem]
 
     cancelled: list[UserBookingItem]
+
+
+class BookingCancellationResponse(BaseModel):
+
+    booking_id: int
+
+    status: str
+
+    payment_status: str
+
+    released_seats: int
+
+    message: str

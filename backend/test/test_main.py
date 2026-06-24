@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 # Environment isolation and path alignment
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
@@ -486,3 +486,152 @@ def test_get_user_bookings_groups_sorts_and_isolates_users():
     assert data["upcoming"][0]["lat"] == 53.3069
     assert data["upcoming"][0]["lon"] == -6.2218
     assert data["cancelled"][0]["status"] == "cancelled"
+
+
+def test_cancel_booking_requires_authentication():
+    response = client.patch("/api/bookings/1/cancel")
+    assert response.status_code == 401
+
+
+def test_cancel_booking_restores_inventory_and_allows_rebooking():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+    booking_start = (
+        datetime.now() + timedelta(days=2)
+    ).replace(microsecond=0)
+    booking_end = booking_start + timedelta(hours=1)
+
+    db = TestingSessionLocal()
+    try:
+        slot = AvailabilitySlot(
+            id=10,
+            venue_id="osm_296568074",
+            date=booking_start.date(),
+            start_time=booking_start.time(),
+            end_time=booking_end.time(),
+            available=False,
+            available_seats=3
+        )
+        booking = Booking(
+            id=10,
+            user_id=1,
+            venue_id="osm_296568074",
+            booking_date=booking_start.date(),
+            start_time=booking_start.time(),
+            end_time=booking_end.time(),
+            seats_reserved=2,
+            status="confirmed",
+            order_id="ORD-cancel-test",
+            payment_status="paid"
+        )
+        db.add_all([slot, booking])
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.patch("/api/bookings/10/cancel", headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {
+        "booking_id": 10,
+        "status": "cancelled",
+        "payment_status": "refund_pending",
+        "released_seats": 2,
+        "message": "Booking cancelled successfully"
+    }
+
+    db = TestingSessionLocal()
+    try:
+        restored_slot = db.query(AvailabilitySlot).filter(
+            AvailabilitySlot.id == 10
+        ).one()
+        assert restored_slot.available_seats == 5
+        assert restored_slot.available is True
+    finally:
+        db.close()
+
+    second_response = client.patch("/api/bookings/10/cancel", headers=headers)
+    assert second_response.status_code == 409
+
+    rebooking_response = client.post(
+        "/api/bookings",
+        json={
+            "user_id": 1,
+            "venue_id": "osm_296568074",
+            "booking_date": booking_start.date().isoformat(),
+            "start_time": booking_start.time().isoformat(),
+            "end_time": booking_end.time().isoformat(),
+            "seats_reserved": 2
+        }
+    )
+    assert rebooking_response.status_code == 200
+
+
+def test_cancel_booking_enforces_owner_and_deadline():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+    booking_start = (
+        datetime.now() + timedelta(hours=23)
+    ).replace(microsecond=0)
+    booking_end = booking_start + timedelta(hours=1)
+
+    db = TestingSessionLocal()
+    try:
+        other_user = User(
+            id=2,
+            full_name="Other User",
+            email="other@example.com",
+            password_hash=hash_password("00000000")
+        )
+        slot = AvailabilitySlot(
+            id=11,
+            venue_id="osm_296568075",
+            date=booking_start.date(),
+            start_time=booking_start.time(),
+            end_time=booking_end.time(),
+            available=True,
+            available_seats=1
+        )
+        own_booking = Booking(
+            id=11,
+            user_id=1,
+            venue_id="osm_296568075",
+            booking_date=booking_start.date(),
+            start_time=booking_start.time(),
+            end_time=booking_end.time(),
+            seats_reserved=1,
+            status="confirmed",
+            order_id="ORD-deadline-test",
+            payment_status="paid"
+        )
+        other_booking = Booking(
+            id=12,
+            user_id=2,
+            venue_id="osm_296568075",
+            booking_date=booking_start.date(),
+            start_time=booking_start.time(),
+            end_time=booking_end.time(),
+            seats_reserved=1,
+            status="confirmed",
+            order_id="ORD-owner-test",
+            payment_status="paid"
+        )
+        db.add_all([other_user, slot, own_booking, other_booking])
+        db.commit()
+    finally:
+        db.close()
+
+    deadline_response = client.patch("/api/bookings/11/cancel", headers=headers)
+    assert deadline_response.status_code == 409
+
+    ownership_response = client.patch("/api/bookings/12/cancel", headers=headers)
+    assert ownership_response.status_code == 404
