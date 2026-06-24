@@ -178,7 +178,7 @@ class BookingCreate(BaseModel):
 
     end_time: time
 
-    seats_reserved: int
+    seats_reserved: int = Field(ge=1)
 
 
 class BookingResponse(BaseModel):
