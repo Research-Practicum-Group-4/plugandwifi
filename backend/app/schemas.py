@@ -34,6 +34,18 @@ class UserLogin(
 
     password: str
 
+    remember_me: bool = False
+
+
+class RefreshTokenRequest(BaseModel):
+
+    refresh_token: str = Field(min_length=32)
+
+
+class LogoutRequest(BaseModel):
+
+    refresh_token: str = Field(min_length=32)
+
 
 class VenueResponse(BaseModel):
 
