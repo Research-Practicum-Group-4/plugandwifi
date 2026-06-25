@@ -1,7 +1,6 @@
 import axios from "axios";
 import {
   LoginResponse,
-  Venue,
   VenueDetail,
   VenueAvailability,
   BookingRequest,
@@ -479,7 +478,9 @@ export const api = {
           seats_avail: v.seats_avail,
           total_seats: v.total_seats,
           hourly_price: v.hourly_price,
-          rating: v.rating
+          rating: v.rating,
+          lat: v.lat,
+          lon: v.lon
         })),
         page,
         limit,
