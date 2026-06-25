@@ -10,6 +10,7 @@ os.environ["ACCESS_TOKEN_EXPIRE_MINUTES"] = "60"
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
+from fastapi import Depends
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -18,7 +19,8 @@ from sqlalchemy.pool import StaticPool
 from app.main import app
 from app.database import Base, build_engine_options, get_db
 from app.models import User, Venue, AvailabilitySlot, Booking, RefreshSession
-from app.auth import hash_password
+from app.auth import create_access_token, hash_password, verify_access_token
+from app.rbac import require_roles
 from app.refresh_tokens import hash_refresh_token
 
 # SQLite test database configuration
@@ -34,6 +36,15 @@ def override_get_db():
         db.close()
 
 app.dependency_overrides[get_db] = override_get_db
+
+
+@app.get("/_test/provider-only")
+def provider_only_route(
+    current_user: User = Depends(require_roles("provider"))
+):
+    return {"user_id": current_user.id}
+
+
 client = TestClient(app)
 
 
@@ -322,12 +333,66 @@ def test_provider_registration_flow():
     assert login_response.json()["user"]["role"] == "provider"
 
     access_token = login_response.json()["access_token"]
+    assert verify_access_token(access_token)["role"] == "provider"
     me_response = client.get(
         "/api/users/me",
         headers={"Authorization": f"Bearer {access_token}"}
     )
     assert me_response.status_code == 200
     assert me_response.json()["role"] == "provider"
+
+    provider_response = client.get(
+        "/_test/provider-only",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
+    assert provider_response.status_code == 200
+    assert provider_response.json()["user_id"] is not None
+
+
+def test_provider_route_rejects_standard_user():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    access_token = login_response.json()["access_token"]
+
+    response = client.get(
+        "/_test/provider-only",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Insufficient permissions"
+
+
+def test_provider_route_rejects_token_without_role():
+    access_token = create_access_token(
+        {"user_id": 1, "email": "test2@example.com"}
+    )
+
+    response = client.get(
+        "/_test/provider-only",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
+
+    assert response.status_code == 403
+
+
+def test_provider_route_rejects_role_changed_after_token_issue():
+    access_token = create_access_token(
+        {
+            "user_id": 1,
+            "email": "test2@example.com",
+            "role": "provider"
+        }
+    )
+
+    response = client.get(
+        "/_test/provider-only",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
+
+    assert response.status_code == 403
 
 
 def test_registration_rejects_invalid_role():
@@ -726,6 +791,12 @@ def test_refresh_token_rotation_and_reuse_detection():
         json={"refresh_token": first_token}
     )
     assert refresh_response.status_code == 200
+    assert (
+        verify_access_token(
+            refresh_response.json()["access_token"]
+        )["role"]
+        == "user"
+    )
     second_token = refresh_response.json()["refresh_token"]
     assert second_token != first_token
 

@@ -4,9 +4,6 @@ from fastapi import (
     HTTPException,
     Query
 )
-from fastapi.security import (
-    OAuth2PasswordBearer
-)
 from .database import (
     engine, 
     Base , 
@@ -36,9 +33,9 @@ from .schemas import (
 from .auth import (
     hash_password, 
     verify_password,
-    create_access_token,
-    verify_access_token
+    create_access_token
 )
+from .rbac import get_current_user
 from .refresh_tokens import (
     hash_refresh_token,
     issue_refresh_session
@@ -75,36 +72,6 @@ FREE_CANCELLATION_HOURS = get_free_cancellation_hours()
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
-
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="/api/auth/login"
-)
-
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-):
-
-    payload = verify_access_token(
-        token
-    )
-
-    user = (
-        db.query(User)
-        .filter(
-            User.id == payload["user_id"]
-        )
-        .first()
-    )
-
-    if not user:
-
-        raise HTTPException(
-            status_code=401,
-            detail="User not found"
-        )
-
-    return user
 
 def calculate_distance_km(
     origin_lat: float,
@@ -477,7 +444,8 @@ def login_user(
     access_token = create_access_token(
         {
             "user_id": user.id,
-            "email": user.email
+            "email": user.email,
+            "role": user.role
         }
     )
     refresh_token, refresh_session = issue_refresh_session(
@@ -585,7 +553,8 @@ def refresh_access_token(
     access_token = create_access_token(
         {
             "user_id": user.id,
-            "email": user.email
+            "email": user.email,
+            "role": user.role
         }
     )
 
