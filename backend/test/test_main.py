@@ -395,6 +395,161 @@ def test_provider_route_rejects_role_changed_after_token_issue():
     assert response.status_code == 403
 
 
+def test_provider_dashboard_kpis_requires_authentication():
+    response = client.get("/api/provider/dashboard/kpis")
+    assert response.status_code == 401
+
+
+def test_provider_dashboard_kpis_rejects_standard_user():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    access_token = login_response.json()["access_token"]
+
+    response = client.get(
+        "/api/provider/dashboard/kpis",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
+
+    assert response.status_code == 403
+
+
+def test_provider_dashboard_kpis_returns_window_metrics_and_deltas():
+    provider_payload = {
+        "full_name": "KPI Provider",
+        "email": "kpi-provider@ucd.ie",
+        "password": "password123",
+        "role": "provider"
+    }
+    register_response = client.post(
+        "/api/auth/register",
+        json=provider_payload
+    )
+    assert register_response.status_code == 200
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": provider_payload["email"],
+            "password": provider_payload["password"]
+        }
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+
+    today = date.today()
+    current_booking_date = today - timedelta(days=5)
+    previous_booking_date = today - timedelta(days=35)
+
+    db = TestingSessionLocal()
+    try:
+        db.query(Booking).delete()
+        db.query(AvailabilitySlot).delete()
+
+        db.add_all(
+            [
+                AvailabilitySlot(
+                    id=20,
+                    venue_id="osm_296568074",
+                    date=current_booking_date,
+                    start_time=time(9, 0),
+                    end_time=time(12, 0),
+                    available=True,
+                    available_seats=5
+                ),
+                AvailabilitySlot(
+                    id=21,
+                    venue_id="osm_296568075",
+                    date=current_booking_date,
+                    start_time=time(9, 0),
+                    end_time=time(12, 0),
+                    available=True,
+                    available_seats=5
+                ),
+                AvailabilitySlot(
+                    id=22,
+                    venue_id="osm_296568074",
+                    date=previous_booking_date,
+                    start_time=time(9, 0),
+                    end_time=time(12, 0),
+                    available=True,
+                    available_seats=5
+                ),
+                Booking(
+                    id=20,
+                    user_id=1,
+                    venue_id="osm_296568074",
+                    booking_date=current_booking_date,
+                    start_time=time(9, 0),
+                    end_time=time(11, 0),
+                    seats_reserved=2,
+                    status="confirmed",
+                    order_id="ORD-kpi-current-one",
+                    payment_status="paid"
+                ),
+                Booking(
+                    id=21,
+                    user_id=1,
+                    venue_id="osm_296568075",
+                    booking_date=current_booking_date,
+                    start_time=time(9, 0),
+                    end_time=time(10, 0),
+                    seats_reserved=1,
+                    status="confirmed",
+                    order_id="ORD-kpi-current-two",
+                    payment_status="paid"
+                ),
+                Booking(
+                    id=22,
+                    user_id=1,
+                    venue_id="osm_296568074",
+                    booking_date=previous_booking_date,
+                    start_time=time(9, 0),
+                    end_time=time(10, 0),
+                    seats_reserved=1,
+                    status="confirmed",
+                    order_id="ORD-kpi-previous",
+                    payment_status="paid"
+                ),
+                Booking(
+                    id=23,
+                    user_id=1,
+                    venue_id="osm_296568075",
+                    booking_date=current_booking_date,
+                    start_time=time(10, 0),
+                    end_time=time(11, 0),
+                    seats_reserved=1,
+                    status="cancelled",
+                    order_id="ORD-kpi-cancelled",
+                    payment_status="refund_pending"
+                )
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(
+        "/api/provider/dashboard/kpis",
+        headers=headers
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["window_days"] == 30
+    assert data["total_reservations"]["value"] == 2
+    assert data["total_reservations"]["delta_percent"] == 100
+    assert data["monthly_revenue"]["value"] == 18
+    assert data["monthly_revenue"]["delta_percent"] == pytest.approx(414.29)
+    assert data["active_properties_count"]["value"] == 2
+    assert data["active_properties_count"]["delta_percent"] == 100
+    assert data["average_user_rating"]["value"] == 4.6
+    assert data["average_user_rating"]["delta_percent"] == pytest.approx(-4.17)
+
+
 def test_registration_rejects_invalid_role():
     response = client.post(
         "/api/auth/register",

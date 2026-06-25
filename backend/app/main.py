@@ -29,14 +29,15 @@ from .schemas import (
     UserBookingsResponse,
     BookingCancellationResponse,
     RefreshTokenRequest,
-    LogoutRequest
+    LogoutRequest,
+    ProviderDashboardKPIsResponse
 )
 from .auth import (
     hash_password, 
     verify_password,
     create_access_token
 )
-from .rbac import get_current_user
+from .rbac import get_current_user, require_roles
 from .refresh_tokens import (
     hash_refresh_token,
     issue_refresh_session
@@ -175,6 +176,130 @@ def serialize_user_booking(booking: Booking, venue: Venue | None, status: str):
         "lat": venue.lat if venue else None,
         "lon": venue.lon if venue else None
     }
+
+
+def calculate_percentage_delta(
+    current_value: int | float,
+    previous_value: int | float
+):
+    if previous_value == 0:
+        return None
+
+    return round(
+        ((current_value - previous_value) / previous_value) * 100,
+        2
+    )
+
+
+def calculate_booking_duration_hours(booking: Booking):
+    start_datetime = datetime.combine(
+        booking.booking_date,
+        booking.start_time
+    )
+    end_datetime = datetime.combine(
+        booking.booking_date,
+        booking.end_time
+    )
+
+    if end_datetime < start_datetime:
+        end_datetime = end_datetime + timedelta(days=1)
+
+    return (
+        end_datetime - start_datetime
+    ).total_seconds() / 3600
+
+
+def calculate_booking_revenue(booking: Booking, venue: Venue | None):
+    if venue is None or venue.hourly_price is None:
+        return 0
+
+    return (
+        venue.hourly_price
+        * calculate_booking_duration_hours(booking)
+        * booking.seats_reserved
+    )
+
+
+def get_dashboard_kpi_values(
+    db: Session,
+    window_start: date,
+    window_end: date
+):
+    booking_rows = (
+        db.query(Booking, Venue)
+        .outerjoin(
+            Venue,
+            Booking.venue_id == Venue.venue_id
+        )
+        .filter(Booking.booking_date >= window_start)
+        .filter(Booking.booking_date < window_end)
+        .filter(
+            func.coalesce(
+                func.lower(Booking.status),
+                "confirmed"
+            ).notin_({"cancelled", "canceled"})
+        )
+        .all()
+    )
+
+    active_venue_ids = [
+        venue_id
+        for venue_id, in (
+            db.query(AvailabilitySlot.venue_id)
+            .filter(AvailabilitySlot.date >= window_start)
+            .filter(AvailabilitySlot.date < window_end)
+            .filter(AvailabilitySlot.available.is_(True))
+            .distinct()
+            .all()
+        )
+    ]
+
+    average_rating = None
+
+    if active_venue_ids:
+        average_rating = (
+            db.query(func.avg(Venue.rating))
+            .filter(Venue.venue_id.in_(active_venue_ids))
+            .filter(Venue.rating.isnot(None))
+            .scalar()
+        )
+
+    return {
+        "total_reservations": len(booking_rows),
+        "monthly_revenue": round(
+            sum(
+                calculate_booking_revenue(
+                    booking,
+                    venue
+                )
+                for booking, venue in booking_rows
+            ),
+            2
+        ),
+        "active_properties_count": len(active_venue_ids),
+        "average_user_rating": (
+            round(
+                average_rating,
+                2
+            )
+            if average_rating is not None
+            else 0
+        )
+    }
+
+
+def build_kpi_metric(
+    current_value: int | float,
+    previous_value: int | float
+):
+    return {
+        "value": current_value,
+        "delta_percent": calculate_percentage_delta(
+            current_value,
+            previous_value
+        )
+    }
+
 
 def has_required_contiguous_seats(
     db: Session,
@@ -1100,6 +1225,59 @@ def delete_favorite(
 
     return {
         "message": "Favorite removed successfully"
+    }
+
+
+@app.get(
+    "/api/provider/dashboard/kpis",
+    response_model=ProviderDashboardKPIsResponse
+)
+def get_provider_dashboard_kpis(
+    current_user: User = Depends(require_roles("provider")),
+    db: Session = Depends(get_db)
+):
+    window_days = 30
+    today = date.today()
+    current_window_start = today - timedelta(
+        days=window_days - 1
+    )
+    current_window_end = today + timedelta(
+        days=1
+    )
+    previous_window_start = current_window_start - timedelta(
+        days=window_days
+    )
+    previous_window_end = current_window_start
+
+    current_values = get_dashboard_kpi_values(
+        db,
+        current_window_start,
+        current_window_end
+    )
+    previous_values = get_dashboard_kpi_values(
+        db,
+        previous_window_start,
+        previous_window_end
+    )
+
+    return {
+        "window_days": window_days,
+        "total_reservations": build_kpi_metric(
+            current_values["total_reservations"],
+            previous_values["total_reservations"]
+        ),
+        "monthly_revenue": build_kpi_metric(
+            current_values["monthly_revenue"],
+            previous_values["monthly_revenue"]
+        ),
+        "active_properties_count": build_kpi_metric(
+            current_values["active_properties_count"],
+            previous_values["active_properties_count"]
+        ),
+        "average_user_rating": build_kpi_metric(
+            current_values["average_user_rating"],
+            previous_values["average_user_rating"]
+        )
     }
 
 
