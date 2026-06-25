@@ -14,7 +14,8 @@ from .models import (
     Venue,
     AvailabilitySlot,
     Booking,
-    RefreshSession
+    RefreshSession,
+    Favorite
 )
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
@@ -1072,6 +1073,33 @@ def get_me(
         "email": current_user.email,
 
         "role": current_user.role
+    }
+
+
+@app.delete("/api/favorites/{venue_id}")
+def delete_favorite(
+    venue_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    favorite = (
+        db.query(Favorite)
+        .filter(Favorite.user_id == current_user.id)
+        .filter(Favorite.venue_id == venue_id)
+        .first()
+    )
+
+    if favorite is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Favorite not found"
+        )
+
+    db.delete(favorite)
+    db.commit()
+
+    return {
+        "message": "Favorite removed successfully"
     }
 
 
