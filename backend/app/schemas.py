@@ -255,3 +255,23 @@ class BookingCancellationResponse(BaseModel):
     released_seats: int
 
     message: str
+
+
+class KPIMetric(BaseModel):
+
+    value: int | float
+
+    delta_percent: float | None = None
+
+
+class ProviderDashboardKPIsResponse(BaseModel):
+
+    window_days: int
+
+    total_reservations: KPIMetric
+
+    monthly_revenue: KPIMetric
+
+    active_properties_count: KPIMetric
+
+    average_user_rating: KPIMetric
