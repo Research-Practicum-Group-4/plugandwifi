@@ -7,9 +7,10 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Label } from "../components/ui/label";
 import { Slider } from "../components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Search, MapPin, Star, Wifi, Volume2, Filter } from "lucide-react";
+import { Search, Star, Wifi, Volume2, Filter } from "lucide-react";
 import { api } from "../../services/api";
 import { Venue } from "../../types/api";
+import { MapView } from "../components/MapView";
 
 export function SearchPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -298,52 +299,14 @@ export function SearchPage() {
               </TabsContent>
 
               <TabsContent value="map">
-                <Card className="h-[600px] overflow-hidden">
-                  <div className="relative h-full bg-gray-100">
-                    <img
-                      src="https://upload.wikimedia.org/wikipedia/commons/2/2b/Location_map_United_States_Manhattan_2.svg"
-                      alt="Manhattan Map"
-                      className="w-full h-full object-contain"
-                    />
-                    {loading ? (
-                      <div className="absolute inset-0 bg-white/80 flex items-center justify-center text-muted-foreground">
-                        Loading map markers...
-                      </div>
-                    ) : (
-                      venues.map((venue, idx) => (
-                        <div
-                          key={venue.venue_id}
-                          className="absolute cursor-pointer group"
-                          style={{
-                            left: `${20 + idx * 12}%`,
-                            top: `${30 + idx * 10}%`,
-                          }}
-                        >
-                          <div className="relative">
-                            <div
-                              className="size-12 rounded-full flex items-center justify-center shadow-lg transition-transform group-hover:scale-110"
-                              style={{ backgroundColor: '#253c50' }}
-                            >
-                              <MapPin className="size-6 text-white" />
-                            </div>
-                            <div className="absolute top-14 left-1/2 -translate-x-1/2 bg-white p-3 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 min-w-[200px]">
-                              <p className="font-medium mb-1">{venue.name}</p>
-                              <p className="text-sm text-muted-foreground mb-2">${venue.hourly_price}/hour</p>
-                              <Link to={`/venue/${venue.venue_id}`}>
-                                <Button
-                                  size="sm"
-                                  className="w-full"
-                                  style={{ backgroundColor: '#2f8a64' }}
-                                >
-                                  Book a Space
-                                </Button>
-                              </Link>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                <Card className="h-[600px] overflow-hidden border border-border shadow-sm">
+                  {loading ? (
+                    <div className="h-full w-full flex items-center justify-center text-muted-foreground bg-muted bg-opacity-80">
+                      Loading map and active venues...
+                    </div>
+                  ) : (
+                    <MapView venues={venues} height="600px" />
+                  )}
                 </Card>
               </TabsContent>
             </Tabs>

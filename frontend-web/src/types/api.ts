@@ -25,6 +25,8 @@ export interface Venue {
   total_seats: number;
   hourly_price: number;
   rating: number;
+  lat: number;
+  lon: number;
 }
 
 export interface HourlyProfileDetail {

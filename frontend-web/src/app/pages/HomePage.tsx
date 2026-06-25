@@ -5,11 +5,12 @@ import { Card, CardContent } from "../components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import { Calendar } from "../components/ui/calendar";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Search, Volume2, Phone, Star, MapPin, LayoutGrid, Map } from "lucide-react";
+import { Search, Volume2, Phone, Star, LayoutGrid, Map } from "lucide-react";
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { api } from "../../services/api";
 import { Venue } from "../../types/api";
+import { MapView } from "../components/MapView";
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -159,45 +160,8 @@ export function HomePage() {
             ))}
           </div>
         ) : (
-          <Card className="h-[600px] overflow-hidden">
-            <div className="relative h-full bg-gray-100">
-              <img
-                src="https://upload.wikimedia.org/wikipedia/commons/2/2b/Location_map_United_States_Manhattan_2.svg"
-                alt="Manhattan Map"
-                className="w-full h-full object-contain"
-              />
-              {venues.map((venue, idx) => (
-                <div
-                  key={venue.venue_id}
-                  className="absolute cursor-pointer group"
-                  style={{
-                    left: `${30 + idx * 12}%`,
-                    top: `${40 + idx * 8}%`,
-                  }}
-                  onClick={() => navigate(`/venue/${venue.venue_id}`)}
-                >
-                  <div className="relative">
-                    <div
-                      className="size-12 rounded-full flex items-center justify-center shadow-lg transition-transform group-hover:scale-110"
-                      style={{ backgroundColor: '#253c50' }}
-                    >
-                      <MapPin className="size-6 text-white" />
-                    </div>
-                    <div className="absolute top-14 left-1/2 -translate-x-1/2 bg-white p-3 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                      <p className="font-medium">{venue.name}</p>
-                      <p className="text-sm text-muted-foreground mb-2">${venue.hourly_price}/hour</p>
-                      <Button
-                        size="sm"
-                        className="w-full"
-                        style={{ backgroundColor: '#2f8a64' }}
-                      >
-                        Book a Space
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <Card className="h-[600px] overflow-hidden border border-border shadow-sm">
+            <MapView venues={venues} height="600px" />
           </Card>
         )}
 
