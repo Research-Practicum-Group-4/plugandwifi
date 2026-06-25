@@ -8,7 +8,8 @@ from sqlalchemy import (
     ForeignKey,
     Date,
     Time,
-    DateTime
+    DateTime,
+    UniqueConstraint
 )
 
 from datetime import datetime
@@ -218,6 +219,40 @@ class AvailabilitySlot(Base):
         Integer,
         nullable=False
     )
+
+
+class Favorite(Base):
+
+    __tablename__ = "favorites"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "venue_id",
+            name="uq_favorites_user_venue"
+        ),
+    )
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
+    venue_id = Column(
+        String,
+        ForeignKey("venues.venue_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
 
 class Booking(Base):
 

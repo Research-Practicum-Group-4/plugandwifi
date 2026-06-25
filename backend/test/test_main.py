@@ -18,7 +18,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.database import Base, build_engine_options, get_db
-from app.models import User, Venue, AvailabilitySlot, Booking, RefreshSession
+from app.models import User, Venue, AvailabilitySlot, Booking, RefreshSession, Favorite
 from app.auth import create_access_token, hash_password, verify_access_token
 from app.rbac import require_roles
 from app.refresh_tokens import hash_refresh_token
@@ -487,6 +487,87 @@ def test_get_me_unauthorized():
 def test_get_user_bookings_requires_authentication():
     response = client.get("/api/users/me/bookings")
     assert response.status_code == 401
+
+
+def test_delete_favorite_requires_authentication():
+    response = client.delete("/api/favorites/osm_296568074")
+    assert response.status_code == 401
+
+
+def test_delete_favorite_removes_current_user_favorite():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+
+    db = TestingSessionLocal()
+    try:
+        favorite = Favorite(
+            id=1,
+            user_id=1,
+            venue_id="osm_296568074"
+        )
+        db.add(favorite)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.delete("/api/favorites/osm_296568074", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["message"] == "Favorite removed successfully"
+
+    db = TestingSessionLocal()
+    try:
+        deleted_favorite = db.query(Favorite).filter(
+            Favorite.user_id == 1,
+            Favorite.venue_id == "osm_296568074"
+        ).first()
+        assert deleted_favorite is None
+    finally:
+        db.close()
+
+
+def test_delete_favorite_returns_404_for_missing_or_other_user_favorite():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+
+    db = TestingSessionLocal()
+    try:
+        other_user = User(
+            id=2,
+            full_name="Other User",
+            email="other-fav@example.com",
+            password_hash=hash_password("00000000")
+        )
+        other_favorite = Favorite(
+            id=2,
+            user_id=2,
+            venue_id="osm_296568075"
+        )
+        db.add_all([other_user, other_favorite])
+        db.commit()
+    finally:
+        db.close()
+
+    missing_response = client.delete("/api/favorites/osm_296568074", headers=headers)
+    assert missing_response.status_code == 404
+
+    other_user_response = client.delete("/api/favorites/osm_296568075", headers=headers)
+    assert other_user_response.status_code == 404
+
+    db = TestingSessionLocal()
+    try:
+        protected_favorite = db.query(Favorite).filter(
+            Favorite.user_id == 2,
+            Favorite.venue_id == "osm_296568075"
+        ).first()
+        assert protected_favorite is not None
+    finally:
+        db.close()
 
 
 def test_get_user_bookings_groups_sorts_and_isolates_users():
