@@ -46,11 +46,21 @@ export function MainLayout() {
               </>
             )}
 
-            <Link to="/provider/dashboard">
-              <Button variant="ghost" size="icon">
-                <Building2 className="size-5" />
-              </Button>
-            </Link>
+            {/* Provider Navigation conditional CTA */}
+            {isAuthenticated && user?.role === "provider" ? (
+              <Link to="/provider/dashboard">
+                <Button variant="ghost" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50/50 font-medium flex items-center gap-1.5">
+                  <Building2 className="size-4" />
+                  Dashboard
+                </Button>
+              </Link>
+            ) : (
+              <Link to="/provider/register">
+                <Button variant="default" className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-medium text-xs md:text-sm px-4">
+                  Register as a Space Provider
+                </Button>
+              </Link>
+            )}
 
             {isAuthenticated ? (
               <DropdownMenu>
@@ -70,6 +80,12 @@ export function MainLayout() {
                       <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
                     </div>
                   </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link to="/bookings" className="w-full">
+                      My Bookings
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={logout} className="text-red-600 focus:text-red-600 cursor-pointer">
                     Log out

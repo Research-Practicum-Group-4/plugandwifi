@@ -8,7 +8,7 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (fullName: string, email: string, password: string) => Promise<void>;
+  register: (fullName: string, email: string, password: string, role?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -53,12 +53,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (fullName: string, email: string, password: string) => {
+  const register = async (fullName: string, email: string, password: string, role?: string) => {
     try {
       await api.register({
         full_name: fullName,
         email: email,
         password: password,
+        role: role,
       });
       // Optionally auto-login or let the UI handle redirection to /login
     } catch (error) {

@@ -91,6 +91,35 @@ export interface UserBooking {
   status: string;
 }
 
+export interface UserBookingItem {
+  booking_id: number;
+  venue_id: string;
+  venue_name: string | null;
+  booking_date: string;
+  start_time: string;
+  end_time: string;
+  seats_reserved: number;
+  status: string;
+  order_id: string;
+  payment_status: string;
+  lat: number | null;
+  lon: number | null;
+}
+
+export interface UserBookingsResponse {
+  upcoming: UserBookingItem[];
+  completed: UserBookingItem[];
+  cancelled: UserBookingItem[];
+}
+
+export interface BookingCancellationResponse {
+  booking_id: number;
+  status: string;
+  payment_status: string;
+  released_seats: number;
+  message: string;
+}
+
 export interface Provider {
   provider_id: number;
   company_name: string;
@@ -112,4 +141,5 @@ export interface VenueListResponse {
   limit: number;
   has_more: boolean;
 }
+
 

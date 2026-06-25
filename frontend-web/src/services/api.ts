@@ -5,8 +5,10 @@ import {
   VenueAvailability,
   BookingRequest,
   BookingResponse,
-  UserBooking,
   VenueListResponse,
+  UserBookingItem,
+  UserBookingsResponse,
+  BookingCancellationResponse,
 } from "../types/api";
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
@@ -299,14 +301,48 @@ const generateMockVenues = (): VenueDetail[] => {
 
 const mockVenues: VenueDetail[] = generateMockVenues();
 
-const mockBookings: UserBooking[] = [
+const mockBookings: UserBookingItem[] = [
   {
     booking_id: 101,
+    venue_id: "osm_12345",
     venue_name: "Starbucks Ranelagh",
-    date: "2026-06-03",
-    start_time: "09:00",
-    end_time: "10:00",
-    status: "confirmed"
+    booking_date: "2026-06-03",
+    start_time: "09:00:00",
+    end_time: "10:00:00",
+    seats_reserved: 1,
+    status: "completed",
+    order_id: "ORD-20260603-01",
+    payment_status: "paid",
+    lat: 53.3090,
+    lon: -6.2550
+  },
+  {
+    booking_id: 102,
+    venue_id: "osm_12346",
+    venue_name: "UCD Library",
+    booking_date: "2026-07-15",
+    start_time: "14:00:00",
+    end_time: "16:00:00",
+    seats_reserved: 2,
+    status: "upcoming",
+    order_id: "ORD-20260715-02",
+    payment_status: "paid",
+    lat: 53.3078,
+    lon: -6.2230
+  },
+  {
+    booking_id: 103,
+    venue_id: "osm_12347",
+    venue_name: "The Grand Hotel Lobby",
+    booking_date: "2026-05-20",
+    start_time: "11:00:00",
+    end_time: "13:00:00",
+    seats_reserved: 1,
+    status: "cancelled",
+    order_id: "ORD-20260520-03",
+    payment_status: "refunded",
+    lat: 40.7589,
+    lon: -73.9851
   }
 ];
 
@@ -380,13 +416,14 @@ export const api = {
     if (USE_MOCK) {
       await delay(300);
       if (credentials.email && credentials.password) {
+        const isProvider = credentials.email.includes("provider");
         return {
           access_token: "mock_jwt_token",
           user: {
-            user_id: 1,
-            full_name: "Sunmin Lee",
+            user_id: isProvider ? 2 : 1,
+            full_name: isProvider ? "Mock Provider" : "Sunmin Lee",
             email: credentials.email,
-            role: "user"
+            role: isProvider ? "provider" : "user"
           }
         };
       }
@@ -401,13 +438,13 @@ export const api = {
           id: data.user.id,
           full_name: data.user.full_name,
           email: data.user.email,
-          role: "user"
+          role: data.user.role || "user"
         }
       };
     }
   },
 
-  register: async (user: { full_name: string; email: string; password: string }): Promise<{ message: string }> => {
+  register: async (user: { full_name: string; email: string; password: string; role?: string }): Promise<{ message: string }> => {
     if (USE_MOCK) {
       await delay(300);
       return { message: "User created successfully" };
@@ -549,20 +586,26 @@ export const api = {
       const venue = mockVenues.find(v => v.venue_id === booking.venue_id);
       const newBookingId = 100 + mockBookings.length + 1;
       
-      const newBooking: UserBooking = {
+      const newBooking: UserBookingItem = {
         booking_id: newBookingId,
+        venue_id: booking.venue_id,
         venue_name: venue?.name || "Unknown Venue",
-        date: booking.booking_date,
-        start_time: booking.start_time.substring(0, 5),
-        end_time: booking.end_time.substring(0, 5),
-        status: "confirmed"
+        booking_date: booking.booking_date,
+        start_time: booking.start_time.includes(":") ? booking.start_time : `${booking.start_time}:00`,
+        end_time: booking.end_time.includes(":") ? booking.end_time : `${booking.end_time}:00`,
+        seats_reserved: booking.seats_reserved,
+        status: "upcoming",
+        order_id: `ORD-20260625-${newBookingId}`,
+        payment_status: "paid",
+        lat: venue?.lat || null,
+        lon: venue?.lon || null
       };
       
       mockBookings.push(newBooking);
 
       // Prune seat availability
       if (venue && venue.seats_avail > 0) {
-        venue.seats_avail -= booking.seats_reserved;
+        venue.seats_avail = Math.max(0, venue.seats_avail - booking.seats_reserved);
       }
 
       return {
@@ -577,30 +620,67 @@ export const api = {
   },
 
   // 6. Get User Bookings
-  getUserBookings: async (): Promise<UserBooking[]> => {
+  getUserBookings: async (): Promise<UserBookingsResponse> => {
     checkAuth();
     if (USE_MOCK) {
       await delay(300);
-      return [...mockBookings];
+      return {
+        upcoming: mockBookings.filter(b => b.status === "upcoming"),
+        completed: mockBookings.filter(b => b.status === "completed"),
+        cancelled: mockBookings.filter(b => b.status === "cancelled" || b.status === "canceled")
+      };
     } else {
-      const response = await axiosInstance.get<UserBooking[]>("/users/me/bookings");
+      const response = await axiosInstance.get<UserBookingsResponse>("/users/me/bookings");
       return response.data;
     }
   },
 
   // 7. Cancel Booking
-  cancelBooking: async (bookingId: number): Promise<{ booking_id: number; status: string }> => {
+  cancelBooking: async (bookingId: number): Promise<BookingCancellationResponse> => {
     checkAuth();
     if (USE_MOCK) {
       await delay(300);
       const booking = mockBookings.find(b => b.booking_id === bookingId);
-      if (booking) {
-        booking.status = "cancelled";
-        return { booking_id: bookingId, status: "cancelled" };
+      if (!booking) {
+        throw new Error("Booking not found");
       }
-      throw new Error("Booking not found");
+      if (booking.status === "cancelled") {
+        throw new Error("Booking is already cancelled");
+      }
+      if (booking.status === "completed") {
+        throw new Error("Completed bookings cannot be cancelled");
+      }
+
+      // Simulated cancellation window check
+      // Assume local date is 2026-06-25T19:53:42 as metadata says.
+      const now = new Date("2026-06-25T19:53:42");
+      const bookingStart = new Date(`${booking.booking_date}T${booking.start_time}`);
+      const hoursDiff = (bookingStart.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      // If booking date is less than 24 hours away, simulate a 409 Conflict rejection
+      if (hoursDiff < 24) {
+        const err: any = new Error("Booking can only be cancelled at least 24 hours before the start time");
+        err.response = {
+          status: 409,
+          data: {
+            detail: "Booking can only be cancelled at least 24 hours before the start time"
+          }
+        };
+        throw err;
+      }
+
+      booking.status = "cancelled";
+      booking.payment_status = "refund_pending";
+
+      return {
+        booking_id: bookingId,
+        status: "cancelled",
+        payment_status: "refund_pending",
+        released_seats: booking.seats_reserved,
+        message: "Booking cancelled successfully"
+      };
     } else {
-      const response = await axiosInstance.delete<{ booking_id: number; status: string }>(`/bookings/${bookingId}`);
+      const response = await axiosInstance.patch<BookingCancellationResponse>(`/bookings/${bookingId}/cancel`);
       return response.data;
     }
   }
