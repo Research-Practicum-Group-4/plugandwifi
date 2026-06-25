@@ -5,12 +5,15 @@ import { SearchPage } from "./pages/SearchPage";
 import { VenueDetailPage } from "./pages/VenueDetailPage";
 import { CheckoutPage } from "./pages/CheckoutPage";
 import { SavedPlacesPage } from "./pages/SavedPlacesPage";
+import { MyBookingsPage } from "./pages/MyBookingsPage";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { SignupPage } from "./pages/auth/SignupPage";
+import { ProviderRegisterPage } from "./pages/provider/ProviderRegisterPage";
 import { ProviderDashboard } from "./pages/provider/ProviderDashboard";
 import { OfferSpacePage } from "./pages/provider/OfferSpacePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ProviderRoute } from "./components/ProviderRoute";
 
 export const router = createBrowserRouter([
   {
@@ -22,13 +25,22 @@ export const router = createBrowserRouter([
       { path: "venue/:id", Component: VenueDetailPage },
       { path: "login", Component: LoginPage },
       { path: "signup", Component: SignupPage },
+      { path: "provider/register", Component: ProviderRegisterPage },
       
-      // Protected pages
+      // User Protected pages
       {
         element: <ProtectedRoute />,
         children: [
           { path: "checkout", Component: CheckoutPage },
           { path: "saved", Component: SavedPlacesPage },
+          { path: "bookings", Component: MyBookingsPage },
+        ],
+      },
+
+      // Provider Protected pages
+      {
+        element: <ProviderRoute />,
+        children: [
           { path: "provider/dashboard", Component: ProviderDashboard },
           { path: "provider/offer-space", Component: OfferSpacePage },
         ],
