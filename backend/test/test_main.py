@@ -550,6 +550,159 @@ def test_provider_dashboard_kpis_returns_window_metrics_and_deltas():
     assert data["average_user_rating"]["delta_percent"] == pytest.approx(-4.17)
 
 
+def test_provider_dashboard_arrivals_requires_authentication():
+    response = client.get("/api/provider/dashboard/arrivals")
+    assert response.status_code == 401
+
+
+def test_provider_dashboard_arrivals_rejects_standard_user():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    access_token = login_response.json()["access_token"]
+
+    response = client.get(
+        "/api/provider/dashboard/arrivals",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
+
+    assert response.status_code == 403
+
+
+def test_provider_dashboard_arrivals_returns_upcoming_feed_in_chronological_order():
+    provider_payload = {
+        "full_name": "Arrival Provider",
+        "email": "arrival-provider@ucd.ie",
+        "password": "password123",
+        "role": "provider"
+    }
+    register_response = client.post(
+        "/api/auth/register",
+        json=provider_payload
+    )
+    assert register_response.status_code == 200
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": provider_payload["email"],
+            "password": provider_payload["password"]
+        }
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+
+    soon_start = (
+        datetime.now() + timedelta(days=1)
+    ).replace(microsecond=0)
+    soon_end = soon_start + timedelta(hours=1)
+    later_start = (
+        datetime.now() + timedelta(days=2)
+    ).replace(microsecond=0)
+    later_end = later_start + timedelta(hours=1)
+    past_start = (
+        datetime.now() - timedelta(days=1)
+    ).replace(microsecond=0)
+    past_end = past_start + timedelta(hours=1)
+
+    db = TestingSessionLocal()
+    try:
+        db.query(Booking).delete()
+        db.add_all(
+            [
+                Booking(
+                    id=30,
+                    user_id=1,
+                    venue_id="osm_296568074",
+                    booking_date=later_start.date(),
+                    start_time=later_start.time(),
+                    end_time=later_end.time(),
+                    seats_reserved=2,
+                    status="confirmed",
+                    order_id="ORD-arrival-later",
+                    payment_status="paid"
+                ),
+                Booking(
+                    id=31,
+                    user_id=1,
+                    venue_id="osm_296568075",
+                    booking_date=soon_start.date(),
+                    start_time=soon_start.time(),
+                    end_time=soon_end.time(),
+                    seats_reserved=1,
+                    status="confirmed",
+                    order_id="ORD-arrival-soon",
+                    payment_status="paid"
+                ),
+                Booking(
+                    id=32,
+                    user_id=1,
+                    venue_id="osm_296568074",
+                    booking_date=soon_start.date(),
+                    start_time=soon_start.time(),
+                    end_time=soon_end.time(),
+                    seats_reserved=1,
+                    status="cancelled",
+                    order_id="ORD-arrival-cancelled",
+                    payment_status="refund_pending"
+                ),
+                Booking(
+                    id=33,
+                    user_id=1,
+                    venue_id="osm_296568075",
+                    booking_date=soon_start.date(),
+                    start_time=soon_start.time(),
+                    end_time=soon_end.time(),
+                    seats_reserved=1,
+                    status="completed",
+                    order_id="ORD-arrival-completed",
+                    payment_status="paid"
+                ),
+                Booking(
+                    id=34,
+                    user_id=1,
+                    venue_id="osm_296568074",
+                    booking_date=past_start.date(),
+                    start_time=past_start.time(),
+                    end_time=past_end.time(),
+                    seats_reserved=1,
+                    status="confirmed",
+                    order_id="ORD-arrival-past",
+                    payment_status="paid"
+                )
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(
+        "/api/provider/dashboard/arrivals",
+        headers=headers
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert [item["booking_id"] for item in data["items"]] == [31, 30]
+    assert data["items"][0]["client_full_name"] == "Test Student"
+    assert data["items"][0]["venue_name"] == "UCD Village Study Hub"
+    assert data["items"][0]["confirmation_status"] == "confirmed"
+    assert data["items"][0]["space_label"] == "UCD Village Study Hub"
+    assert data["items"][0]["fee_estimate"] == 4
+    assert data["items"][1]["fee_estimate"] == 7
+
+    limited_response = client.get(
+        "/api/provider/dashboard/arrivals?limit=1",
+        headers=headers
+    )
+    assert limited_response.status_code == 200
+    assert len(limited_response.json()["items"]) == 1
+    assert limited_response.json()["items"][0]["booking_id"] == 31
+
+
 def test_registration_rejects_invalid_role():
     response = client.post(
         "/api/auth/register",
