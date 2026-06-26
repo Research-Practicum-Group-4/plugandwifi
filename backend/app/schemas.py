@@ -275,3 +275,33 @@ class ProviderDashboardKPIsResponse(BaseModel):
     active_properties_count: KPIMetric
 
     average_user_rating: KPIMetric
+
+
+class ProviderArrivalItem(BaseModel):
+
+    booking_id: int
+
+    client_full_name: str
+
+    venue_id: str
+
+    venue_name: str | None = None
+
+    confirmation_status: str
+
+    booking_date: date
+
+    start_time: time
+
+    end_time: time
+
+    seats_reserved: int
+
+    space_label: str | None = None
+
+    fee_estimate: float
+
+
+class ProviderArrivalsResponse(BaseModel):
+
+    items: list[ProviderArrivalItem]

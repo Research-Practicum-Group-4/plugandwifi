@@ -30,7 +30,8 @@ from .schemas import (
     BookingCancellationResponse,
     RefreshTokenRequest,
     LogoutRequest,
-    ProviderDashboardKPIsResponse
+    ProviderDashboardKPIsResponse,
+    ProviderArrivalsResponse
 )
 from .auth import (
     hash_password, 
@@ -297,6 +298,32 @@ def build_kpi_metric(
         "delta_percent": calculate_percentage_delta(
             current_value,
             previous_value
+        )
+    }
+
+
+def serialize_provider_arrival(
+    booking: Booking,
+    user: User,
+    venue: Venue | None
+):
+    return {
+        "booking_id": booking.id,
+        "client_full_name": user.full_name,
+        "venue_id": booking.venue_id,
+        "venue_name": venue.name if venue else None,
+        "confirmation_status": booking.status,
+        "booking_date": booking.booking_date,
+        "start_time": booking.start_time,
+        "end_time": booking.end_time,
+        "seats_reserved": booking.seats_reserved,
+        "space_label": venue.name if venue else None,
+        "fee_estimate": round(
+            calculate_booking_revenue(
+                booking,
+                venue
+            ),
+            2
         )
     }
 
@@ -1278,6 +1305,66 @@ def get_provider_dashboard_kpis(
             current_values["average_user_rating"],
             previous_values["average_user_rating"]
         )
+    }
+
+
+@app.get(
+    "/api/provider/dashboard/arrivals",
+    response_model=ProviderArrivalsResponse
+)
+def get_provider_dashboard_arrivals(
+    current_user: User = Depends(require_roles("provider")),
+    limit: int = Query(
+        20,
+        ge=1
+    ),
+    db: Session = Depends(get_db)
+):
+    current_datetime = datetime.now()
+
+    arrival_rows = (
+        db.query(Booking, User, Venue)
+        .join(
+            User,
+            Booking.user_id == User.id
+        )
+        .outerjoin(
+            Venue,
+            Booking.venue_id == Venue.venue_id
+        )
+        .filter(Booking.booking_date >= current_datetime.date())
+        .filter(
+            func.coalesce(
+                func.lower(Booking.status),
+                "confirmed"
+            ).notin_({"cancelled", "canceled", "completed"})
+        )
+        .order_by(
+            Booking.booking_date,
+            Booking.start_time
+        )
+        .all()
+    )
+
+    upcoming_rows = [
+        (
+            booking,
+            user,
+            venue
+        )
+        for booking, user, venue in arrival_rows
+        if booking_datetime(booking) >= current_datetime
+    ][:limit]
+
+    return {
+        "items": [
+            serialize_provider_arrival(
+                booking,
+                user,
+                venue
+            )
+            for booking, user, venue in upcoming_rows
+        ]
     }
 
 
