@@ -28,6 +28,7 @@ from .schemas import (
     BookingResponse,
     UserBookingsResponse,
     BookingCancellationResponse,
+    SlotDeactivationResponse,
     RefreshTokenRequest,
     LogoutRequest,
     ProviderDashboardKPIsResponse,
@@ -326,6 +327,27 @@ def serialize_provider_arrival(
             2
         )
     }
+
+
+def slot_has_active_booking(
+    db: Session,
+    slot: AvailabilitySlot
+):
+    return (
+        db.query(Booking)
+        .filter(Booking.venue_id == slot.venue_id)
+        .filter(Booking.booking_date == slot.date)
+        .filter(Booking.start_time < slot.end_time)
+        .filter(Booking.end_time > slot.start_time)
+        .filter(
+            func.coalesce(
+                func.lower(Booking.status),
+                "confirmed"
+            ).notin_({"cancelled", "canceled", "completed"})
+        )
+        .first()
+        is not None
+    )
 
 
 def has_required_contiguous_seats(
@@ -1365,6 +1387,54 @@ def get_provider_dashboard_arrivals(
             )
             for booking, user, venue in upcoming_rows
         ]
+    }
+
+
+@app.delete(
+    "/api/venues/{venue_id}/slots/{slot_id}",
+    response_model=SlotDeactivationResponse
+)
+def deactivate_availability_slot(
+    venue_id: str,
+    slot_id: int,
+    current_user: User = Depends(require_roles("provider")),
+    db: Session = Depends(get_db)
+):
+    slot = (
+        db.query(AvailabilitySlot)
+        .filter(AvailabilitySlot.id == slot_id)
+        .filter(AvailabilitySlot.venue_id == venue_id)
+        .with_for_update()
+        .first()
+    )
+
+    if slot is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Availability slot not found"
+        )
+
+    if slot_has_active_booking(
+        db,
+        slot
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="An active booking exists during this time."
+        )
+
+    slot.available = False
+    slot.available_seats = 0
+
+    db.commit()
+    db.refresh(slot)
+
+    return {
+        "slot_id": slot.id,
+        "venue_id": slot.venue_id,
+        "available": slot.available,
+        "available_seats": slot.available_seats,
+        "message": "Slot deactivated successfully"
     }
 
 
