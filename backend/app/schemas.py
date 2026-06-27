@@ -257,6 +257,19 @@ class BookingCancellationResponse(BaseModel):
     message: str
 
 
+class SlotDeactivationResponse(BaseModel):
+
+    slot_id: int
+
+    venue_id: str
+
+    available: bool
+
+    available_seats: int
+
+    message: str
+
+
 class KPIMetric(BaseModel):
 
     value: int | float

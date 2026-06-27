@@ -703,6 +703,207 @@ def test_provider_dashboard_arrivals_returns_upcoming_feed_in_chronological_orde
     assert limited_response.json()["items"][0]["booking_id"] == 31
 
 
+def test_deactivate_slot_requires_authentication():
+    response = client.delete("/api/venues/osm_296568074/slots/1")
+    assert response.status_code == 401
+
+
+def test_deactivate_slot_rejects_standard_user():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    access_token = login_response.json()["access_token"]
+
+    response = client.delete(
+        "/api/venues/osm_296568074/slots/1",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
+
+    assert response.status_code == 403
+
+
+def test_deactivate_slot_returns_404_for_missing_slot():
+    provider_payload = {
+        "full_name": "Slot Provider",
+        "email": "slot-provider-404@ucd.ie",
+        "password": "password123",
+        "role": "provider"
+    }
+    client.post("/api/auth/register", json=provider_payload)
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": provider_payload["email"],
+            "password": provider_payload["password"]
+        }
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+
+    response = client.delete(
+        "/api/venues/osm_296568074/slots/999",
+        headers=headers
+    )
+
+    assert response.status_code == 404
+
+
+def test_deactivate_slot_blocks_when_active_booking_overlaps():
+    provider_payload = {
+        "full_name": "Slot Provider",
+        "email": "slot-provider-conflict@ucd.ie",
+        "password": "password123",
+        "role": "provider"
+    }
+    client.post("/api/auth/register", json=provider_payload)
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": provider_payload["email"],
+            "password": provider_payload["password"]
+        }
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+    slot_date = date.today() + timedelta(days=3)
+
+    db = TestingSessionLocal()
+    try:
+        slot = AvailabilitySlot(
+            id=40,
+            venue_id="osm_296568074",
+            date=slot_date,
+            start_time=time(9, 0),
+            end_time=time(12, 0),
+            available=True,
+            available_seats=5
+        )
+        booking = Booking(
+            id=40,
+            user_id=1,
+            venue_id="osm_296568074",
+            booking_date=slot_date,
+            start_time=time(10, 0),
+            end_time=time(11, 0),
+            seats_reserved=2,
+            status="confirmed",
+            order_id="ORD-slot-conflict",
+            payment_status="paid"
+        )
+        db.add_all([slot, booking])
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.delete(
+        "/api/venues/osm_296568074/slots/40",
+        headers=headers
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "An active booking exists during this time."
+    )
+
+    db = TestingSessionLocal()
+    try:
+        unchanged_slot = db.query(AvailabilitySlot).filter(
+            AvailabilitySlot.id == 40
+        ).one()
+        assert unchanged_slot.available is True
+        assert unchanged_slot.available_seats == 5
+    finally:
+        db.close()
+
+
+def test_deactivate_slot_allows_when_only_inactive_bookings_overlap():
+    provider_payload = {
+        "full_name": "Slot Provider",
+        "email": "slot-provider-success@ucd.ie",
+        "password": "password123",
+        "role": "provider"
+    }
+    client.post("/api/auth/register", json=provider_payload)
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": provider_payload["email"],
+            "password": provider_payload["password"]
+        }
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+    slot_date = date.today() + timedelta(days=4)
+
+    db = TestingSessionLocal()
+    try:
+        slot = AvailabilitySlot(
+            id=41,
+            venue_id="osm_296568075",
+            date=slot_date,
+            start_time=time(9, 0),
+            end_time=time(12, 0),
+            available=True,
+            available_seats=4
+        )
+        cancelled_booking = Booking(
+            id=41,
+            user_id=1,
+            venue_id="osm_296568075",
+            booking_date=slot_date,
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            seats_reserved=1,
+            status="cancelled",
+            order_id="ORD-slot-cancelled",
+            payment_status="refund_pending"
+        )
+        completed_booking = Booking(
+            id=42,
+            user_id=1,
+            venue_id="osm_296568075",
+            booking_date=slot_date,
+            start_time=time(10, 0),
+            end_time=time(11, 0),
+            seats_reserved=1,
+            status="completed",
+            order_id="ORD-slot-completed",
+            payment_status="paid"
+        )
+        db.add_all([slot, cancelled_booking, completed_booking])
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.delete(
+        "/api/venues/osm_296568075/slots/41",
+        headers=headers
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "slot_id": 41,
+        "venue_id": "osm_296568075",
+        "available": False,
+        "available_seats": 0,
+        "message": "Slot deactivated successfully"
+    }
+
+    db = TestingSessionLocal()
+    try:
+        deactivated_slot = db.query(AvailabilitySlot).filter(
+            AvailabilitySlot.id == 41
+        ).one()
+        assert deactivated_slot.available is False
+        assert deactivated_slot.available_seats == 0
+    finally:
+        db.close()
+
+
 def test_registration_rejects_invalid_role():
     response = client.post(
         "/api/auth/register",
