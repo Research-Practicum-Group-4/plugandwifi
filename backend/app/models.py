@@ -311,3 +311,61 @@ class Booking(Base):
         String,
         default = "paid"
     )
+
+
+class PostBookingReview(Base):
+
+    __tablename__ = "post_booking_reviews"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "booking_id",
+            name="uq_post_booking_reviews_booking"
+        ),
+    )
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    booking_id = Column(
+        Integer,
+        ForeignKey("bookings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
+    venue_id = Column(
+        String,
+        ForeignKey("venues.venue_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
+    wifi_score = Column(Float)
+
+    plug_score = Column(Float)
+
+    quietness_score = Column(Float)
+
+    verified = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false"
+    )
+
+    created_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow
+    )

@@ -18,7 +18,15 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.database import Base, build_engine_options, get_db
-from app.models import User, Venue, AvailabilitySlot, Booking, RefreshSession, Favorite
+from app.models import (
+    User,
+    Venue,
+    AvailabilitySlot,
+    Booking,
+    RefreshSession,
+    Favorite,
+    PostBookingReview
+)
 from app.auth import create_access_token, hash_password, verify_access_token
 from app.rbac import require_roles
 from app.refresh_tokens import hash_refresh_token
@@ -927,6 +935,148 @@ def test_get_venue_by_id():
     # Non-existent venue ID lookup
     res_404 = client.get("/api/venues/ghost_venue_id")
     assert res_404.status_code == 404
+
+
+def test_venue_survey_metrics_aggregate_verified_completed_reviews():
+    db = TestingSessionLocal()
+    try:
+        db.query(PostBookingReview).delete()
+        db.query(Booking).delete()
+
+        bookings = [
+            Booking(
+                id=50,
+                user_id=1,
+                venue_id="osm_296568074",
+                booking_date=date(2026, 6, 15),
+                start_time=time(9, 0),
+                end_time=time(10, 0),
+                seats_reserved=1,
+                status="completed",
+                order_id="ORD-survey-1",
+                payment_status="paid"
+            ),
+            Booking(
+                id=51,
+                user_id=1,
+                venue_id="osm_296568074",
+                booking_date=date(2026, 6, 15),
+                start_time=time(10, 0),
+                end_time=time(11, 0),
+                seats_reserved=1,
+                status="completed",
+                order_id="ORD-survey-2",
+                payment_status="paid"
+            ),
+            Booking(
+                id=52,
+                user_id=1,
+                venue_id="osm_296568074",
+                booking_date=date(2026, 6, 15),
+                start_time=time(11, 0),
+                end_time=time(12, 0),
+                seats_reserved=1,
+                status="completed",
+                order_id="ORD-survey-3",
+                payment_status="paid"
+            ),
+            Booking(
+                id=53,
+                user_id=1,
+                venue_id="osm_296568074",
+                booking_date=date(2026, 6, 15),
+                start_time=time(12, 0),
+                end_time=time(13, 0),
+                seats_reserved=1,
+                status="completed",
+                order_id="ORD-survey-unverified",
+                payment_status="paid"
+            ),
+            Booking(
+                id=54,
+                user_id=1,
+                venue_id="osm_296568074",
+                booking_date=date(2026, 6, 15),
+                start_time=time(13, 0),
+                end_time=time(14, 0),
+                seats_reserved=1,
+                status="confirmed",
+                order_id="ORD-survey-not-completed",
+                payment_status="paid"
+            )
+        ]
+        reviews = [
+            PostBookingReview(
+                id=50,
+                booking_id=50,
+                user_id=1,
+                venue_id="osm_296568074",
+                wifi_score=3,
+                plug_score=4,
+                quietness_score=2,
+                verified=True
+            ),
+            PostBookingReview(
+                id=51,
+                booking_id=51,
+                user_id=1,
+                venue_id="osm_296568074",
+                wifi_score=4,
+                plug_score=5,
+                quietness_score=3,
+                verified=True
+            ),
+            PostBookingReview(
+                id=52,
+                booking_id=52,
+                user_id=1,
+                venue_id="osm_296568074",
+                wifi_score=5,
+                plug_score=None,
+                quietness_score=4,
+                verified=True
+            ),
+            PostBookingReview(
+                id=53,
+                booking_id=53,
+                user_id=1,
+                venue_id="osm_296568074",
+                wifi_score=1,
+                plug_score=1,
+                quietness_score=1,
+                verified=False
+            ),
+            PostBookingReview(
+                id=54,
+                booking_id=54,
+                user_id=1,
+                venue_id="osm_296568074",
+                wifi_score=1,
+                plug_score=1,
+                quietness_score=1,
+                verified=True
+            )
+        ]
+        db.add_all(bookings + reviews)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/venues/osm_296568074/survey-metrics")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "venue_id": "osm_296568074",
+        "wifi_score": 4.0,
+        "plug_score": "Too few ratings",
+        "quietness_score": 3.0
+    }
+
+
+def test_venue_survey_metrics_returns_404_for_missing_venue():
+    response = client.get("/api/venues/ghost_venue_id/survey-metrics")
+    assert response.status_code == 404
+
 
 # Deep integration test for seat optimization limits and overbooking blockades
 def test_booking_edge_cases():
