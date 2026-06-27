@@ -15,7 +15,8 @@ from .models import (
     AvailabilitySlot,
     Booking,
     RefreshSession,
-    Favorite
+    Favorite,
+    PostBookingReview
 )
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
@@ -32,7 +33,8 @@ from .schemas import (
     RefreshTokenRequest,
     LogoutRequest,
     ProviderDashboardKPIsResponse,
-    ProviderArrivalsResponse
+    ProviderArrivalsResponse,
+    VenueSurveyMetricsResponse
 )
 from .auth import (
     hash_password, 
@@ -347,6 +349,38 @@ def slot_has_active_booking(
         )
         .first()
         is not None
+    )
+
+
+def get_verified_survey_metric(
+    db: Session,
+    venue_id: str,
+    metric_column
+):
+    metric_values = (
+        db.query(metric_column)
+        .join(
+            Booking,
+            PostBookingReview.booking_id == Booking.id
+        )
+        .filter(PostBookingReview.venue_id == venue_id)
+        .filter(PostBookingReview.verified.is_(True))
+        .filter(func.lower(Booking.status) == "completed")
+        .filter(metric_column.isnot(None))
+        .all()
+    )
+
+    values = [
+        value
+        for value, in metric_values
+    ]
+
+    if len(values) < 3:
+        return "Too few ratings"
+
+    return round(
+        sum(values) / len(values),
+        2
     )
 
 
@@ -1043,6 +1077,47 @@ def get_venue_by_id(
         )
     
     return venue
+
+
+@app.get(
+    "/api/venues/{venue_id}/survey-metrics",
+    response_model=VenueSurveyMetricsResponse
+)
+def get_venue_survey_metrics(
+    venue_id: str,
+    db: Session = Depends(get_db)
+):
+    venue = (
+        db.query(Venue)
+        .filter(Venue.venue_id == venue_id)
+        .first()
+    )
+
+    if venue is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Venue not found"
+        )
+
+    return {
+        "venue_id": venue_id,
+        "wifi_score": get_verified_survey_metric(
+            db,
+            venue_id,
+            PostBookingReview.wifi_score
+        ),
+        "plug_score": get_verified_survey_metric(
+            db,
+            venue_id,
+            PostBookingReview.plug_score
+        ),
+        "quietness_score": get_verified_survey_metric(
+            db,
+            venue_id,
+            PostBookingReview.quietness_score
+        )
+    }
+
 
 @app.post(
     "/api/bookings",

@@ -318,3 +318,14 @@ class ProviderArrivalItem(BaseModel):
 class ProviderArrivalsResponse(BaseModel):
 
     items: list[ProviderArrivalItem]
+
+
+class VenueSurveyMetricsResponse(BaseModel):
+
+    venue_id: str
+
+    wifi_score: float | str
+
+    plug_score: float | str
+
+    quietness_score: float | str
