@@ -37,7 +37,9 @@ from .schemas import (
     ProviderDashboardKPIsResponse,
     ProviderArrivalsResponse,
     VenueSurveyMetricsResponse,
-    AdminDashboardOverviewResponse
+    AdminDashboardOverviewResponse,
+    VenueSuspensionRequest,
+    VenueSuspensionResponse
 )
 from .auth import (
     hash_password, 
@@ -424,6 +426,17 @@ def slot_has_active_booking(
         .first()
         is not None
     )
+
+
+def is_active_booking_status(status: str | None):
+    return (
+        status
+        or "confirmed"
+    ).lower() not in {
+        "cancelled",
+        "canceled",
+        "completed"
+    }
 
 
 def get_verified_survey_metric(
@@ -1018,7 +1031,12 @@ def get_venues(
             detail="date and start_time are required when duration_hours is provided"
         )
 
-    query = db.query(Venue)
+    query = db.query(Venue).filter(
+        func.coalesce(
+            Venue.state,
+            "Active"
+        ) != "Suspended"
+    )
 
     if duration_hours is None and date and start_time and end_time:
 
@@ -1165,6 +1183,7 @@ def get_venues(
         {
             "venue_id": venue.venue_id,
             "name": venue.name,
+            "state": venue.state,
             "lat": venue.lat,
             "lon": venue.lon,
             "borough": venue.borough,
@@ -1648,6 +1667,62 @@ def get_admin_dashboard_overview(
             get_admin_completed_checkout_revenues(db)
         ),
         "system_incident_counts": get_admin_incident_counts(db)
+    }
+
+
+@app.patch(
+    "/api/admin/venues/{venue_id}/suspension",
+    response_model=VenueSuspensionResponse
+)
+def suspend_venue(
+    venue_id: str,
+    payload: VenueSuspensionRequest,
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db)
+):
+    venue = (
+        db.query(Venue)
+        .filter(Venue.venue_id == venue_id)
+        .with_for_update()
+        .first()
+    )
+
+    if venue is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Venue not found"
+        )
+
+    active_bookings = (
+        db.query(Booking)
+        .filter(Booking.venue_id == venue_id)
+        .with_for_update()
+        .all()
+    )
+    active_bookings = [
+        booking
+        for booking in active_bookings
+        if is_active_booking_status(booking.status)
+    ]
+
+    released_seats = 0
+
+    for booking in active_bookings:
+        released_seats += booking.seats_reserved
+        booking.status = "cancelled"
+        booking.payment_status = "refund_pending"
+
+    venue.state = payload.state
+
+    db.commit()
+    db.refresh(venue)
+
+    return {
+        "venue_id": venue.venue_id,
+        "state": venue.state,
+        "cancelled_bookings": len(active_bookings),
+        "released_seats": released_seats,
+        "message": "Venue suspended successfully"
     }
 
 

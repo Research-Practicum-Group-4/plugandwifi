@@ -51,6 +51,7 @@ class VenueResponse(BaseModel):
 
     venue_id: str
     name: str
+    state: str | None = None
     lat: float
     lon: float
     borough: str
@@ -101,6 +102,8 @@ class VenueDetailResponse(BaseModel):
     venue_id: str
 
     name: str
+
+    state: str | None = None
 
     osm_type: str | None = None
 
@@ -388,3 +391,21 @@ class AdminDashboardOverviewResponse(BaseModel):
     total_completed_checkout_revenues: float
 
     system_incident_counts: AdminIncidentCounts
+
+
+class VenueSuspensionRequest(BaseModel):
+
+    state: Literal["Suspended"] = "Suspended"
+
+
+class VenueSuspensionResponse(BaseModel):
+
+    venue_id: str
+
+    state: str
+
+    cancelled_bookings: int
+
+    released_seats: int
+
+    message: str
