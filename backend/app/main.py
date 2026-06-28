@@ -27,6 +27,8 @@ from .schemas import (
     VenueDetailResponse,
     BookingCreate,
     BookingResponse,
+    ReviewCreate,
+    ReviewResponse,
     UserBookingsResponse,
     BookingCancellationResponse,
     SlotDeactivationResponse,
@@ -454,6 +456,70 @@ def get_verified_survey_metric(
         sum(values) / len(values),
         2
     )
+
+
+def calculate_review_star_rating(review: PostBookingReview):
+    score_values = [
+        score
+        for score in (
+            review.wifi_score,
+            review.plug_score,
+            review.quietness_score
+        )
+        if score is not None
+    ]
+
+    if not score_values:
+        return None
+
+    return sum(score_values) / len(score_values)
+
+
+def refresh_venue_rating(
+    db: Session,
+    venue_id: str
+):
+    review_rows = (
+        db.query(PostBookingReview)
+        .join(
+            Booking,
+            PostBookingReview.booking_id == Booking.id
+        )
+        .filter(PostBookingReview.venue_id == venue_id)
+        .filter(PostBookingReview.verified.is_(True))
+        .filter(func.lower(Booking.status) == "completed")
+        .all()
+    )
+
+    review_ratings = [
+        rating
+        for rating in (
+            calculate_review_star_rating(review)
+            for review in review_rows
+        )
+        if rating is not None
+    ]
+
+    aggregate_rating = (
+        round(
+            sum(review_ratings) / len(review_ratings),
+            2
+        )
+        if review_ratings
+        else None
+    )
+
+    venue = (
+        db.query(Venue)
+        .filter(Venue.venue_id == venue_id)
+        .with_for_update()
+        .first()
+    )
+
+    if venue is not None:
+        venue.rating = aggregate_rating
+
+    return aggregate_rating
 
 
 def has_required_contiguous_seats(
@@ -1188,6 +1254,86 @@ def get_venue_survey_metrics(
             venue_id,
             PostBookingReview.quietness_score
         )
+    }
+
+
+@app.post(
+    "/api/reviews",
+    response_model=ReviewResponse
+)
+def create_review(
+    payload: ReviewCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    booking = (
+        db.query(Booking)
+        .filter(Booking.id == payload.booking_id)
+        .filter(Booking.user_id == current_user.id)
+        .with_for_update()
+        .first()
+    )
+
+    if booking is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Booking not found"
+        )
+
+    booking_status = (
+        booking.status
+        or ""
+    ).lower()
+
+    if booking_status != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail="Only completed bookings can be reviewed"
+        )
+
+    existing_review = (
+        db.query(PostBookingReview)
+        .filter(PostBookingReview.booking_id == booking.id)
+        .first()
+    )
+
+    if existing_review is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Review already exists for this booking"
+        )
+
+    review = PostBookingReview(
+        booking_id=booking.id,
+        user_id=current_user.id,
+        venue_id=booking.venue_id,
+        wifi_score=payload.wifi_score,
+        plug_score=payload.plug_score,
+        quietness_score=payload.quietness_score,
+        verified=True
+    )
+
+    db.add(review)
+    db.flush()
+
+    venue_rating = refresh_venue_rating(
+        db,
+        booking.venue_id
+    )
+
+    db.commit()
+    db.refresh(review)
+
+    return {
+        "id": review.id,
+        "booking_id": review.booking_id,
+        "user_id": review.user_id,
+        "venue_id": review.venue_id,
+        "wifi_score": review.wifi_score,
+        "plug_score": review.plug_score,
+        "quietness_score": review.quietness_score,
+        "verified": review.verified,
+        "venue_rating": venue_rating
     }
 
 

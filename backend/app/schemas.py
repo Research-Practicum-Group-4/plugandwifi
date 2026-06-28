@@ -208,6 +208,47 @@ class BookingResponse(BaseModel):
         from_attributes = True
 
 
+class ReviewCreate(BaseModel):
+
+    booking_id: int
+
+    wifi_score: float = Field(
+        ge=1,
+        le=5
+    )
+
+    plug_score: float = Field(
+        ge=1,
+        le=5
+    )
+
+    quietness_score: float = Field(
+        ge=1,
+        le=5
+    )
+
+
+class ReviewResponse(BaseModel):
+
+    id: int
+
+    booking_id: int
+
+    user_id: int
+
+    venue_id: str
+
+    wifi_score: float | None = None
+
+    plug_score: float | None = None
+
+    quietness_score: float | None = None
+
+    verified: bool
+
+    venue_rating: float | None = None
+
+
 class UserBookingItem(BaseModel):
 
     booking_id: int

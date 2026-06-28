@@ -1250,6 +1250,255 @@ def test_venue_survey_metrics_returns_404_for_missing_venue():
     assert response.status_code == 404
 
 
+def test_create_review_requires_authentication():
+    response = client.post(
+        "/api/reviews",
+        json={
+            "booking_id": 1,
+            "wifi_score": 4,
+            "plug_score": 4,
+            "quietness_score": 4
+        }
+    )
+
+    assert response.status_code == 401
+
+
+def test_create_review_updates_venue_rating_and_api_payloads():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+
+    db = TestingSessionLocal()
+    try:
+        db.query(PostBookingReview).delete()
+        db.query(Booking).delete()
+
+        venue = db.query(Venue).filter(
+            Venue.venue_id == "osm_296568074"
+        ).one()
+        venue.rating = 2.5
+
+        completed_booking = Booking(
+            id=70,
+            user_id=1,
+            venue_id="osm_296568074",
+            booking_date=date(2026, 6, 15),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            seats_reserved=1,
+            status="completed",
+            order_id="ORD-review-completed",
+            payment_status="paid"
+        )
+        previous_booking = Booking(
+            id=71,
+            user_id=1,
+            venue_id="osm_296568074",
+            booking_date=date(2026, 6, 14),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            seats_reserved=1,
+            status="completed",
+            order_id="ORD-review-previous",
+            payment_status="paid"
+        )
+        previous_review = PostBookingReview(
+            id=71,
+            booking_id=71,
+            user_id=1,
+            venue_id="osm_296568074",
+            wifi_score=3,
+            plug_score=3,
+            quietness_score=3,
+            verified=True
+        )
+
+        db.add_all(
+            [
+                completed_booking,
+                previous_booking,
+                previous_review
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post(
+        "/api/reviews",
+        headers=headers,
+        json={
+            "booking_id": 70,
+            "wifi_score": 5,
+            "plug_score": 4,
+            "quietness_score": 3
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["booking_id"] == 70
+    assert data["verified"] is True
+    assert data["venue_rating"] == 3.5
+
+    venue_list_response = client.get("/api/venues?borough=Dublin South")
+    assert venue_list_response.status_code == 200
+    venue_list_items = venue_list_response.json()["items"]
+    updated_venue = next(
+        item
+        for item in venue_list_items
+        if item["venue_id"] == "osm_296568074"
+    )
+    assert updated_venue["rating"] == 3.5
+
+    venue_detail_response = client.get("/api/venues/osm_296568074")
+    assert venue_detail_response.status_code == 200
+    assert venue_detail_response.json()["rating"] == 3.5
+
+
+def test_create_review_rejects_non_owner_booking():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+
+    db = TestingSessionLocal()
+    try:
+        other_user = User(
+            id=2,
+            full_name="Other Reviewer",
+            email="other-reviewer@example.com",
+            password_hash=hash_password("00000000")
+        )
+        other_booking = Booking(
+            id=72,
+            user_id=2,
+            venue_id="osm_296568074",
+            booking_date=date(2026, 6, 15),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            seats_reserved=1,
+            status="completed",
+            order_id="ORD-review-other",
+            payment_status="paid"
+        )
+        db.add_all([other_user, other_booking])
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post(
+        "/api/reviews",
+        headers=headers,
+        json={
+            "booking_id": 72,
+            "wifi_score": 5,
+            "plug_score": 5,
+            "quietness_score": 5
+        }
+    )
+
+    assert response.status_code == 404
+
+
+def test_create_review_rejects_incomplete_and_duplicate_reviews():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+
+    db = TestingSessionLocal()
+    try:
+        db.query(PostBookingReview).delete()
+        db.query(Booking).delete()
+
+        incomplete_booking = Booking(
+            id=73,
+            user_id=1,
+            venue_id="osm_296568074",
+            booking_date=date(2026, 6, 15),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            seats_reserved=1,
+            status="confirmed",
+            order_id="ORD-review-incomplete",
+            payment_status="paid"
+        )
+        completed_booking = Booking(
+            id=74,
+            user_id=1,
+            venue_id="osm_296568074",
+            booking_date=date(2026, 6, 15),
+            start_time=time(10, 0),
+            end_time=time(11, 0),
+            seats_reserved=1,
+            status="completed",
+            order_id="ORD-review-duplicate",
+            payment_status="paid"
+        )
+        existing_review = PostBookingReview(
+            id=74,
+            booking_id=74,
+            user_id=1,
+            venue_id="osm_296568074",
+            wifi_score=4,
+            plug_score=4,
+            quietness_score=4,
+            verified=True
+        )
+        db.add_all(
+            [
+                incomplete_booking,
+                completed_booking,
+                existing_review
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    incomplete_response = client.post(
+        "/api/reviews",
+        headers=headers,
+        json={
+            "booking_id": 73,
+            "wifi_score": 5,
+            "plug_score": 5,
+            "quietness_score": 5
+        }
+    )
+    assert incomplete_response.status_code == 409
+    assert incomplete_response.json()["detail"] == (
+        "Only completed bookings can be reviewed"
+    )
+
+    duplicate_response = client.post(
+        "/api/reviews",
+        headers=headers,
+        json={
+            "booking_id": 74,
+            "wifi_score": 5,
+            "plug_score": 5,
+            "quietness_score": 5
+        }
+    )
+    assert duplicate_response.status_code == 409
+    assert duplicate_response.json()["detail"] == (
+        "Review already exists for this booking"
+    )
+
+
 # Deep integration test for seat optimization limits and overbooking blockades
 def test_booking_edge_cases():
     # Attempting to book 10 seats when the capacity limit is 5
