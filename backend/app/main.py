@@ -34,7 +34,8 @@ from .schemas import (
     LogoutRequest,
     ProviderDashboardKPIsResponse,
     ProviderArrivalsResponse,
-    VenueSurveyMetricsResponse
+    VenueSurveyMetricsResponse,
+    AdminDashboardOverviewResponse
 )
 from .auth import (
     hash_password, 
@@ -302,6 +303,77 @@ def build_kpi_metric(
             current_value,
             previous_value
         )
+    }
+
+
+def get_admin_completed_checkout_revenues(db: Session):
+    booking_rows = (
+        db.query(Booking, Venue)
+        .outerjoin(
+            Venue,
+            Booking.venue_id == Venue.venue_id
+        )
+        .filter(
+            func.coalesce(
+                func.lower(Booking.payment_status),
+                ""
+            ) == "paid"
+        )
+        .filter(
+            func.coalesce(
+                func.lower(Booking.status),
+                "confirmed"
+            ).notin_(["cancelled", "canceled"])
+        )
+        .all()
+    )
+
+    return round(
+        sum(
+            calculate_booking_revenue(
+                booking,
+                venue
+            )
+            for booking, venue in booking_rows
+        ),
+        2
+    )
+
+
+def get_admin_incident_counts(db: Session):
+    cancelled_bookings = (
+        db.query(func.count(Booking.id))
+        .filter(
+            func.coalesce(
+                func.lower(Booking.status),
+                "confirmed"
+            ).in_(["cancelled", "canceled"])
+        )
+        .scalar()
+        or 0
+    )
+    refund_pending_bookings = (
+        db.query(func.count(Booking.id))
+        .filter(
+            func.coalesce(
+                func.lower(Booking.payment_status),
+                ""
+            ) == "refund_pending"
+        )
+        .scalar()
+        or 0
+    )
+    unavailable_slots = (
+        db.query(func.count(AvailabilitySlot.id))
+        .filter(AvailabilitySlot.available.is_(False))
+        .scalar()
+        or 0
+    )
+
+    return {
+        "cancelled_bookings": cancelled_bookings,
+        "refund_pending_bookings": refund_pending_bookings,
+        "unavailable_slots": unavailable_slots
     }
 
 
@@ -1402,6 +1474,34 @@ def get_provider_dashboard_kpis(
             current_values["average_user_rating"],
             previous_values["average_user_rating"]
         )
+    }
+
+
+@app.get(
+    "/api/admin/dashboard/overview",
+    response_model=AdminDashboardOverviewResponse
+)
+def get_admin_dashboard_overview(
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db)
+):
+    global_active_properties = (
+        db.query(
+            func.count(
+                func.distinct(AvailabilitySlot.venue_id)
+            )
+        )
+        .filter(AvailabilitySlot.available.is_(True))
+        .scalar()
+        or 0
+    )
+
+    return {
+        "global_active_properties": global_active_properties,
+        "total_completed_checkout_revenues": (
+            get_admin_completed_checkout_revenues(db)
+        ),
+        "system_incident_counts": get_admin_incident_counts(db)
     }
 
 

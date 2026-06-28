@@ -558,6 +558,178 @@ def test_provider_dashboard_kpis_returns_window_metrics_and_deltas():
     assert data["average_user_rating"]["delta_percent"] == pytest.approx(-4.17)
 
 
+def test_admin_dashboard_overview_requires_authentication():
+    response = client.get("/api/admin/dashboard/overview")
+    assert response.status_code == 401
+
+
+def test_admin_dashboard_overview_rejects_standard_user():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    access_token = login_response.json()["access_token"]
+
+    response = client.get(
+        "/api/admin/dashboard/overview",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
+
+    assert response.status_code == 403
+
+
+def test_admin_dashboard_overview_rejects_provider_user():
+    provider_payload = {
+        "full_name": "Admin Blocked Provider",
+        "email": "admin-blocked-provider@ucd.ie",
+        "password": "password123",
+        "role": "provider"
+    }
+    register_response = client.post(
+        "/api/auth/register",
+        json=provider_payload
+    )
+    assert register_response.status_code == 200
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": provider_payload["email"],
+            "password": provider_payload["password"]
+        }
+    )
+    access_token = login_response.json()["access_token"]
+
+    response = client.get(
+        "/api/admin/dashboard/overview",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
+
+    assert response.status_code == 403
+
+
+def test_admin_dashboard_overview_returns_system_metrics():
+    db = TestingSessionLocal()
+    try:
+        db.query(Booking).delete()
+        db.query(AvailabilitySlot).delete()
+
+        admin_user = User(
+            id=90,
+            full_name="Admin User",
+            email="admin@example.com",
+            password_hash=hash_password("00000000"),
+            role="admin"
+        )
+        db.add(admin_user)
+
+        db.add_all(
+            [
+                AvailabilitySlot(
+                    id=60,
+                    venue_id="osm_296568074",
+                    date=date(2026, 7, 1),
+                    start_time=time(9, 0),
+                    end_time=time(12, 0),
+                    available=True,
+                    available_seats=5
+                ),
+                AvailabilitySlot(
+                    id=61,
+                    venue_id="osm_296568075",
+                    date=date(2026, 7, 1),
+                    start_time=time(9, 0),
+                    end_time=time(12, 0),
+                    available=True,
+                    available_seats=5
+                ),
+                AvailabilitySlot(
+                    id=62,
+                    venue_id="osm_296568075",
+                    date=date(2026, 7, 2),
+                    start_time=time(9, 0),
+                    end_time=time(12, 0),
+                    available=False,
+                    available_seats=0
+                ),
+                Booking(
+                    id=60,
+                    user_id=1,
+                    venue_id="osm_296568074",
+                    booking_date=date(2026, 7, 1),
+                    start_time=time(9, 0),
+                    end_time=time(11, 0),
+                    seats_reserved=2,
+                    status="confirmed",
+                    order_id="ORD-admin-paid-one",
+                    payment_status="paid"
+                ),
+                Booking(
+                    id=61,
+                    user_id=1,
+                    venue_id="osm_296568075",
+                    booking_date=date(2026, 7, 1),
+                    start_time=time(10, 0),
+                    end_time=time(11, 0),
+                    seats_reserved=1,
+                    status="completed",
+                    order_id="ORD-admin-paid-two",
+                    payment_status="paid"
+                ),
+                Booking(
+                    id=62,
+                    user_id=1,
+                    venue_id="osm_296568074",
+                    booking_date=date(2026, 7, 2),
+                    start_time=time(9, 0),
+                    end_time=time(10, 0),
+                    seats_reserved=1,
+                    status="cancelled",
+                    order_id="ORD-admin-refund",
+                    payment_status="refund_pending"
+                ),
+                Booking(
+                    id=63,
+                    user_id=1,
+                    venue_id="osm_296568075",
+                    booking_date=date(2026, 7, 2),
+                    start_time=time(10, 0),
+                    end_time=time(11, 0),
+                    seats_reserved=1,
+                    status="canceled",
+                    order_id="ORD-admin-canceled",
+                    payment_status="paid"
+                )
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "admin@example.com", "password": "00000000"}
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+
+    response = client.get(
+        "/api/admin/dashboard/overview",
+        headers=headers
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["global_active_properties"] == 2
+    assert data["total_completed_checkout_revenues"] == pytest.approx(18.0)
+    assert data["system_incident_counts"] == {
+        "cancelled_bookings": 2,
+        "refund_pending_bookings": 1,
+        "unavailable_slots": 1
+    }
+
+
 def test_provider_dashboard_arrivals_requires_authentication():
     response = client.get("/api/provider/dashboard/arrivals")
     assert response.status_code == 401
