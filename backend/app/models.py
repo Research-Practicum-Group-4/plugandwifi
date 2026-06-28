@@ -108,6 +108,13 @@ class Venue(Base):
 
     name = Column(String)
 
+    state = Column(
+        String,
+        nullable=False,
+        default="Active",
+        server_default="Active"
+    )
+
     osm_type = Column(String)
 
     cuisine_type = Column(String)

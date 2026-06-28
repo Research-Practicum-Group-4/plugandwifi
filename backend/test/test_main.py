@@ -730,6 +730,165 @@ def test_admin_dashboard_overview_returns_system_metrics():
     }
 
 
+def test_admin_venue_suspension_requires_authentication():
+    response = client.patch(
+        "/api/admin/venues/osm_296568074/suspension",
+        json={"state": "Suspended"}
+    )
+
+    assert response.status_code == 401
+
+
+def test_admin_venue_suspension_rejects_non_admin_user():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    access_token = login_response.json()["access_token"]
+
+    response = client.patch(
+        "/api/admin/venues/osm_296568074/suspension",
+        headers={"Authorization": f"Bearer {access_token}"},
+        json={"state": "Suspended"}
+    )
+
+    assert response.status_code == 403
+
+
+def test_admin_venue_suspension_cancels_active_bookings_and_excludes_search():
+    db = TestingSessionLocal()
+    try:
+        db.query(Booking).delete()
+
+        admin_user = User(
+            id=91,
+            full_name="Suspension Admin",
+            email="suspension-admin@example.com",
+            password_hash=hash_password("00000000"),
+            role="admin"
+        )
+        db.add(admin_user)
+
+        active_booking = Booking(
+            id=80,
+            user_id=1,
+            venue_id="osm_296568074",
+            booking_date=date(2026, 7, 1),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            seats_reserved=2,
+            status="confirmed",
+            order_id="ORD-suspend-active",
+            payment_status="paid"
+        )
+        completed_booking = Booking(
+            id=81,
+            user_id=1,
+            venue_id="osm_296568074",
+            booking_date=date(2026, 6, 1),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            seats_reserved=1,
+            status="completed",
+            order_id="ORD-suspend-completed",
+            payment_status="paid"
+        )
+        db.add_all([active_booking, completed_booking])
+        db.commit()
+    finally:
+        db.close()
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": "suspension-admin@example.com",
+            "password": "00000000"
+        }
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+
+    response = client.patch(
+        "/api/admin/venues/osm_296568074/suspension",
+        headers=headers,
+        json={"state": "Suspended"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "venue_id": "osm_296568074",
+        "state": "Suspended",
+        "cancelled_bookings": 1,
+        "released_seats": 2,
+        "message": "Venue suspended successfully"
+    }
+
+    db = TestingSessionLocal()
+    try:
+        venue = db.query(Venue).filter(
+            Venue.venue_id == "osm_296568074"
+        ).one()
+        cancelled_booking = db.query(Booking).filter(
+            Booking.id == 80
+        ).one()
+        completed_booking = db.query(Booking).filter(
+            Booking.id == 81
+        ).one()
+
+        assert venue.state == "Suspended"
+        assert cancelled_booking.status == "cancelled"
+        assert cancelled_booking.payment_status == "refund_pending"
+        assert completed_booking.status == "completed"
+        assert completed_booking.payment_status == "paid"
+    finally:
+        db.close()
+
+    venues_response = client.get("/api/venues?borough=Dublin South")
+    assert venues_response.status_code == 200
+    venue_ids = [
+        item["venue_id"]
+        for item in venues_response.json()["items"]
+    ]
+    assert "osm_296568074" not in venue_ids
+    assert "osm_296568075" in venue_ids
+
+
+def test_admin_venue_suspension_returns_404_for_missing_venue():
+    db = TestingSessionLocal()
+    try:
+        admin_user = User(
+            id=92,
+            full_name="Missing Venue Admin",
+            email="missing-venue-admin@example.com",
+            password_hash=hash_password("00000000"),
+            role="admin"
+        )
+        db.add(admin_user)
+        db.commit()
+    finally:
+        db.close()
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": "missing-venue-admin@example.com",
+            "password": "00000000"
+        }
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+
+    response = client.patch(
+        "/api/admin/venues/ghost_venue_id/suspension",
+        headers=headers,
+        json={"state": "Suspended"}
+    )
+
+    assert response.status_code == 404
+
+
 def test_provider_dashboard_arrivals_requires_authentication():
     response = client.get("/api/provider/dashboard/arrivals")
     assert response.status_code == 401
