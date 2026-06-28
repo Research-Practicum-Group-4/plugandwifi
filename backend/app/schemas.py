@@ -329,3 +329,21 @@ class VenueSurveyMetricsResponse(BaseModel):
     plug_score: float | str
 
     quietness_score: float | str
+
+
+class AdminIncidentCounts(BaseModel):
+
+    cancelled_bookings: int
+
+    refund_pending_bookings: int
+
+    unavailable_slots: int
+
+
+class AdminDashboardOverviewResponse(BaseModel):
+
+    global_active_properties: int
+
+    total_completed_checkout_revenues: float
+
+    system_incident_counts: AdminIncidentCounts
