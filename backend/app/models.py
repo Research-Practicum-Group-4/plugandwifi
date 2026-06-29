@@ -137,6 +137,12 @@ class Venue(Base):
 
     opening_hours = Column(Text)
 
+    seat_capacity = Column(Integer)
+
+    amenity_tags = Column(Text)
+
+    rules_text = Column(Text)
+
     has_wifi = Column(Boolean)
 
     noise_level = Column(String)

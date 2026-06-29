@@ -403,6 +403,154 @@ def test_provider_route_rejects_role_changed_after_token_issue():
     assert response.status_code == 403
 
 
+def test_create_venue_requires_authentication():
+    response = client.post(
+        "/api/venues",
+        json={
+            "name": "Provider Study Room",
+            "lat": 53.3,
+            "lon": -6.2,
+            "borough": "Dublin South",
+            "seat_capacity": 12
+        }
+    )
+
+    assert response.status_code == 401
+
+
+def test_create_venue_rejects_standard_user():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    access_token = login_response.json()["access_token"]
+
+    response = client.post(
+        "/api/venues",
+        headers={"Authorization": f"Bearer {access_token}"},
+        json={
+            "name": "Provider Study Room",
+            "lat": 53.3,
+            "lon": -6.2,
+            "borough": "Dublin South",
+            "seat_capacity": 12
+        }
+    )
+
+    assert response.status_code == 403
+
+
+def test_provider_can_create_active_venue_listing_and_search_it():
+    provider_payload = {
+        "full_name": "Venue Creator",
+        "email": "venue-creator@ucd.ie",
+        "password": "password123",
+        "role": "provider"
+    }
+    register_response = client.post(
+        "/api/auth/register",
+        json=provider_payload
+    )
+    assert register_response.status_code == 200
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": provider_payload["email"],
+            "password": provider_payload["password"]
+        }
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+
+    create_payload = {
+        "name": "Provider Study Room",
+        "lat": 53.31,
+        "lon": -6.22,
+        "borough": "Dublin South",
+        "opening_hours": "Mo-Fr 09:00-18:00",
+        "seat_capacity": 12,
+        "amenity_tags": ["wifi", "plugs", "quiet"],
+        "rules_text": "Keep noise low.",
+        "has_wifi": True,
+        "plug_access": 1,
+        "hourly_price": 5.5
+    }
+
+    response = client.post(
+        "/api/venues",
+        headers=headers,
+        json=create_payload
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["venue_id"].startswith("provider-")
+    assert data["name"] == "Provider Study Room"
+    assert data["state"] == "Active"
+    assert data["seat_capacity"] == 12
+    assert data["amenity_tags"] == ["wifi", "plugs", "quiet"]
+
+    db = TestingSessionLocal()
+    try:
+        created_venue = db.query(Venue).filter(
+            Venue.venue_id == data["venue_id"]
+        ).one()
+        assert created_venue.state == "Active"
+        assert created_venue.partner == login_response.json()["user"]["user_id"]
+        assert created_venue.amenity_tags == "wifi,plugs,quiet"
+    finally:
+        db.close()
+
+    venues_response = client.get("/api/venues?borough=Dublin South")
+    assert venues_response.status_code == 200
+    venue_ids = [
+        item["venue_id"]
+        for item in venues_response.json()["items"]
+    ]
+    assert data["venue_id"] in venue_ids
+
+
+def test_create_venue_rejects_invalid_payload():
+    provider_payload = {
+        "full_name": "Invalid Venue Provider",
+        "email": "invalid-venue-provider@ucd.ie",
+        "password": "password123",
+        "role": "provider"
+    }
+    register_response = client.post(
+        "/api/auth/register",
+        json=provider_payload
+    )
+    assert register_response.status_code == 200
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": provider_payload["email"],
+            "password": provider_payload["password"]
+        }
+    )
+    headers = {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+
+    response = client.post(
+        "/api/venues",
+        headers=headers,
+        json={
+            "name": "",
+            "lat": 100,
+            "lon": -6.2,
+            "borough": "Dublin South",
+            "seat_capacity": 0
+        }
+    )
+
+    assert response.status_code == 422
+
+
 def test_provider_dashboard_kpis_requires_authentication():
     response = client.get("/api/provider/dashboard/kpis")
     assert response.status_code == 401

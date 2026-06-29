@@ -24,6 +24,8 @@ from .schemas import (
     UserRegister,
     UserLogin,
     VenueListResponse,
+    VenueCreate,
+    VenueCreateResponse,
     VenueDetailResponse,
     BookingCreate,
     BookingResponse,
@@ -161,6 +163,45 @@ def get_booking_category(
         return "completed"
 
     return "upcoming"
+
+
+def serialize_amenity_tags(tags: list[str]):
+    return ",".join(
+        tag.strip()
+        for tag in tags
+        if tag.strip()
+    )
+
+
+def deserialize_amenity_tags(tags: str | None):
+    if not tags:
+        return []
+
+    return [
+        tag.strip()
+        for tag in tags.split(",")
+        if tag.strip()
+    ]
+
+
+def serialize_created_venue(venue: Venue):
+    return {
+        "venue_id": venue.venue_id,
+        "name": venue.name,
+        "state": venue.state,
+        "lat": venue.lat,
+        "lon": venue.lon,
+        "borough": venue.borough,
+        "opening_hours": venue.opening_hours,
+        "seat_capacity": venue.seat_capacity,
+        "amenity_tags": deserialize_amenity_tags(
+            venue.amenity_tags
+        ),
+        "rules_text": venue.rules_text,
+        "has_wifi": venue.has_wifi,
+        "plug_access": venue.plug_access,
+        "hourly_price": venue.hourly_price
+    }
 
 
 def booking_datetime(booking: Booking):
@@ -957,6 +998,42 @@ def logout_user(
     return {
         "message": "Logged out successfully"
     }
+
+
+@app.post(
+    "/api/venues",
+    response_model=VenueCreateResponse
+)
+def create_venue(
+    payload: VenueCreate,
+    current_user: User = Depends(require_roles("provider")),
+    db: Session = Depends(get_db)
+):
+    venue = Venue(
+        venue_id=f"provider-{uuid.uuid4().hex[:12]}",
+        name=payload.name,
+        state="Active",
+        lat=payload.lat,
+        lon=payload.lon,
+        borough=payload.borough,
+        opening_hours=payload.opening_hours,
+        seat_capacity=payload.seat_capacity,
+        amenity_tags=serialize_amenity_tags(
+            payload.amenity_tags
+        ),
+        rules_text=payload.rules_text,
+        has_wifi=payload.has_wifi,
+        plug_access=payload.plug_access,
+        hourly_price=payload.hourly_price,
+        partner=current_user.id
+    )
+
+    db.add(venue)
+    db.commit()
+    db.refresh(venue)
+
+    return serialize_created_venue(venue)
+
 
 @app.get(
     "/api/venues",
