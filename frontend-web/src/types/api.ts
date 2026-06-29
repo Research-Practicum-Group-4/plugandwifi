@@ -142,4 +142,35 @@ export interface VenueListResponse {
   has_more: boolean;
 }
 
+export interface KPIMetric {
+  value: number;
+  delta_percent: number | null;
+}
+
+export interface ProviderDashboardKPIsResponse {
+  window_days: number;
+  total_reservations: KPIMetric;
+  monthly_revenue: KPIMetric;
+  active_properties_count: KPIMetric;
+  average_user_rating: KPIMetric;
+}
+
+export interface ProviderArrivalItem {
+  booking_id: number;
+  client_full_name: string;
+  venue_id: string;
+  venue_name: string | null;
+  confirmation_status: string;
+  booking_date: string;
+  start_time: string;
+  end_time: string;
+  seats_reserved: number;
+  space_label: string | null;
+  fee_estimate: number;
+}
+
+export interface ProviderArrivalsResponse {
+  items: ProviderArrivalItem[];
+}
+
 

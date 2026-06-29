@@ -9,6 +9,8 @@ import {
   UserBookingItem,
   UserBookingsResponse,
   BookingCancellationResponse,
+  ProviderDashboardKPIsResponse,
+  ProviderArrivalsResponse,
 } from "../types/api";
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
@@ -434,8 +436,8 @@ export const api = {
       return {
         access_token: data.access_token,
         user: {
-          user_id: data.user.id,
-          id: data.user.id,
+          user_id: data.user.user_id || data.user.id,
+          id: data.user.user_id || data.user.id,
           full_name: data.user.full_name,
           email: data.user.email,
           role: data.user.role || "user"
@@ -536,6 +538,7 @@ export const api = {
         if (filters.limit !== undefined) params.limit = filters.limit;
       }
       const response = await axiosInstance.get<VenueListResponse>("/venues", { params });
+      console.log(response)
       return response.data;
     }
   },
@@ -614,8 +617,12 @@ export const api = {
         message: "Booking created successfully"
       };
     } else {
-      const response = await axiosInstance.post<BookingResponse>("/bookings", booking);
-      return response.data;
+      const response = await axiosInstance.post<any>("/bookings", booking);
+      return {
+        booking_id: response.data.id || response.data.booking_id,
+        status: response.data.status,
+        message: "Booking created successfully"
+      };
     }
   },
 
@@ -681,6 +688,78 @@ export const api = {
       };
     } else {
       const response = await axiosInstance.patch<BookingCancellationResponse>(`/bookings/${bookingId}/cancel`);
+      return response.data;
+    }
+  },
+
+  // 8. Get Provider KPIs
+  getProviderKPIs: async (): Promise<ProviderDashboardKPIsResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(300);
+      return {
+        window_days: 30,
+        total_reservations: { value: 127, delta_percent: 12 },
+        monthly_revenue: { value: 2450, delta_percent: 18 },
+        active_properties_count: { value: 3, delta_percent: 0 },
+        average_user_rating: { value: 4.8, delta_percent: 4.1 }
+      };
+    } else {
+      const response = await axiosInstance.get<ProviderDashboardKPIsResponse>("/provider/dashboard/kpis");
+      return response.data;
+    }
+  },
+
+  // 9. Get Provider Arrivals
+  getProviderArrivals: async (): Promise<ProviderArrivalsResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(300);
+      return {
+        items: [
+          {
+            booking_id: 1,
+            client_full_name: "Sarah Johnson",
+            venue_id: "osm_12347",
+            venue_name: "Grand Hotel Lobby - Table 5",
+            confirmation_status: "confirmed",
+            booking_date: "2026-06-28",
+            start_time: "14:00:00",
+            end_time: "16:00:00",
+            seats_reserved: 1,
+            space_label: "Table 5",
+            fee_estimate: 24.0
+          },
+          {
+            booking_id: 2,
+            client_full_name: "Michael Chen",
+            venue_id: "osm_12347",
+            venue_name: "Grand Hotel Lobby - Table 3",
+            confirmation_status: "confirmed",
+            booking_date: "2026-06-28",
+            start_time: "15:00:00",
+            end_time: "17:00:00",
+            seats_reserved: 1,
+            space_label: "Table 3",
+            fee_estimate: 24.0
+          },
+          {
+            booking_id: 3,
+            client_full_name: "Emma Wilson",
+            venue_id: "osm_12349",
+            venue_name: "Business Lounge - Desk 2",
+            confirmation_status: "pending",
+            booking_date: "2026-06-29",
+            start_time: "10:00:00",
+            end_time: "13:00:00",
+            seats_reserved: 1,
+            space_label: "Desk 2",
+            fee_estimate: 45.0
+          }
+        ]
+      };
+    } else {
+      const response = await axiosInstance.get<ProviderArrivalsResponse>("/provider/dashboard/arrivals");
       return response.data;
     }
   }
