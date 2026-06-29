@@ -98,6 +98,72 @@ class VenueListResponse(BaseModel):
     has_more: bool
 
 
+class VenueCreate(BaseModel):
+
+    name: str = Field(min_length=1)
+
+    lat: float = Field(
+        ge=-90,
+        le=90
+    )
+
+    lon: float = Field(
+        ge=-180,
+        le=180
+    )
+
+    borough: str = Field(min_length=1)
+
+    opening_hours: str | None = None
+
+    seat_capacity: int = Field(ge=1)
+
+    amenity_tags: list[str] = []
+
+    rules_text: str | None = None
+
+    has_wifi: bool | None = None
+
+    plug_access: int | None = Field(
+        None,
+        ge=0
+    )
+
+    hourly_price: float | None = Field(
+        None,
+        ge=0
+    )
+
+
+class VenueCreateResponse(BaseModel):
+
+    venue_id: str
+
+    name: str
+
+    state: str
+
+    lat: float
+
+    lon: float
+
+    borough: str
+
+    opening_hours: str | None = None
+
+    seat_capacity: int
+
+    amenity_tags: list[str]
+
+    rules_text: str | None = None
+
+    has_wifi: bool | None = None
+
+    plug_access: int | None = None
+
+    hourly_price: float | None = None
+
+
 class VenueDetailResponse(BaseModel):
     venue_id: str
 
