@@ -133,3 +133,5 @@ if __name__ == "__main__":
 
     from normalise import apply_to_venues as apply_normalisation
     apply_normalisation(DB)
+
+    print(df.dtypes)
