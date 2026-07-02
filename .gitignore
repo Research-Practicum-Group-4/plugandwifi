@@ -82,3 +82,5 @@ instance/
 *.log
 *.sqlite3
 *.db
+
+~$*.docx
