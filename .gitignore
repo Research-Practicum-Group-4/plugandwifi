@@ -84,3 +84,8 @@ instance/
 *.db
 
 ~$*.docx
+
+busyness_ml.pptx
+data_quality_report.docx
+response.json
+reports/ridership_skew.png
