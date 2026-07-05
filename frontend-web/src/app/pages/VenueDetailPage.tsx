@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useParams, useNavigate, useLocation } from "react-router";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Separator } from "../components/ui/separator";
@@ -14,20 +15,37 @@ import { VenueDetail, AvailabilitySlot } from "../../types/api";
 export function VenueDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [selectedSlot, setSelectedSlot] = useState<AvailabilitySlot | null>(null);
+  const location = useLocation();
+  const stateParams = location.state || {};
+
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  const [bookingDate, setBookingDate] = useState(
+    stateParams.searchDate || sessionStorage.getItem("searchDate") || todayStr
+  );
+  const [startTime, setStartTime] = useState(
+    stateParams.startTime || sessionStorage.getItem("startTime") || "09:00"
+  );
+  const [endTime, setEndTime] = useState(
+    stateParams.endTime || sessionStorage.getItem("endTime") || "12:00"
+  );
+  const [seatsReserved, setSeatsReserved] = useState(
+    stateParams.seatsRequired || parseInt(sessionStorage.getItem("seatsRequired") || "1")
+  );
+
   const [isSaved, setIsSaved] = useState(false);
   const [venue, setVenue] = useState<VenueDetail | null>(null);
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const getSlotDurationHours = (slot: AvailabilitySlot) => {
+  const getDurationHours = (start: string, end: string) => {
     try {
-      const start = new Date(slot.start_time);
-      const end = new Date(slot.end_time);
-      const diffMs = end.getTime() - start.getTime();
-      return Math.round(diffMs / (1000 * 60 * 60));
+      const [startH, startM] = start.split(":").map(Number);
+      const [endH, endM] = end.split(":").map(Number);
+      const diff = (endH + endM / 60) - (startH + startM / 60);
+      return diff > 0 ? diff : 0;
     } catch {
-      return 1;
+      return 0;
     }
   };
 
@@ -36,7 +54,10 @@ export function VenueDetailPage() {
     setLoading(true);
     Promise.all([
       api.getVenueDetail(id),
-      api.getAvailability(id)
+      api.getAvailability(id).catch(e => {
+        console.warn("Could not load slots:", e);
+        return { venue_id: id, available_slots: [] };
+      })
     ])
       .then(([venueData, availabilityData]) => {
         setVenue(venueData);
@@ -50,27 +71,34 @@ export function VenueDetailPage() {
       });
   }, [id]);
 
+  const duration = getDurationHours(startTime, endTime);
+  const totalPrice = venue ? venue.hourly_price * duration * seatsReserved : 0;
+
   const handleBooking = () => {
     if (!venue) return;
-    if (!selectedSlot) {
-      toast.error("Please select an available time slot first.");
+    if (!bookingDate) {
+      toast.error("Please select a booking date.");
       return;
     }
-
-    const bookingDate = selectedSlot.start_time.split("T")[0];
-    const startTime = selectedSlot.start_time.split("T")[1];
-    const endTime = selectedSlot.end_time.split("T")[1];
-    const duration = getSlotDurationHours(selectedSlot);
+    if (!startTime || !endTime) {
+      toast.error("Please select both start and end times.");
+      return;
+    }
+    if (duration <= 0) {
+      toast.error("End time must be after start time.");
+      return;
+    }
 
     navigate("/checkout", {
       state: {
         venueId: venue.venue_id,
         venueName: venue.name,
         bookingDate,
-        startTime,
-        endTime,
+        startTime: `${startTime}:00`,
+        endTime: `${endTime}:00`,
         duration: duration.toString(),
-        price: venue.hourly_price * duration,
+        price: totalPrice,
+        seatsReserved,
       },
     });
   };
@@ -342,49 +370,74 @@ export function VenueDetailPage() {
                   <span className="text-muted-foreground">per hour</span>
                 </div>
 
-                <div className="space-y-3">
-                  <Label>Select Time Slot</Label>
-                  {slots.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">No slots available today.</p>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-2 max-h-[180px] overflow-y-auto pr-1">
-                      {slots.map((slot) => {
-                        const duration = getSlotDurationHours(slot);
-                        return (
-                          <button
-                            key={slot.slot_id}
-                            disabled={!slot.available}
-                            onClick={() => setSelectedSlot(slot)}
-                            className={`w-full text-left p-3 rounded-lg border text-sm flex items-center justify-between transition-all cursor-pointer ${
-                              !slot.available
-                                ? "bg-muted opacity-50 cursor-not-allowed"
-                                : selectedSlot?.slot_id === slot.slot_id
-                                ? "border-primary bg-primary/5 ring-1 ring-primary"
-                                : "hover:bg-accent border-border"
-                            }`}
-                          >
-                            <span className="flex items-center gap-2">
-                              <Clock className="size-4 text-muted-foreground" />
-                              {formatSlotTime(slot.start_time, slot.end_time)}
-                              <span className="text-xs text-muted-foreground">({duration}h)</span>
-                            </span>
-                            <Badge variant={slot.available ? (selectedSlot?.slot_id === slot.slot_id ? "default" : "outline") : "secondary"}>
-                              {slot.available ? (selectedSlot?.slot_id === slot.slot_id ? "Selected" : "Available") : "Booked"}
-                            </Badge>
-                          </button>
-                        );
-                      })}
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="bookingDate">Date</Label>
+                    <Input
+                      id="bookingDate"
+                      type="date"
+                      value={bookingDate}
+                      onChange={(e) => setBookingDate(e.target.value)}
+                      className="w-full bg-background"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="startTime">Start Time</Label>
+                      <select
+                        id="startTime"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {Array.from({ length: 15 }, (_, i) => {
+                          const hour = i + 8; // 8 AM to 10 PM
+                          const str = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+                          return <option key={str} value={str}>{hour > 12 ? `${hour - 12} PM` : `${hour} AM`}</option>;
+                        })}
+                      </select>
                     </div>
-                  )}
+
+                    <div className="space-y-1">
+                      <Label htmlFor="endTime">End Time</Label>
+                      <select
+                        id="endTime"
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {Array.from({ length: 15 }, (_, i) => {
+                          const hour = i + 9; // 9 AM to 11 PM
+                          const str = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+                          return <option key={str} value={str}>{hour > 12 ? `${hour - 12} PM` : `${hour} AM`}</option>;
+                        })}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="seatsReserved">Seats Reserved</Label>
+                    <select
+                      id="seatsReserved"
+                      value={seatsReserved}
+                      onChange={(e) => setSeatsReserved(parseInt(e.target.value))}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 8, 10].map((num) => (
+                        <option key={num} value={num}>{num} {num === 1 ? "seat" : "seats"}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
               <Separator />
 
               <div className="flex justify-between items-center">
-                <span>Total</span>
+                <span>Total ({duration}h • {seatsReserved} {seatsReserved === 1 ? "seat" : "seats"})</span>
                 <span className="text-2xl" style={{ color: '#2f8a64' }}>
-                  ${selectedSlot ? (venue.hourly_price * getSlotDurationHours(selectedSlot)).toFixed(2) : "0.00"}
+                  ${totalPrice.toFixed(2)}
                 </span>
               </div>
 
@@ -393,13 +446,13 @@ export function VenueDetailPage() {
                 size="lg"
                 onClick={handleBooking}
                 style={{ backgroundColor: '#253c50' }}
-                disabled={!selectedSlot}
+                disabled={duration <= 0}
               >
-                {selectedSlot ? "Continue to Checkout" : "Select a Time Slot"}
+                {duration <= 0 ? "Invalid Time Range" : "Continue to Checkout"}
               </Button>
 
               <p className="text-sm text-muted-foreground text-center">
-                Free cancellation up to 1 hour before booking
+                Free cancellation up to 24 hours before booking
               </p>
             </CardContent>
           </Card>

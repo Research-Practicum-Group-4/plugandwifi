@@ -77,14 +77,14 @@ export function CheckoutPage() {
         booking_date: bookingData.bookingDate || "2026-06-15",
         start_time: bookingData.startTime || "09:00:00",
         end_time: bookingData.endTime || "12:00:00",
-        seats_reserved: 1,
+        seats_reserved: bookingData.seatsReserved || 1,
       });
       
       setIsProcessing(false);
       toast.success("Booking confirmed!", {
         description: `Booking ID: ${response.booking_id}. Check confirmation shortly.`,
       });
-      navigate("/");
+      navigate("/bookings");
     } catch (err: any) {
       console.error("Booking failed:", err);
       setIsProcessing(false);
@@ -247,6 +247,9 @@ export function CheckoutPage() {
                 <p className="text-muted-foreground">
                   Duration: {bookingData.duration} hour{bookingData.duration !== "1" ? "s" : ""}
                 </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Seats: {bookingData.seatsReserved || 1} { (bookingData.seatsReserved || 1) === 1 ? "seat" : "seats" }
+                </p>
               </div>
 
               <Separator />
@@ -275,7 +278,7 @@ export function CheckoutPage() {
                   <div>
                     <p>Free cancellation</p>
                     <p className="text-sm text-muted-foreground">
-                      Cancel up to 1 hour before your booking
+                      Cancel up to 24 hours before your booking
                     </p>
                   </div>
                 </div>

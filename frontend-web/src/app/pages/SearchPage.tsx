@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
@@ -7,13 +7,30 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Label } from "../components/ui/label";
 import { Slider } from "../components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Search, Star, Wifi, Volume2, Filter } from "lucide-react";
+import { Search, Star, Wifi, Volume2, Filter, Clock } from "lucide-react";
 import { api } from "../../services/api";
 import { Venue } from "../../types/api";
 import { MapView } from "../components/MapView";
 
+const LANDMARKS: Record<string, { lat: number; lon: number }> = {
+  "times square": { lat: 40.7580, lon: -73.9855 },
+  "central park": { lat: 40.7829, lon: -73.9654 },
+  "empire state building": { lat: 40.7484, lon: -73.9857 },
+  "grand canal dock": { lat: 53.3421, lon: -6.2397 },
+  "ranelagh": { lat: 53.3262, lon: -6.2546 },
+  "belfield": { lat: 53.3078, lon: -6.2230 },
+  "dublin": { lat: 53.3498, lon: -6.2603 },
+  "manhattan": { lat: 40.7831, lon: -73.9712 },
+};
+
 export function SearchPage() {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("query") || "");
+  const [searchDate, setSearchDate] = useState(searchParams.get("date") || "");
+  const [startTime, setStartTime] = useState(searchParams.get("start_time") || "");
+  const [endTime, setEndTime] = useState(searchParams.get("end_time") || "");
+  const [seatsRequired, setSeatsRequired] = useState(parseInt(searchParams.get("seats") || "1"));
+
   const [filters, setFilters] = useState({
     freeWifi: false,
     noLoudMusic: false,
@@ -26,38 +43,111 @@ export function SearchPage() {
   const [limit] = useState(10);
   const [hasMore, setHasMore] = useState(false);
 
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+  // Debounce search query to limit geocoding API hits
   useEffect(() => {
-    setLoading(true);
-    api.getVenues({
-      noise_level: filters.noLoudMusic ? "quiet" : undefined,
-      wifi_free: filters.freeWifi ? true : undefined,
-      max_price: priceRange[1],
-      page: currentPage,
-      limit: limit,
-    })
-      .then((data) => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Sync state variables back to URL search params & sessionStorage
+  useEffect(() => {
+    const params: any = {};
+    if (searchQuery) params.query = searchQuery;
+    if (searchDate) params.date = searchDate;
+    if (startTime) params.start_time = startTime;
+    if (endTime) params.end_time = endTime;
+    if (seatsRequired > 1) params.seats = seatsRequired.toString();
+    setSearchParams(params);
+
+    sessionStorage.setItem("searchDate", searchDate);
+    sessionStorage.setItem("startTime", startTime);
+    sessionStorage.setItem("endTime", endTime);
+    sessionStorage.setItem("seatsRequired", seatsRequired.toString());
+  }, [searchQuery, searchDate, startTime, endTime, seatsRequired]);
+
+  useEffect(() => {
+    const fetchVenues = async () => {
+      setLoading(true);
+
+      let lat: number | undefined = undefined;
+      let lon: number | undefined = undefined;
+      let nameFilter: string | undefined = undefined;
+
+      if (debouncedSearchQuery) {
+        const clean = debouncedSearchQuery.trim().toLowerCase();
+        let matched = false;
+
+        // Local lookup for instant matching
+        for (const [key, coords] of Object.entries(LANDMARKS)) {
+          if (clean.includes(key) || key.includes(clean)) {
+            lat = coords.lat;
+            lon = coords.lon;
+            matched = true;
+            break;
+          }
+        }
+
+        // Fallback to OSM Nominatim API if no local match is found
+        if (!matched) {
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(debouncedSearchQuery)}&limit=1`);
+            const data = await res.json();
+            if (data && data.length > 0) {
+              lat = parseFloat(data[0].lat);
+              lon = parseFloat(data[0].lon);
+              matched = true;
+            }
+          } catch (e) {
+            console.warn("OSM Geocoding API failed:", e);
+          }
+        }
+
+        // If it is not a landmark (no coordinates resolved), query standard venues
+        if (!matched) {
+          nameFilter = debouncedSearchQuery;
+        }
+      }
+
+      try {
+        const data = await api.getVenues({
+          noise_level: filters.noLoudMusic ? "quiet" : undefined,
+          wifi_free: filters.freeWifi ? true : undefined,
+          max_price: priceRange[1],
+          page: currentPage,
+          limit: limit,
+          name: nameFilter,
+          lat,
+          lon,
+          radius: (lat !== undefined && lon !== undefined) ? 2.0 : undefined,
+          date: searchDate || undefined,
+          start_time: startTime ? `${startTime}:00` : undefined,
+          end_time: endTime ? `${endTime}:00` : undefined,
+          seats_required: seatsRequired,
+        });
+
         let result = [...data.items];
         setHasMore(data.has_more);
-        
-        // Local filtering
-        if (searchQuery) {
-          result = result.filter(v => v.name.toLowerCase().includes(searchQuery.toLowerCase()));
-        }
+
+        // Local filters for ratings and price range
         if (filters.fourPlusStars) {
           result = result.filter(v => v.rating >= 4.0);
         }
-        
-        // Filter by price range
         result = result.filter(v => v.hourly_price >= priceRange[0] && v.hourly_price <= priceRange[1]);
-        
+
         setVenues(result);
-        setLoading(false);
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error("Failed to fetch venues:", err);
+      } finally {
         setLoading(false);
-      });
-  }, [filters, searchQuery, priceRange, currentPage, limit]);
+      }
+    };
+
+    fetchVenues();
+  }, [filters, debouncedSearchQuery, priceRange, currentPage, limit, searchDate, startTime, endTime, seatsRequired]);
 
   const getVenueImage = (venueId: string) => {
     const images: Record<string, string> = {
@@ -158,6 +248,88 @@ export function SearchPage() {
             </div>
           </div>
 
+          <div className="space-y-4">
+            <h3 className="mb-4 flex items-center gap-2">
+              <Clock className="size-5" />
+              Availability
+            </h3>
+
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="searchDate">Date</Label>
+                <Input
+                  id="searchDate"
+                  type="date"
+                  value={searchDate}
+                  onChange={(e) => {
+                    setSearchDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full bg-background"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="startTime">Start Time</Label>
+                  <select
+                    id="startTime"
+                    value={startTime}
+                    onChange={(e) => {
+                      setStartTime(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">Any</option>
+                    {Array.from({ length: 15 }, (_, i) => {
+                      const hour = i + 8; // 8 AM to 10 PM
+                      const str = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+                      return <option key={str} value={str}>{hour > 12 ? `${hour - 12} PM` : `${hour} AM`}</option>;
+                    })}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="endTime">End Time</Label>
+                  <select
+                    id="endTime"
+                    value={endTime}
+                    onChange={(e) => {
+                      setEndTime(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">Any</option>
+                    {Array.from({ length: 15 }, (_, i) => {
+                      const hour = i + 9; // 9 AM to 11 PM
+                      const str = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+                      return <option key={str} value={str}>{hour > 12 ? `${hour - 12} PM` : `${hour} AM`}</option>;
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="seatsRequired">Seats Required</Label>
+                <select
+                  id="seatsRequired"
+                  value={seatsRequired}
+                  onChange={(e) => {
+                    setSeatsRequired(parseInt(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {[1, 2, 3, 4, 5, 6, 8, 10].map((num) => (
+                    <option key={num} value={num}>{num} {num === 1 ? "seat" : "seats"}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
           <Button
             variant="outline"
             className="w-full"
@@ -165,6 +337,10 @@ export function SearchPage() {
               setFilters({ freeWifi: false, noLoudMusic: false, fourPlusStars: false });
               setPriceRange([1, 10]);
               setSearchQuery("");
+              setSearchDate("");
+              setStartTime("");
+              setEndTime("");
+              setSeatsRequired(1);
               setCurrentPage(1);
             }}
           >
@@ -253,7 +429,15 @@ export function SearchPage() {
                               <p className="text-2xl" style={{ color: '#2f8a64' }}>
                                 ${venue.hourly_price}/hr
                               </p>
-                              <Link to={`/venue/${venue.venue_id}`}>
+                              <Link
+                                to={`/venue/${venue.venue_id}`}
+                                state={{
+                                  searchDate,
+                                  startTime,
+                                  endTime,
+                                  seatsRequired
+                                }}
+                              >
                                 <Button style={{ backgroundColor: '#253c50' }}>
                                   Book a Space
                                 </Button>
