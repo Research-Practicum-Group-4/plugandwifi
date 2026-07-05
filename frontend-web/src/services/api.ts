@@ -467,6 +467,14 @@ export const api = {
     max_price?: number;
     page?: number;
     limit?: number;
+    name?: string;
+    lat?: number;
+    lon?: number;
+    radius?: number;
+    date?: string;
+    start_time?: string;
+    end_time?: string;
+    seats_required?: number;
   }): Promise<VenueListResponse> => {
     if (USE_MOCK) {
       await delay(400);
@@ -493,6 +501,28 @@ export const api = {
         }
         if (filters.max_price !== undefined) {
           filtered = filtered.filter(v => v.hourly_price <= filters.max_price!);
+        }
+        if (filters.name) {
+          filtered = filtered.filter(v => v.name.toLowerCase().includes(filters.name!.toLowerCase()));
+        }
+        if (filters.lat !== undefined && filters.lon !== undefined) {
+          const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+            const R = 6371; // Earth radius in km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = 
+              Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+          };
+          const radius = filters.radius ?? 2.0;
+          filtered = filtered.map(v => ({
+            ...v,
+            distance_km: Math.round(calculateDistance(filters.lat!, filters.lon!, v.lat, v.lon) * 10) / 10
+          })).filter(v => v.distance_km <= radius);
+          filtered.sort((a, b) => a.distance_km - b.distance_km);
         }
       }
 
@@ -536,9 +566,16 @@ export const api = {
         if (filters.max_price !== undefined) params.max_price = filters.max_price;
         if (filters.page !== undefined) params.page = filters.page;
         if (filters.limit !== undefined) params.limit = filters.limit;
+        if (filters.name !== undefined) params.name = filters.name;
+        if (filters.lat !== undefined) params.lat = filters.lat;
+        if (filters.lon !== undefined) params.lon = filters.lon;
+        if (filters.radius !== undefined) params.radius = filters.radius;
+        if (filters.date !== undefined) params.date = filters.date;
+        if (filters.start_time !== undefined) params.start_time = filters.start_time;
+        if (filters.end_time !== undefined) params.end_time = filters.end_time;
+        if (filters.seats_required !== undefined) params.seats_required = filters.seats_required;
       }
       const response = await axiosInstance.get<VenueListResponse>("/venues", { params });
-      console.log(response)
       return response.data;
     }
   },

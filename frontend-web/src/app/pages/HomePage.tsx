@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent } from "../components/ui/card";
@@ -78,11 +78,19 @@ export function HomePage() {
               <Calendar mode="single" selected={date} onSelect={setDate} />
             </PopoverContent>
           </Popover>
-          <Link to="/search">
-            <Button size="lg" className="h-12 px-8" style={{ backgroundColor: '#2f8a64' }}>
-              Search
-            </Button>
-          </Link>
+          <Button
+            size="lg"
+            className="h-12 px-8 cursor-pointer"
+            style={{ backgroundColor: '#2f8a64' }}
+            onClick={() => {
+              const params = new URLSearchParams();
+              if (searchQuery) params.set("query", searchQuery);
+              if (date) params.set("date", format(date, "yyyy-MM-dd"));
+              navigate(`/search?${params.toString()}`);
+            }}
+          >
+            Search
+          </Button>
         </div>
 
         <div className="flex flex-wrap gap-2 justify-center">
