@@ -1226,42 +1226,34 @@ def get_venues(
             key=lambda venue_with_distance: venue_with_distance[1]
         )
 
-        total_items = len(
-            venues_with_distance
-        )
-
-        total_pages = (
-            total_items + limit - 1
-        ) // limit
-
         selected_venues = venues_with_distance[
-            offset: offset + limit
+            offset: offset + limit + 1
         ]
 
-        has_more = page < total_pages
+        has_more = len(
+            selected_venues
+        ) > limit
+
+        selected_venues = selected_venues[:limit]
     else:
-        total_items = query.count()
-
-        total_pages = (
-            total_items + limit - 1
-        ) // limit
-
         venues = query.order_by(
             Venue.venue_id
         ).offset(
             offset
         ).limit(
-            limit
+            limit + 1
         ).all()
 
-        has_more = page < total_pages
+        has_more = len(
+            venues
+        ) > limit
 
         selected_venues = [
             (
                 venue,
                 None
             )
-            for venue in venues
+            for venue in venues[:limit]
         ]
 
     items = [
@@ -1292,8 +1284,6 @@ def get_venues(
         "items": items,
         "page": page,
         "limit": limit,
-        "total_items": total_items,
-        "total_pages": total_pages,
         "has_more": has_more
     }
 

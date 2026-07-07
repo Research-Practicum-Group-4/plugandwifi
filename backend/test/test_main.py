@@ -227,8 +227,6 @@ def test_get_venues_pagination_metadata():
     first_page_data = first_page.json()
     assert first_page_data["page"] == 1
     assert first_page_data["limit"] == 1
-    assert first_page_data["total_items"] == 2
-    assert first_page_data["total_pages"] == 2
     assert first_page_data["has_more"] is True
     assert len(first_page_data["items"]) == 1
 
@@ -237,8 +235,6 @@ def test_get_venues_pagination_metadata():
     second_page_data = second_page.json()
     assert second_page_data["page"] == 2
     assert second_page_data["limit"] == 1
-    assert second_page_data["total_items"] == 2
-    assert second_page_data["total_pages"] == 2
     assert second_page_data["has_more"] is False
     assert len(second_page_data["items"]) == 1
 
@@ -248,8 +244,6 @@ def test_get_venues_geospatial_sorting_and_radius():
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["total_items"] == 2
-    assert data["total_pages"] == 1
     assert len(data["items"]) == 2
     assert data["items"][0]["name"] == "UCD Library Shared Space"
     assert data["items"][0]["distance_km"] == 0
@@ -260,8 +254,6 @@ def test_get_venues_geospatial_sorting_and_radius():
     )
     assert narrow_response.status_code == 200
     narrow_data = narrow_response.json()
-    assert narrow_data["total_items"] == 1
-    assert narrow_data["total_pages"] == 1
     assert len(narrow_data["items"]) == 1
     assert narrow_data["items"][0]["name"] == "UCD Library Shared Space"
 
