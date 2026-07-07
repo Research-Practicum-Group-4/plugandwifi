@@ -139,6 +139,8 @@ export interface VenueListResponse {
   items: Venue[];
   page: number;
   limit: number;
+  total_items: number;
+  total_pages: number;
   has_more: boolean;
 }
 

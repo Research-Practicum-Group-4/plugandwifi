@@ -530,6 +530,8 @@ export const api = {
       const page = filters?.page ?? 1;
       const offset = (page - 1) * limit;
       const paginatedItems = filtered.slice(offset, offset + limit);
+      const total_items = filtered.length;
+      const total_pages = Math.ceil(total_items / limit);
       const has_more = filtered.length > offset + limit;
 
       // Return a list of basic Venue items
@@ -553,6 +555,8 @@ export const api = {
         })),
         page,
         limit,
+        total_items,
+        total_pages,
         has_more
       };
     } else {
