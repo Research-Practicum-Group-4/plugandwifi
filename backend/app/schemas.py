@@ -95,6 +95,10 @@ class VenueListResponse(BaseModel):
 
     limit: int
 
+    total_items: int
+
+    total_pages: int
+
     has_more: bool
 
 
