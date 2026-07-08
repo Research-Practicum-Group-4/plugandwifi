@@ -12,7 +12,7 @@ import type { RootStackScreenProps } from '../../types/navigation';
 
 export function SettingsScreen({ navigation }: RootStackScreenProps<'Settings'>) {
   const { t, lang, setLang } = useT();
-  const { isDark, toggleDark, colors } = useTheme();
+  const { isDark, mode, setMode, colors } = useTheme();
   const { user } = useAuth();
   const [langModal, setLangModal] = useState(false);
   const [notifications, setNotifications] = useState(true);
@@ -42,14 +42,18 @@ export function SettingsScreen({ navigation }: RootStackScreenProps<'Settings'>)
 
         <View style={[styles.section, { backgroundColor: colors.white, borderColor: colors.border }]}>
           <Text style={styles.sectionLabel}>{t('settings.appearance')}</Text>
-          <View style={styles.row}>
-            <Text style={[styles.rowLabel, { color: colors.text }]}>{isDark ? t('settings.dark') : t('settings.light')}</Text>
-            <Switch
-              value={isDark}
-              onValueChange={toggleDark}
-              trackColor={{ false: staticColors.border, true: staticColors.primary }}
-              thumbColor={staticColors.white}
-            />
+          <View style={styles.segmentRow}>
+            {(['light', 'system', 'dark'] as Array<'light' | 'system' | 'dark'>).map(m => (
+              <Pressable
+                key={m}
+                style={[styles.segment, mode === m && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                onPress={() => setMode(m)}
+              >
+                <Text style={[styles.segmentText, mode === m && { color: colors.white }]}>
+                  {m === 'light' ? t('settings.light') : m === 'dark' ? t('settings.dark') : 'System'}
+                </Text>
+              </Pressable>
+            ))}
           </View>
         </View>
 
@@ -130,6 +134,9 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 13, color: staticColors.textMuted, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 1 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   rowLabel: { fontSize: 15 },
+  segmentRow: { flexDirection: 'row', gap: spacing.xs },
+  segment: { flex: 1, borderWidth: 1, borderColor: staticColors.border, borderRadius: 8, paddingVertical: spacing.sm, alignItems: 'center' },
+  segmentText: { fontSize: 13, fontWeight: '600', color: staticColors.text },
   pickerBtn: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: spacing.sm,

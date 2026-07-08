@@ -23,3 +23,7 @@ export async function loginUser(payload: LoginPayload): Promise<LoginResponse> {
 export async function logoutUser(token?: string): Promise<{ message: string }> {
   return apiPost<{ message: string }>('/api/auth/logout', {}, token);
 }
+
+export async function refreshToken(refreshToken: string): Promise<{ access_token: string }> {
+  return apiPost<{ access_token: string }>('/api/auth/refresh', { refresh_token: refreshToken });
+}

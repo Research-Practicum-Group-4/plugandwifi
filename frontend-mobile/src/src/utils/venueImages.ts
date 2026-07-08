@@ -13,15 +13,22 @@ const IMG_POOL = [
   'https://images.unsplash.com/photo-1559339352-11d035aa65de?w=600',
   'https://images.unsplash.com/photo-1507133750040-4a8f57021571?w=600',
   'https://images.unsplash.com/photo-1511920170033-f8396924c348?w=600',
+  'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=600',
+  'https://images.unsplash.com/photo-1544148103-0773bf10d330?w=600',
+  'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=600',
+  'https://images.unsplash.com/photo-1466978913421-dad2ebd01d17?w=600',
+  'https://images.unsplash.com/photo-1504718855392-0b0b1b8a3a1b?w=600',
+  'https://images.unsplash.com/photo-1537047902294-62a40c13b2e6?w=600',
 ];
 
 export function getVenueImage(venue: Venue): string {
   const image = (venue as any).image as string | undefined;
   if (image) return image;
 
-  let hash = 0;
+  // Better hash: use DJB2-like algorithm
+  let hash = 5381;
   for (let i = 0; i < venue.id.length; i++) {
-    hash = ((hash << 5) - hash + venue.id.charCodeAt(i)) | 0;
+    hash = ((hash << 5) + hash + venue.id.charCodeAt(i)) | 0;
   }
   const idx = Math.abs(hash) % IMG_POOL.length;
   return IMG_POOL[idx];

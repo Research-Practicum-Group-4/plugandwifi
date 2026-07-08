@@ -43,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await loginUser(payload);
     await Promise.all([
       authStorage.setToken(response.access_token),
+      authStorage.setRefreshToken(response.refresh_token),
       authStorage.setUser(JSON.stringify(response.user)),
     ]);
     setToken(response.access_token);

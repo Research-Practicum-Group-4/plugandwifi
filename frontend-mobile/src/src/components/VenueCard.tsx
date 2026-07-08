@@ -80,9 +80,13 @@ export function VenueCard({ venue, compact = false, saved = false, alertOn = fal
           <Text style={styles.name} numberOfLines={1}>{venue.name}</Text>
           <Text style={styles.rating}>★ {venue.rating}</Text>
         </View>
-        <Text style={styles.meta}>
-          {venue.distance}{venue.distance && venue.availability ? ' • ' : ''}{venue.availability}
-        </Text>
+        {venue.distance !== '—' || venue.availability !== 'Varies' ? (
+          <Text style={styles.meta}>
+            {venue.distance !== '—' ? venue.distance : ''}
+            {venue.distance !== '—' && venue.availability !== 'Varies' ? ' • ' : ''}
+            {venue.availability !== 'Varies' ? venue.availability : ''}
+          </Text>
+        ) : null}
         <View style={styles.tagsRow}>
           {hasWifi ? <View style={styles.tag}><Text style={styles.tagText}>{t('common.wifi')}</Text></View> : null}
           {hasPlugs ? <View style={styles.tag}><Text style={styles.tagText}>{t('common.plugs')}</Text></View> : null}
