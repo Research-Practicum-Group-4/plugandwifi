@@ -1424,6 +1424,79 @@ def test_get_venue_by_id():
     assert res_404.status_code == 404
 
 
+def test_get_venue_availability_returns_real_slots():
+    response = client.get("/api/venues/osm_296568074/availability")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["venue_id"] == "osm_296568074"
+    assert data["available_slots"] == [
+        {
+            "slot_id": 1,
+            "date": "2026-06-15",
+            "start_time": "2026-06-15T09:00:00",
+            "end_time": "2026-06-15T12:00:00",
+            "available": True,
+            "available_seats": 5
+        }
+    ]
+
+
+def test_get_venue_availability_marks_unavailable_and_full_slots():
+    db = TestingSessionLocal()
+    try:
+        unavailable_slot = AvailabilitySlot(
+            id=20,
+            venue_id="osm_296568074",
+            date=date(2026, 6, 16),
+            start_time=time(9, 0, 0),
+            end_time=time(10, 0, 0),
+            available=False,
+            available_seats=3
+        )
+        full_slot = AvailabilitySlot(
+            id=21,
+            venue_id="osm_296568074",
+            date=date(2026, 6, 16),
+            start_time=time(10, 0, 0),
+            end_time=time(11, 0, 0),
+            available=True,
+            available_seats=0
+        )
+        db.add_all([unavailable_slot, full_slot])
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/venues/osm_296568074/availability")
+
+    assert response.status_code == 200
+    slots = response.json()["available_slots"]
+    assert slots[1] == {
+        "slot_id": 20,
+        "date": "2026-06-16",
+        "start_time": "2026-06-16T09:00:00",
+        "end_time": "2026-06-16T10:00:00",
+        "available": False,
+        "available_seats": 3
+    }
+    assert slots[2] == {
+        "slot_id": 21,
+        "date": "2026-06-16",
+        "start_time": "2026-06-16T10:00:00",
+        "end_time": "2026-06-16T11:00:00",
+        "available": False,
+        "available_seats": 0
+    }
+
+
+def test_get_venue_availability_returns_404_for_missing_venue():
+    response = client.get("/api/venues/missing-venue/availability")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Venue not found"
+
+
 def test_venue_survey_metrics_aggregate_verified_completed_reviews():
     db = TestingSessionLocal()
     try:

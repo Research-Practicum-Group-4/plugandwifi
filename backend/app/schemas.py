@@ -239,6 +239,28 @@ class VenueDetailResponse(BaseModel):
         from_attributes = True
 
 
+class AvailabilitySlotResponse(BaseModel):
+
+    slot_id: int
+
+    date: date
+
+    start_time: str
+
+    end_time: str
+
+    available: bool
+
+    available_seats: int
+
+
+class VenueAvailabilityResponse(BaseModel):
+
+    venue_id: str
+
+    available_slots: list[AvailabilitySlotResponse]
+
+
 class BookingCreate(BaseModel):
 
     user_id: int

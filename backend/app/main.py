@@ -27,6 +27,7 @@ from .schemas import (
     VenueCreate,
     VenueCreateResponse,
     VenueDetailResponse,
+    VenueAvailabilityResponse,
     BookingCreate,
     BookingResponse,
     ReviewCreate,
@@ -1322,6 +1323,58 @@ def get_venue_by_id(
         )
     
     return venue
+
+
+@app.get(
+    "/api/venues/{venue_id}/availability",
+    response_model=VenueAvailabilityResponse
+)
+def get_venue_availability(
+    venue_id: str,
+    db: Session = Depends(get_db)
+):
+    venue = (
+        db.query(Venue)
+        .filter(Venue.venue_id == venue_id)
+        .first()
+    )
+
+    if venue is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Venue not found"
+        )
+
+    slots = (
+        db.query(AvailabilitySlot)
+        .filter(AvailabilitySlot.venue_id == venue_id)
+        .order_by(
+            AvailabilitySlot.date,
+            AvailabilitySlot.start_time
+        )
+        .all()
+    )
+
+    return {
+        "venue_id": venue_id,
+        "available_slots": [
+            {
+                "slot_id": slot.id,
+                "date": slot.date,
+                "start_time": (
+                    f"{slot.date.isoformat()}T{slot.start_time.isoformat()}"
+                ),
+                "end_time": (
+                    f"{slot.date.isoformat()}T{slot.end_time.isoformat()}"
+                ),
+                "available": (
+                    slot.available and slot.available_seats > 0
+                ),
+                "available_seats": slot.available_seats
+            }
+            for slot in slots
+        ]
+    }
 
 
 @app.get(
