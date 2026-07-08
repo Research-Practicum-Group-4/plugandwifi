@@ -1,9 +1,9 @@
 import pandas as pd
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import math
-
+import re
 
 df = pd.read_csv("data/processed/mta_ridership.csv")
 
@@ -55,10 +55,16 @@ test_df["pred_baseline"] = test_df.apply(
 
 def mae(pred, actual):
     m = pred.notna() & actual.notna()
-    return (pred[m] - actual[m]).abs().mean()
+    return mean_absolute_error(actual[m], pred[m])
 
 
 print(round(mae(test_df["pred_baseline"], test_df["avg_ridership"]), 1))
 print(round(mae(test_df["pred_knn"], test_df["avg_ridership"]), 1))
 
-print(round(math.sqrt(mean_squared_error(test_df["avg_ridership"], test_df["pred_knn"])), 1))
+valid = test_df["pred_knn"].notna() & test_df["avg_ridership"].notna()
+y_true = test_df.loc[valid, "avg_ridership"]
+y_pred = test_df.loc[valid, "pred_knn"]
+
+print(round(math.sqrt(mean_squared_error(y_true, y_pred)), 1))
+print(round(r2_score(y_true, y_pred), 3))
+

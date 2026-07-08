@@ -1,3 +1,4 @@
 pandas
 requests
 scipy
+xgboost

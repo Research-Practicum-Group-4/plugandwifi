@@ -316,5 +316,24 @@ rows = [
 ]
 make_table(["Action","Priority","Dataset","Detail"], rows, widths=[2.2, 0.8, 0.9, 6.6], alt=True)
 
+# ============================ 11. MODEL PERFORMANCE ============================
+H1("11 · Model performance — busyness KNN")
+body("The busyness model predicts subway ridership from location and time, then reads it out at venue "
+     "coordinates. Errors are measured on the honest split (20% of stations held out in full) and reported "
+     "in riders per day — predictions are exponentiated back from log space before scoring. Chosen model: "
+     "distance-weighted KNN, k = 10.")
+rows = [
+    ["MAE — mean absolute error","217.8","Average size of a prediction miss, in riders/day. The headline, most interpretable figure."],
+    ["RMSE — root mean squared error","682.0","Squares errors before averaging, so large misses dominate. Here RMSE is ~3× MAE, signalling a heavy-tailed error distribution."],
+]
+make_table(["Metric","Value (riders/day)","What it measures"], rows, widths=[2.7, 1.7, 6.1], alt=True)
+caption("The wide RMSE-to-MAE gap is the Part B skew resurfacing: absolute error grows with ridership, so a few very busy hub stations are hard to hit in raw counts even when the log-scale fit is sound.")
+
+body("Two metrics don't fully characterise a skewed target. Worth adding before this is presented as final:")
+bullet("Median absolute error (MedAE) — the typical miss for an ordinary station, unmoved by the handful of giants. It will sit well below the 217.8 mean and better reflects the experience at most venues.")
+bullet("R² on the grouped split — variance explained versus simply predicting the mean. It puts the raw error in context and lets KNN and the Random Forest be compared on one number (this is the honest replacement for the old, leaky OOB R² of 0.93).")
+bullet("Baseline-relative MAE — quote the error against the k = 1 'nearest single station' baseline, so the gain from averaging over neighbours is explicit rather than assumed.")
+bullet("Log-scale error (e.g. RMSLE) — the model is fitted on log ridership, so a log-scale error counts a 2× miss equally at a small station and a hub, matching how the model actually treats the problem.")
+
 doc.save("/Users/adamt/Documents/workshare/data_quality_report.docx")
 print("saved docx with", len(doc.tables), "tables")
