@@ -33,7 +33,6 @@ from .schemas import (
     ReviewResponse,
     UserBookingsResponse,
     BookingCancellationResponse,
-    FavoriteResponse,
     SlotDeactivationResponse,
     RefreshTokenRequest,
     LogoutRequest,
@@ -1647,55 +1646,6 @@ def get_me(
         "email": current_user.email,
 
         "role": current_user.role
-    }
-
-
-@app.post(
-    "/api/favorites/{venue_id}",
-    response_model=FavoriteResponse,
-    status_code=201
-)
-def create_favorite(
-    venue_id: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    venue = (
-        db.query(Venue)
-        .filter(Venue.venue_id == venue_id)
-        .first()
-    )
-
-    if venue is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Venue not found"
-        )
-
-    existing_favorite = (
-        db.query(Favorite)
-        .filter(Favorite.user_id == current_user.id)
-        .filter(Favorite.venue_id == venue_id)
-        .first()
-    )
-
-    if existing_favorite is not None:
-        raise HTTPException(
-            status_code=409,
-            detail="Favorite already exists"
-        )
-
-    favorite = Favorite(
-        user_id=current_user.id,
-        venue_id=venue_id
-    )
-    db.add(favorite)
-    db.commit()
-
-    return {
-        "user_id": current_user.id,
-        "venue_id": venue_id,
-        "message": "Favorite created successfully"
     }
 
 
