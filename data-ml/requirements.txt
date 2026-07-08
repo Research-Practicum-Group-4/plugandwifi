@@ -1,3 +1,7 @@
 pandas
 requests
+numpy
 scipy
+sodapy
+xgboost
+matplotlib
