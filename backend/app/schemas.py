@@ -371,6 +371,15 @@ class BookingCancellationResponse(BaseModel):
     message: str
 
 
+class FavoriteResponse(BaseModel):
+
+    user_id: int
+
+    venue_id: str
+
+    message: str
+
+
 class SlotDeactivationResponse(BaseModel):
 
     slot_id: int
