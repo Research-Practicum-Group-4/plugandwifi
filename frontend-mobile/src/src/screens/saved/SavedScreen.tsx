@@ -4,7 +4,7 @@ import { Heart, X } from 'lucide-react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { VenueCard } from '../../components/VenueCard';
-import { fetchVenueById } from '../../services/venues';
+import { fetchVenues } from '../../services/venues';
 import { mapVenue } from '../../utils/mapVenue';
 import { useFavorites } from '../../context/FavoriteContext';
 import { useAlerts } from '../../context/AlertContext';
@@ -28,10 +28,11 @@ export function SavedScreen({ navigation }: MainTabScreenProps<'Saved'>) {
         setLoading(true);
         const idList = Array.from(ids);
         if (idList.length === 0) { setVenues([]); setLoading(false); return; }
-        const results = await Promise.allSettled(idList.map(fetchVenueById));
-        const loaded: Venue[] = [];
-        results.forEach(r => { if (r.status === 'fulfilled' && r.value) loaded.push(mapVenue(r.value)); });
-        setVenues(loaded);
+        try {
+          const r = await fetchVenues({ lat: 40.7831, lon: -73.9712, limit: 200 });
+          const loaded = r.items.map(mapVenue).filter(v => ids.has(v.id));
+          setVenues(loaded);
+        } catch {}
         setLoading(false);
       })();
     }, [ids]),
@@ -62,7 +63,6 @@ export function SavedScreen({ navigation }: MainTabScreenProps<'Saved'>) {
             <VenueCard
               key={venue.id}
               venue={venue}
-              saved
               alertOn={isAlertOn(venue.id)}
               onPress={() => navigation.navigate('VenueDetail', { venueId: venue.id })}
               onBell={() => openAlertDrawer(venue)}

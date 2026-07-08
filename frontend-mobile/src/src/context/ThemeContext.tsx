@@ -19,36 +19,37 @@ export const darkColors = {
   white: '#1e293b', danger: '#ef4444',
 };
 
+export type ThemeMode = 'system' | 'light' | 'dark';
+
 type ThemeCtx = {
   isDark: boolean;
-  toggleDark: () => void;
+  mode: ThemeMode;
+  setMode: (m: ThemeMode) => void;
   colors: typeof lightColors;
 };
 
-const C = createContext<ThemeCtx>({ isDark: false, toggleDark: () => {}, colors: lightColors });
+const C = createContext<ThemeCtx>({ isDark: false, mode: 'system', setMode: () => {}, colors: lightColors });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemDark = useColorScheme() === 'dark';
-  const [isDark, setIsDark] = useState(false);
+  const [mode, setModeState] = useState<ThemeMode>('system');
 
   useEffect(() => {
     AsyncStorage.getItem(THEME_KEY).then(v => {
-      if (v === 'dark') setIsDark(true);
-      else if (v === 'light') setIsDark(false);
-      else setIsDark(systemDark);
+      if (v === 'dark' || v === 'light' || v === 'system') setModeState(v);
+      else setModeState('system');
     });
   }, []);
 
-  const toggleDark = useCallback(() => {
-    setIsDark(prev => {
-      const next = !prev;
-      AsyncStorage.setItem(THEME_KEY, next ? 'dark' : 'light');
-      return next;
-    });
+  const setMode = useCallback((m: ThemeMode) => {
+    setModeState(m);
+    AsyncStorage.setItem(THEME_KEY, m);
   }, []);
+
+  const isDark = mode === 'dark' || (mode === 'system' && systemDark);
 
   return (
-    <C.Provider value={{ isDark, toggleDark, colors: isDark ? darkColors : lightColors }}>
+    <C.Provider value={{ isDark, mode, setMode, colors: isDark ? darkColors : lightColors }}>
       {children}
     </C.Provider>
   );

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-import { Heart, Bell, MapPin, ChevronLeft, Wifi, Plug, Clock, Navigation, Star } from 'lucide-react-native';
+import { Heart, Bell, MapPin, ChevronLeft, Wifi, Plug, Clock, Navigation, Star, Phone, Globe, Train, Bus } from 'lucide-react-native';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { fetchVenueById, type VenueDetail } from '../../services/venues';
 import { getVenueById } from '../../data/mockVenues';
@@ -23,6 +23,43 @@ function buildAddress(d: VenueDetail | null, fallback: string): string {
   if (d.borough) parts.push(d.borough);
   if (d.zipcode) parts.push(d.zipcode);
   return parts.length > 0 ? parts.join(', ') : fallback;
+}
+
+function formatHourArray(hours: number[]): string {
+  if (!hours.length) return '';
+  const sorted = [...hours].sort((a, b) => a - b);
+  const ranges: string[] = [];
+  let start = sorted[0], end = sorted[0];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === end + 1) { end = sorted[i]; }
+    else { ranges.push(formatRange(start, end)); start = sorted[i]; end = sorted[i]; }
+  }
+  ranges.push(formatRange(start, end));
+  return ranges.join(', ');
+}
+
+function formatRange(s: number, e: number): string {
+  const fmt = (h: number) => { const suffix = h >= 12 ? 'PM' : 'AM'; const h12 = h > 12 ? h - 12 : (h === 0 ? 12 : h); return `${h12}${suffix}`; };
+  return s === e ? fmt(s) : `${fmt(s)}-${fmt(e)}`;
+}
+
+function parseBestHours(raw: string | number[]): string {
+  let hours: number[];
+  if (Array.isArray(raw)) { hours = raw; }
+  else {
+    try { hours = JSON.parse(raw as string); } catch { return raw as string; }
+    if (!Array.isArray(hours)) return raw as string;
+  }
+  if (!hours.length) return '';
+  const sorted = [...hours].sort((a, b) => a - b);
+  const ranges: string[] = [];
+  let start = sorted[0], end = sorted[0];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === end + 1) { end = sorted[i]; }
+    else { ranges.push(formatRange(start, end)); start = sorted[i]; end = sorted[i]; }
+  }
+  ranges.push(formatRange(start, end));
+  return ranges.join(', ');
 }
 
 export function VenueDetailScreen({ navigation, route }: RootStackScreenProps<'VenueDetail'>) {
@@ -121,10 +158,12 @@ export function VenueDetailScreen({ navigation, route }: RootStackScreenProps<'V
               </Pressable>
             </View>
           </View>
-          <View style={styles.distanceBadge}>
-            <MapPin size={12} color={colors.primary} />
-            <Text style={styles.distanceBadgeText}>{venue.distance}</Text>
-          </View>
+          {venue.distance !== '—' ? (
+            <View style={styles.distanceBadge}>
+              <MapPin size={12} color={colors.primary} />
+              <Text style={styles.distanceBadgeText}>{venue.distance}</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.body}>
@@ -134,7 +173,21 @@ export function VenueDetailScreen({ navigation, route }: RootStackScreenProps<'V
             <View style={styles.ratingPill}>
               <Text style={styles.ratingPillText}>★ {venue.rating}</Text>
             </View>
+            {rawData?.rating_user_reported != null ? (
+              <View style={[styles.ratingPill, { backgroundColor: colors.primaryDark }]}>
+                <Text style={styles.ratingPillText}>👤 ★ {rawData.rating_user_reported}</Text>
+              </View>
+            ) : null}
           </View>
+          {rawData?.best_hours_for_work ? (
+            <View style={styles.highlightCard}>
+              <Star size={16} color="#f59e0b" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.highlightTitle}>Best hours for work</Text>
+                <Text style={styles.highlightText}>{parseBestHours(rawData.best_hours_for_work)}</Text>
+              </View>
+            </View>
+          ) : null}
 
           <View style={styles.infoRow}>
             <Clock size={15} color={colors.textMuted} />
@@ -143,10 +196,46 @@ export function VenueDetailScreen({ navigation, route }: RootStackScreenProps<'V
             </Text>
           </View>
 
-          <View style={styles.infoRow}>
+           <View style={styles.infoRow}>
             <MapPin size={15} color={colors.textMuted} />
             <Text style={styles.infoText}>{address}</Text>
           </View>
+
+          {(rawData?.phone || rawData?.website) ? (
+            <View style={styles.contactRow}>
+              {rawData?.phone ? (
+                <Pressable style={styles.contactBtn} onPress={() => Linking.openURL(`tel:${rawData.phone}`)}>
+                  <Phone size={15} color={colors.primary} />
+                  <Text style={styles.contactText}>Call</Text>
+                </Pressable>
+              ) : null}
+              {rawData?.website ? (
+                <Pressable style={styles.contactBtn} onPress={() => Linking.openURL(rawData.website!)}>
+                  <Globe size={15} color={colors.primary} />
+                  <Text style={styles.contactText}>Website</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
+
+          {(rawData?.nearest_subway || rawData?.nearest_bus) ? (
+            <View style={styles.transportCard}>
+              {rawData?.nearest_subway ? (
+                <View style={styles.transportRow}>
+                  <Train size={14} color={colors.textMuted} />
+                  <Text style={styles.transportText}>{rawData.nearest_subway}</Text>
+                  {rawData.nearest_subway_m != null ? <Text style={styles.transportDist}>{rawData.nearest_subway_m}m</Text> : null}
+                </View>
+              ) : null}
+              {rawData?.nearest_bus ? (
+                <View style={styles.transportRow}>
+                  <Bus size={14} color={colors.textMuted} />
+                  <Text style={styles.transportText}>{rawData.nearest_bus}</Text>
+                  {rawData.nearest_bus_m != null ? <Text style={styles.transportDist}>{rawData.nearest_bus_m}m</Text> : null}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
 
           {fav ? (
             <View style={styles.notifyRow}>
@@ -181,13 +270,24 @@ export function VenueDetailScreen({ navigation, route }: RootStackScreenProps<'V
 
           <Text style={styles.sectionTitle}>About this space</Text>
           <Text style={styles.aboutText}>
-            {venue.type === 'restaurant' ? 'A restaurant space' : venue.type === 'cafe' ? 'A cafe space' : `A ${venue.type.toLowerCase()} venue`} in {rawData?.borough || 'Manhattan'}
-            {rawData?.nearest_subway ? `, near ${rawData.nearest_subway} station` : ''}.
-            {hasWifi && hasQuiet ? ' Features reliable WiFi in a quiet atmosphere, ideal for focused work sessions.' :
-             hasWifi ? ' Offers WiFi connectivity for your work needs.' :
-             hasQuiet ? ' Provides a quiet environment suitable for concentration.' :
-             ' Comfortable setting for a productive work session.'}
+            {rawData?.cuisine_detail 
+              ? `${rawData.cuisine_detail.charAt(0).toUpperCase()}${rawData.cuisine_detail.slice(1)}` 
+              : `A ${venue.type.toLowerCase()} venue`}{' '}
+            in {rawData?.borough || 'Manhattan'}.
+            {hasWifi && hasQuiet ? ' Features reliable WiFi in a quiet setting.' :
+             hasWifi ? ' WiFi available for your work needs.' :
+             hasQuiet ? ' Quiet environment suitable for concentration.' : ''}
           </Text>
+
+          {rawData?.opening_hours ? (
+            <View style={styles.hoursCard}>
+              <Clock size={16} color={colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.highlightTitle}>Opening hours</Text>
+                <Text style={styles.highlightText}>{rawData.opening_hours}</Text>
+              </View>
+            </View>
+          ) : null}
 
           <View style={styles.divider} />
 
@@ -276,9 +376,23 @@ const styles = StyleSheet.create({
   ratingPillText: { color: colors.white, fontSize: 12, fontWeight: '700' },
   infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: spacing.sm },
   infoText: { fontSize: 14, color: colors.textMuted, flex: 1, lineHeight: 20 },
+  infoHighlight: { fontSize: 14, color: '#b45309', fontWeight: '500', flex: 1 },
+  highlightCard: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, backgroundColor: '#fffbeb', borderRadius: 10, borderWidth: 1, borderColor: '#fde68a', marginTop: spacing.sm },
+  highlightTitle: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 2 },
+  highlightText: { fontSize: 13, color: colors.textMuted, lineHeight: 20 },
+  hoursCard: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, backgroundColor: '#f0faf5', borderRadius: 10, borderWidth: 1, borderColor: '#b7e4cf', marginTop: spacing.sm },
+  contactRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  contactBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  contactText: { fontSize: 13, color: colors.primary, fontWeight: '600' },
+  transportCard: { marginTop: spacing.sm, padding: spacing.md, backgroundColor: colors.surface, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: spacing.xs },
+  transportRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  transportText: { fontSize: 13, color: colors.textMuted, flex: 1 },
+  transportDist: { fontSize: 12, color: colors.primary, fontWeight: '600' },
+  hoursText: { fontSize: 13, color: colors.textMuted, lineHeight: 20 },
   notifyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md, paddingVertical: spacing.xs, paddingHorizontal: spacing.md, backgroundColor: colors.surface, borderRadius: 10 },
   notifyLabel: { flex: 1, fontSize: 14, color: colors.text },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.lg },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.md },
   sectionTitle: { fontSize: 17, fontWeight: '600', color: colors.text, marginBottom: spacing.md },
   aboutText: { fontSize: 14, color: colors.textMuted, lineHeight: 22 },
   amenityGrid: { flexDirection: 'row', gap: spacing.sm },

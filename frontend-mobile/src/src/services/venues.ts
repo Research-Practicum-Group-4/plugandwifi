@@ -30,7 +30,7 @@ export interface VenueDetail extends VenueItem {
   street?: string | null;
   zipcode?: string | null;
   opening_hours?: string | null;
-  best_hours_for_work?: string | null;
+  best_hours_for_work?: string | number[] | null;
   hourly_profile?: string | null;
   partner?: number | null;
   inferred_wifi?: boolean | null;
