@@ -72,7 +72,6 @@ export function CheckoutPage() {
 
     try {
       const response = await api.createBooking({
-        user_id: user.user_id || user.id || 1,
         venue_id: bookingData.venueId,
         booking_date: bookingData.bookingDate || "2026-06-15",
         start_time: bookingData.startTime || "09:00:00",

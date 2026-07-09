@@ -1503,19 +1503,9 @@ def create_review(
 )
 def create_booking(
     payload: BookingCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    
-    user = db.query(User).filter(
-        User.id == payload.user_id
-    ).first()
-
-    if not user:
-        raise HTTPException(
-            status_code = 404,
-            detail = "User not found"
-        )
-    
     venue = db.query(Venue).filter(
         Venue.venue_id == payload.venue_id
     ).first()
@@ -1583,7 +1573,7 @@ def create_booking(
         order_id=f"ORD-{uuid.uuid4().hex[:8]}",
         payment_status="paid",
 
-        user_id=payload.user_id,
+        user_id=current_user.id,
         venue_id=payload.venue_id,
         booking_date=payload.booking_date,
         start_time=payload.start_time,

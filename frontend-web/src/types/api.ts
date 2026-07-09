@@ -68,7 +68,6 @@ export interface VenueAvailability {
 }
 
 export interface BookingRequest {
-  user_id: number;
   venue_id: string;
   booking_date: string;
   start_time: string;
