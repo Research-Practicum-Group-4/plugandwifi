@@ -77,7 +77,7 @@ function fmtTime(h: number): string {
 
 export function CheckoutScreen({ navigation, route }: RootStackScreenProps<'Checkout'>) {
   const { venueId, venueName, duration: initDur, price: rawPrice } = route.params;
-  const { user, token } = useAuth();
+  const { token } = useAuth();
   const safePrice = Number.isFinite(rawPrice) && rawPrice > 0 ? rawPrice : 10;
   const safeDur = parseInt(initDur || '2') || 2;
   const [duration, setDuration] = useState(safeDur);
@@ -137,7 +137,6 @@ export function CheckoutScreen({ navigation, route }: RootStackScreenProps<'Chec
     setProcessing(true);
     try {
       const res = await createBooking({
-        user_id: user?.user_id ?? user?.id ?? 1,
         venue_id: venueId, booking_date: fmtDate(selectedDate),
         start_time: `${String(startHour).padStart(2,'0')}:00:00`,
         end_time: `${String(endHour).padStart(2,'0')}:00:00`,

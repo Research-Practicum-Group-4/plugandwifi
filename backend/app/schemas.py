@@ -263,8 +263,6 @@ class VenueAvailabilityResponse(BaseModel):
 
 class BookingCreate(BaseModel):
 
-    user_id: int
-
     venue_id: str
 
     booking_date: date

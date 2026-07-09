@@ -1,7 +1,6 @@
 import { apiPost, apiGet } from './api';
 
 export interface BookingPayload {
-  user_id: number;
   venue_id: string;
   booking_date: string;
   start_time: string;

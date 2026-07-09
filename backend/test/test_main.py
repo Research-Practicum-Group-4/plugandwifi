@@ -56,6 +56,16 @@ def provider_only_route(
 client = TestClient(app)
 
 
+def get_test_user_headers():
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "test2@example.com", "password": "00000000"}
+    )
+    return {
+        "Authorization": f"Bearer {login_response.json()['access_token']}"
+    }
+
+
 def test_sqlite_engine_options_exclude_postgresql_settings():
     options = build_engine_options("sqlite:///:memory:")
 
@@ -299,18 +309,67 @@ def test_get_venues_duration_hours_requires_date_and_start_time():
     )
     assert missing_start_time.status_code == 400
 
+def test_create_booking_requires_authentication():
+    booking_payload = {
+        "venue_id": "osm_296568074",
+        "booking_date": "2026-06-15",
+        "start_time": "09:00:00",
+        "end_time": "10:00:00",
+        "seats_reserved": 2
+    }
+    response = client.post("/api/bookings", json=booking_payload)
+    assert response.status_code == 401
+
+
 def test_create_booking_success():
     booking_payload = {
-        "user_id": 1,
         "venue_id": "osm_296568074",
         "booking_date": "2026-06-15", 
         "start_time": "09:00:00",
         "end_time": "10:00:00",
         "seats_reserved": 2
     }
-    response = client.post("/api/bookings", json=booking_payload)
+    response = client.post(
+        "/api/bookings",
+        json=booking_payload,
+        headers=get_test_user_headers()
+    )
     assert response.status_code == 200
-    
+    assert response.json()["user_id"] == 1
+
+
+def test_create_booking_ignores_client_user_id():
+    db = TestingSessionLocal()
+    try:
+        other_user = User(
+            id=2,
+            full_name="Other Booking User",
+            email="other-booking@example.com",
+            password_hash=hash_password("00000000")
+        )
+        db.add(other_user)
+        db.commit()
+    finally:
+        db.close()
+
+    booking_payload = {
+        "user_id": 2,
+        "venue_id": "osm_296568074",
+        "booking_date": "2026-06-15",
+        "start_time": "09:00:00",
+        "end_time": "10:00:00",
+        "seats_reserved": 1
+    }
+    response = client.post(
+        "/api/bookings",
+        json=booking_payload,
+        headers=get_test_user_headers()
+    )
+
+    assert response.status_code == 200
+    assert response.json()["user_id"] == 1
+
+
 def test_register_flow():
     payload = {"full_name": "New Student", "email": "new@ucd.ie", "password": "password123"}
     # First registration attempt should succeed
@@ -1891,31 +1950,43 @@ def test_create_review_rejects_incomplete_and_duplicate_reviews():
 def test_booking_edge_cases():
     # Attempting to book 10 seats when the capacity limit is 5
     bad_payload = {
-        "user_id": 1, "venue_id": "osm_296568074", "booking_date": "2026-06-15",
+        "venue_id": "osm_296568074", "booking_date": "2026-06-15",
         "start_time": "09:00:00", "end_time": "10:00:00", "seats_reserved": 10
     }
-    res_bad = client.post("/api/bookings", json=bad_payload)
+    res_bad = client.post(
+        "/api/bookings",
+        json=bad_payload,
+        headers=get_test_user_headers()
+    )
     assert res_bad.status_code == 409
     assert res_bad.json()["detail"] == "Venue capacity exceeded for the requested time"
 
 
 def test_booking_capacity_allows_overlap_until_seat_limit():
     first_payload = {
-        "user_id": 1,
         "venue_id": "osm_296568074",
         "booking_date": "2026-06-15",
         "start_time": "10:00:00",
         "end_time": "11:00:00",
         "seats_reserved": 2
     }
-    first_response = client.post("/api/bookings", json=first_payload)
+    headers = get_test_user_headers()
+    first_response = client.post(
+        "/api/bookings",
+        json=first_payload,
+        headers=headers
+    )
     assert first_response.status_code == 200
 
     second_payload = {
         **first_payload,
         "seats_reserved": 2
     }
-    second_response = client.post("/api/bookings", json=second_payload)
+    second_response = client.post(
+        "/api/bookings",
+        json=second_payload,
+        headers=headers
+    )
     assert second_response.status_code == 409
     assert second_response.json()["detail"] == (
         "Venue capacity exceeded for the requested time"
@@ -1935,13 +2006,13 @@ def test_booking_rejects_non_positive_seat_count():
     response = client.post(
         "/api/bookings",
         json={
-            "user_id": 1,
             "venue_id": "osm_296568074",
             "booking_date": "2026-06-15",
             "start_time": "10:00:00",
             "end_time": "11:00:00",
             "seats_reserved": 0
-        }
+        },
+        headers=get_test_user_headers()
     )
     assert response.status_code == 422
 
@@ -2289,13 +2360,13 @@ def test_cancel_booking_restores_inventory_and_allows_rebooking():
     rebooking_response = client.post(
         "/api/bookings",
         json={
-            "user_id": 1,
             "venue_id": "osm_296568074",
             "booking_date": booking_start.date().isoformat(),
             "start_time": booking_start.time().isoformat(),
             "end_time": booking_end.time().isoformat(),
             "seats_reserved": 2
-        }
+        },
+        headers=headers
     )
     assert rebooking_response.status_code == 200
 
