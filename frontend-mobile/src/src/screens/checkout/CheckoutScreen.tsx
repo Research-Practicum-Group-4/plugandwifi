@@ -3,7 +3,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Clock, MapPin, Calendar, CheckCircle, XCircle, CreditCard } from 'lucide-react-native';
 import { PrimaryButton } from '../../components/PrimaryButton';
-import { fetchVenueById } from '../../services/venues';
+import { fetchVenueById, fetchVenueAvailability, type VenueAvailabilityResponse } from '../../services/venues';
 import { createBooking } from '../../services/bookings';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../theme/colors';
@@ -12,52 +12,6 @@ import type { RootStackScreenProps } from '../../types/navigation';
 
 const DURATIONS = [1, 2, 3];
 const SERVICE_FEE = 2;
-const FALLBACK_SLOTS = (() => { const h: number[] = []; for (let i=8; i<=20; i++) h.push(i); return h; })();
-const DAY_NAMES = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-
-function parseTimeSlots(hoursStr: string | null | undefined, date: Date): number[] {
-  if (!hoursStr) return FALLBACK_SLOTS;
-  const dow = date.getDay(); // 0=Sun, 1=Mon...
-  const dayKey = DAY_NAMES[dow];
-  const ranges = hoursStr.split(';').map(s => s.trim());
-
-  // Try exact day match first, then day range match
-  let matchedRanges: string[] = [];
-  for (const range of ranges) {
-    const [days, times] = range.includes(' ') ? [range.split(' ')[0], range.split(' ').slice(1).join(' ')] : ['', range];
-    const dayParts = days.split(',').map(d => d.trim());
-    for (const dp of dayParts) {
-        if (dp.includes('-')) {
-        const [start, end] = dp.split('-').map(d => DAY_NAMES.indexOf(d));
-        const inRange = end >= start ? (dow >= start && dow <= end) : (dow >= start || dow <= end);
-        if (inRange) { matchedRanges.push(times); break; }
-      } else if (dp === dayKey) {
-        matchedRanges.push(times); break;
-      }
-    }
-    // If no day specified, applies to all days
-    if (!days) matchedRanges.push(times);
-  }
-
-  if (matchedRanges.length === 0) return FALLBACK_SLOTS;
-
-  const slotsSet = new Set<number>();
-  for (const tr of matchedRanges) {
-    for (const part of tr.split(',')) {
-      const [s, e] = part.trim().split('-');
-      if (!s || !e) continue;
-      const startH = parseInt(s.split(':')[0]);
-      const startM = s.includes(':') ? parseInt(s.split(':')[1]) : 0;
-      const endH = parseInt(e.split(':')[0]);
-      const endM = e.includes(':') ? parseInt(e.split(':')[1]) : 0;
-      // Only add slots where at least 1 full hour fits before close
-      const effectiveEnd = endM > 0 ? endH : endH;
-      for (let h = startH; h < effectiveEnd; h++) slotsSet.add(h);
-    }
-  }
-  const slots = [...slotsSet].sort((a, b) => a - b);
-  return slots.length > 0 ? slots : FALLBACK_SLOTS;
-}
 
 function fmtDate(d: Date): string { return d.toISOString().split('T')[0]; }
 function isToday(d: Date): boolean { const n = new Date(); return d.toDateString() === n.toDateString(); }
@@ -65,14 +19,8 @@ function fmtLabel(d: Date): string {
   const today = new Date(); today.setHours(0,0,0,0);
   const t = new Date(d); t.setHours(0,0,0,0);
   const diff = Math.round((t.getTime() - today.getTime()) / 86400000);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Tomorrow';
+  if (diff === 0) return 'Today'; if (diff === 1) return 'Tomorrow';
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-}
-function fmtTime(h: number): string {
-  const suffix = h >= 12 ? 'PM' : 'AM';
-  const hour = h > 12 ? h - 12 : (h === 0 ? 12 : h);
-  return `${hour}:00 ${suffix}`;
 }
 
 export function CheckoutScreen({ navigation, route }: RootStackScreenProps<'Checkout'>) {
@@ -83,41 +31,51 @@ export function CheckoutScreen({ navigation, route }: RootStackScreenProps<'Chec
   const [duration, setDuration] = useState(safeDur);
   const [price, setPrice] = useState(safePrice);
   const [address, setAddress] = useState('Manhattan');
-  const [venueHours, setVenueHours] = useState<string | null>(null);
   const [loadingVenue, setLoadingVenue] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [step, setStep] = useState<'review' | 'payment'>('review');
+  const [availability, setAvailability] = useState<VenueAvailabilityResponse | null>(null);
+  const [venueHours, setVenueHours] = useState<string | null>(null);
+  const [venueBestHours, setVenueBestHours] = useState<string | null>(null);
 
-  const dates = useMemo(() => Array.from({length:5},(_,i) => {const d = new Date(); d.setDate(d.getDate()+i); return d;}), []);
+  const dates = useMemo(() => Array.from({length:14},(_,i) => {const d = new Date(); d.setDate(d.getDate()+i); return d;}), []);
   const [selectedDate, setSelectedDate] = useState(dates[0]);
 
   const availableSlots = useMemo(() => {
-    const all = parseTimeSlots(venueHours, selectedDate);
+    if (!availability?.available_slots) return [];
+    const dateStr = fmtDate(selectedDate);
     const now = new Date();
-    return all.filter(h => {
-      if (isToday(selectedDate)) return h > now.getHours();
-      return h + duration <= Math.max(...all, 24);
-    });
-  }, [venueHours, selectedDate, duration]);
+    return availability.available_slots
+      .filter(s => s.date === dateStr && s.available)
+      .map(s => parseInt(s.start_time.includes('T') ? s.start_time.split('T')[1].split(':')[0] : s.start_time.split(':')[0]))
+      .filter(h => !isToday(selectedDate) || h > now.getHours())
+      .sort((a, b) => a - b);
+  }, [availability, selectedDate]);
 
-  const [startHour, setStartHour] = useState(availableSlots[0] ?? FALLBACK_SLOTS[0]);
+  const [startHour, setStartHour] = useState(0);
 
   useEffect(() => {
-    setStartHour(availableSlots[0] ?? FALLBACK_SLOTS[0]);
+    if (availableSlots.length > 0) setStartHour(availableSlots[0]);
   }, [availableSlots]);
 
   useEffect(() => {
     (async () => {
       try {
-        const data = await fetchVenueById(venueId);
+        const [data, avail] = await Promise.all([fetchVenueById(venueId), fetchVenueAvailability(venueId)]);
         if (data) {
           const parts: string[] = [];
           if (data.building_number) parts.push(data.building_number);
           if (data.street) parts.push(data.street);
           if (data.borough) parts.push(data.borough);
           if (parts.length > 0) setAddress(parts.join(', '));
-          if (typeof data.opening_hours === 'string') setVenueHours(data.opening_hours);
-          else if (typeof data.opening_hours_summary === 'string') setVenueHours(data.opening_hours_summary);
+        }
+        setAvailability(avail);
+        if (data?.opening_hours || data?.opening_hours_summary) {
+          setVenueHours(typeof data.opening_hours === 'string' ? data.opening_hours : String(data.opening_hours_summary));
+        }
+        if (data?.best_hours_for_work) {
+          const bh = data.best_hours_for_work;
+          setVenueBestHours(Array.isArray(bh) ? JSON.stringify(bh) : String(bh));
         }
       } catch {}
       setLoadingVenue(false);
@@ -150,6 +108,8 @@ export function CheckoutScreen({ navigation, route }: RootStackScreenProps<'Chec
     setProcessing(false);
   }
 
+  const fmtTime = (h: number) => { const s = h>=12?'PM':'AM'; const h12=h>12?h-12:(h===0?12:h); return `${h12}:00 ${s}`; };
+
   return (
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.headerSafe}>
@@ -172,7 +132,7 @@ export function CheckoutScreen({ navigation, route }: RootStackScreenProps<'Chec
 
         {step === 'review' ? (<>
           <View style={styles.sectionLabel}>Date</View>
-          <View style={styles.dateRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateRow}>
             {dates.map(d => {
               const active = fmtDate(d) === fmtDate(selectedDate);
               return (
@@ -182,16 +142,20 @@ export function CheckoutScreen({ navigation, route }: RootStackScreenProps<'Chec
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
 
           <View style={styles.sectionLabel}>Start Time</View>
-          <View style={styles.timeRow}>
-            {availableSlots.map(h => (
-              <Pressable key={h} style={[styles.timeChip, startHour===h && styles.timeChipActive]} onPress={() => setStartHour(h)}>
-                <Text style={[styles.timeChipText, startHour===h && styles.timeChipTextActive]}>{fmtTime(h)}</Text>
-              </Pressable>
-            ))}
-          </View>
+          {availableSlots.length === 0 ? (
+            <Text style={styles.noSlots}>No available slots for this date</Text>
+          ) : (
+            <View style={styles.timeRow}>
+              {availableSlots.map(h => (
+                <Pressable key={h} style={[styles.timeChip, startHour===h && styles.timeChipActive]} onPress={() => setStartHour(h)}>
+                  <Text style={[styles.timeChipText, startHour===h && styles.timeChipTextActive]}>{fmtTime(h)}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
 
           <View style={styles.sectionLabel}>Duration</View>
           <View style={styles.durationRow}>
@@ -204,8 +168,15 @@ export function CheckoutScreen({ navigation, route }: RootStackScreenProps<'Chec
 
           <View style={styles.timeCard}>
             <Clock size={15} color={colors.textMuted} />
-            <Text style={styles.timeCardText}>{fmtLabel(selectedDate)} · {fmtTime(startHour)} – {fmtTime(endHour)}</Text>
+            <Text style={styles.timeCardText}>{startHour > 0 ? `${fmtLabel(selectedDate)} · ${fmtTime(startHour)} – ${fmtTime(endHour)}` : 'Select a time slot'}</Text>
           </View>
+
+          {(venueHours || venueBestHours) ? (
+            <View style={styles.hoursInfo}>
+              {venueHours ? <Text style={styles.hoursInfoText}>🕐 Open: {venueHours}</Text> : null}
+              {venueBestHours ? <Text style={styles.hoursInfoSub}>⭐ Best for work: {venueBestHours}</Text> : null}
+            </View>
+          ) : null}
 
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}><Text style={styles.summaryLabel}>${(price/duration).toFixed(0)}/hr × {duration}h</Text><Text style={styles.summaryValue}>${price}</Text></View>
@@ -225,7 +196,7 @@ export function CheckoutScreen({ navigation, route }: RootStackScreenProps<'Chec
 
         <PrimaryButton
           label={step === 'review' ? 'Proceed to Payment' : processing ? 'Confirming...' : 'Confirm & Pay'}
-          disabled={processing}
+          disabled={processing || (step === 'review' && startHour === 0)}
           onPress={() => step === 'review' ? setStep('payment') : handleBooking()}
         />
         <View style={{ height: spacing.xl }} />
@@ -276,6 +247,7 @@ const styles = StyleSheet.create({
   timeChipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
   timeChipText: { fontSize: 13, fontWeight: '500', color: colors.text },
   timeChipTextActive: { color: colors.white, fontWeight: '600' },
+  noSlots: { fontSize: 14, color: colors.textMuted, fontStyle: 'italic' },
   durationRow: { flexDirection: 'row', gap: spacing.sm },
   durationBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center', backgroundColor: colors.white },
   durationBtnActive: { borderColor: colors.primary, backgroundColor: colors.primary },
@@ -283,6 +255,9 @@ const styles = StyleSheet.create({
   durationTextActive: { color: colors.white },
   timeCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, backgroundColor: colors.surface, borderRadius: 10 },
   timeCardText: { fontSize: 14, color: colors.textMuted },
+  hoursInfo: { padding: spacing.md, backgroundColor: '#f0faf5', borderRadius: 12, borderWidth: 1, borderColor: '#b7e4cf', gap: 4 },
+  hoursInfoText: { fontSize: 13, color: colors.text },
+  hoursInfoSub: { fontSize: 12, color: '#b45309' },
   summaryCard: { backgroundColor: colors.white, borderRadius: 14, padding: spacing.lg, borderWidth: 1, borderColor: colors.border, gap: spacing.sm },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   summaryLabel: { fontSize: 14, color: colors.textMuted },

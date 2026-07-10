@@ -25,41 +25,53 @@ function buildAddress(d: VenueDetail | null, fallback: string): string {
   return parts.length > 0 ? parts.join(', ') : fallback;
 }
 
-function formatHourArray(hours: number[]): string {
-  if (!hours.length) return '';
-  const sorted = [...hours].sort((a, b) => a - b);
-  const ranges: string[] = [];
-  let start = sorted[0], end = sorted[0];
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i] === end + 1) { end = sorted[i]; }
-    else { ranges.push(formatRange(start, end)); start = sorted[i]; end = sorted[i]; }
-  }
-  ranges.push(formatRange(start, end));
-  return ranges.join(', ');
+function formatBestHours(raw: string | number[]): string {
+  return parseBestHoursArray(raw).join(', ');
 }
 
-function formatRange(s: number, e: number): string {
-  const fmt = (h: number) => { const suffix = h >= 12 ? 'PM' : 'AM'; const h12 = h > 12 ? h - 12 : (h === 0 ? 12 : h); return `${h12}${suffix}`; };
-  return s === e ? fmt(s) : `${fmt(s)}-${fmt(e)}`;
-}
-
-function parseBestHours(raw: string | number[]): string {
+function parseBestHoursArray(raw: string | number[]): string[] {
   let hours: number[];
   if (Array.isArray(raw)) { hours = raw; }
-  else {
-    try { hours = JSON.parse(raw as string); } catch { return raw as string; }
-    if (!Array.isArray(hours)) return raw as string;
-  }
-  if (!hours.length) return '';
+  else { try { hours = JSON.parse(raw as string); } catch { return []; } if (!Array.isArray(hours)) return []; }
+  if (!hours.length) return [];
   const sorted = [...hours].sort((a, b) => a - b);
   const ranges: string[] = [];
   let start = sorted[0], end = sorted[0];
+  const fmt = (h: number) => { const suffix = h >= 12 ? 'PM' : 'AM'; const h12 = h > 12 ? h - 12 : (h === 0 ? 12 : h); return `${h12}${suffix}`; };
   for (let i = 1; i < sorted.length; i++) {
     if (sorted[i] === end + 1) { end = sorted[i]; }
-    else { ranges.push(formatRange(start, end)); start = sorted[i]; end = sorted[i]; }
+    else { ranges.push(fmt(start) + (start === end ? '' : '-' + fmt(end))); start = sorted[i]; end = sorted[i]; }
   }
-  ranges.push(formatRange(start, end));
-  return ranges.join(', ');
+  ranges.push(fmt(start) + (start === end ? '' : '-' + fmt(end)));
+  return ranges;
+}
+
+function parseHoursGrid(hoursStr: string): Array<{day: string; hours: string}> {
+  const dayMap: Record<string,string> = {Mo:'Mon',Tu:'Tue',We:'Wed',Th:'Thu',Fr:'Fri',Sa:'Sat',Su:'Sun'};
+  const fullDays = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const found = new Map<string,string>();
+
+  for (const range of hoursStr.split(';')) {
+    const trimmed = range.trim();
+    const spaceIdx = trimmed.indexOf(' ');
+    if (spaceIdx < 0) { fullDays.forEach(d => found.set(d, trimmed)); }
+    else {
+      const days = trimmed.slice(0, spaceIdx);
+      const times = trimmed.slice(spaceIdx + 1);
+      for (const dp of days.split(',').map(d => d.trim())) {
+        if (dp.includes('-')) {
+          const [s, e] = dp.split('-').map(d => dayMap[d] || d);
+          const si = fullDays.indexOf(s), ei = fullDays.indexOf(e);
+          if (si >= 0 && ei >= 0) {
+            const r = ei >= si ? fullDays.slice(si, ei+1) : [...fullDays.slice(si), ...fullDays.slice(0, ei+1)];
+            r.forEach(d => found.set(d, times));
+          }
+        } else { found.set(dayMap[dp] || dp, times); }
+      }
+    }
+  }
+
+  return fullDays.map(d => ({ day: d, hours: found.get(d) || '' }));
 }
 
 export function VenueDetailScreen({ navigation, route }: RootStackScreenProps<'VenueDetail'>) {
@@ -184,15 +196,23 @@ export function VenueDetailScreen({ navigation, route }: RootStackScreenProps<'V
               <Star size={16} color="#f59e0b" />
               <View style={{ flex: 1 }}>
                 <Text style={styles.highlightTitle}>Best hours for work</Text>
-                <Text style={styles.highlightText}>{parseBestHours(rawData.best_hours_for_work)}</Text>
+                <View style={styles.timeChipRow}>
+                  {parseBestHoursArray(rawData.best_hours_for_work).map((t, i) => (
+                    <View key={i} style={styles.timeChipBadge}>
+                      <Text style={styles.timeChipBadgeText}>{t}</Text>
+                    </View>
+                  ))}
+                </View>
               </View>
             </View>
           ) : null}
 
           <View style={styles.infoRow}>
-            <Clock size={15} color={colors.textMuted} />
+            <Clock size={15} color={colors.primary} />
             <Text style={styles.infoText}>
-              {typeof rawData?.opening_hours_summary === 'string' ? rawData.opening_hours_summary : venue.availability}
+              {typeof rawData?.opening_hours === 'string' ? rawData.opening_hours :
+               typeof rawData?.opening_hours_summary === 'string' ? rawData.opening_hours_summary :
+               venue.availability}
             </Text>
           </View>
 
@@ -248,54 +268,62 @@ export function VenueDetailScreen({ navigation, route }: RootStackScreenProps<'V
           <View style={styles.divider} />
 
           <Text style={styles.sectionTitle}>Amenities</Text>
-          <View style={styles.amenityGrid}>
-            <View style={[styles.amenityCard, !hasWifi && styles.amenityOff]}>
-              <Wifi size={22} color={hasWifi ? colors.primary : colors.border} />
-              <Text style={[styles.amenityLabel, !hasWifi && styles.amenityLabelOff]}>WiFi</Text>
-              <Text style={styles.amenityStatus}>{hasWifi ? 'Available' : 'N/A'}</Text>
+          <View style={styles.amenityCard}>
+            <View style={styles.amenityLine}>
+              <Wifi size={16} color={hasWifi ? colors.primary : '#d1d5db'} />
+              <Text style={[styles.amenityLineText, !hasWifi && styles.amenityLineTextOff]}>
+                {hasWifi ? 'WiFi available' : 'WiFi — not yet confirmed'}
+              </Text>
             </View>
-            <View style={[styles.amenityCard, !hasPlugs && styles.amenityOff]}>
-              <Plug size={22} color={hasPlugs ? colors.primary : colors.border} />
-              <Text style={[styles.amenityLabel, !hasPlugs && styles.amenityLabelOff]}>Outlets</Text>
-              <Text style={styles.amenityStatus}>{hasPlugs ? 'Available' : 'N/A'}</Text>
+            <View style={styles.amenityDivider} />
+            <View style={styles.amenityLine}>
+              <Plug size={16} color={hasPlugs ? colors.primary : '#d1d5db'} />
+              <Text style={[styles.amenityLineText, !hasPlugs && styles.amenityLineTextOff]}>
+                {hasPlugs ? 'Outlets available' : 'Outlets — not yet confirmed'}
+              </Text>
             </View>
-            <View style={[styles.amenityCard, !hasQuiet && styles.amenityOff]}>
-              <Star size={22} color={hasQuiet ? colors.primary : colors.border} />
-              <Text style={[styles.amenityLabel, !hasQuiet && styles.amenityLabelOff]}>Quiet</Text>
-              <Text style={styles.amenityStatus}>{hasQuiet ? 'Yes' : 'Moderate'}</Text>
+            <View style={styles.amenityDivider} />
+            <View style={styles.amenityLine}>
+              <Star size={16} color={hasQuiet ? colors.primary : '#d1d5db'} />
+              <Text style={[styles.amenityLineText, !hasQuiet && styles.amenityLineTextOff]}>
+                {hasQuiet ? 'Quiet atmosphere' : 'Noise level — not yet confirmed'}
+              </Text>
             </View>
+            {(!hasWifi || !hasPlugs || !hasQuiet) ? (
+              <Text style={styles.amenityFeedbackHint}>
+                Something missing? Your feedback helps us improve accuracy
+              </Text>
+            ) : null}
           </View>
 
           <View style={styles.divider} />
 
           <Text style={styles.sectionTitle}>About this space</Text>
           <Text style={styles.aboutText}>
-            {rawData?.cuisine_detail 
-              ? `${rawData.cuisine_detail.charAt(0).toUpperCase()}${rawData.cuisine_detail.slice(1)}` 
+            {rawData?.cuisine_detail
+              ? `${rawData.cuisine_detail.charAt(0).toUpperCase()}${rawData.cuisine_detail.slice(1)}`
               : `A ${venue.type.toLowerCase()} venue`}{' '}
-            in {rawData?.borough || 'Manhattan'}.
-            {hasWifi && hasQuiet ? ' Features reliable WiFi in a quiet setting.' :
-             hasWifi ? ' WiFi available for your work needs.' :
-             hasQuiet ? ' Quiet environment suitable for concentration.' : ''}
+            in {rawData?.borough || 'Manhattan'}
+            {rawData?.nearest_subway ? `, a short walk from ${rawData.nearest_subway} station` : ''}.
+            {rawData?.best_hours_for_work
+              ? ` Best visited ${formatBestHours(rawData.best_hours_for_work)}.`
+              : ''}
           </Text>
-
-          {rawData?.opening_hours ? (
-            <View style={styles.hoursCard}>
-              <Clock size={16} color={colors.primary} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.highlightTitle}>Opening hours</Text>
-                <Text style={styles.highlightText}>{rawData.opening_hours}</Text>
-              </View>
-            </View>
-          ) : null}
 
           <View style={styles.divider} />
 
-          <Text style={styles.sectionTitle}>Reviews</Text>
-          <View style={styles.reviewPlaceholder}>
-            <Star size={20} color={colors.textMuted} />
-            <Text style={styles.reviewPlaceholderText}>Reviews coming soon</Text>
-          </View>
+          <Text style={styles.sectionTitle}>Ratings & Reviews</Text>
+          {rawData?.rating_user_reported != null ? (
+            <View style={styles.ratingCard}>
+              <Text style={styles.ratingBig}>★ {rawData.rating_user_reported}</Text>
+              <Text style={styles.ratingSub}>from app users</Text>
+            </View>
+          ) : (
+            <View style={styles.ratingPlaceholder}>
+              <Text style={styles.ratingPlaceholderMain}>No reviews yet</Text>
+              <Text style={styles.ratingPlaceholderText}>Be the first to share your experience ^_^</Text>
+            </View>
+          )}
 
           <View style={styles.divider} />
 
@@ -357,60 +385,70 @@ function ShareIcon() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
+  root: { flex: 1, backgroundColor: '#f5f6f8' },
   scroll: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   notFoundText: { fontSize: 18, color: colors.textMuted, marginBottom: spacing.md },
   heroWrap: { position: 'relative' },
-  hero: { width: '100%', height: 260 },
-  heroTopBar: { position: 'absolute', top: 12, left: 12, right: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  heroTopRight: { flexDirection: 'row', gap: spacing.sm },
-  heroCircleBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },
-  distanceBadge: { position: 'absolute', top: 56, left: 12, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.white, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  hero: { width: '100%', height: 270 },
+  heroTopBar: { position: 'absolute', top: 48, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  heroTopRight: { flexDirection: 'row', gap: 10 },
+  heroCircleBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  distanceBadge: { position: 'absolute', top: 52, right: 16, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2 },
   distanceBadgeText: { fontSize: 13, fontWeight: '600', color: colors.text },
-  body: { padding: spacing.lg },
-  name: { fontSize: 22, fontWeight: '700', color: colors.text, marginBottom: 4 },
-  typeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  type: { fontSize: 14, color: colors.textMuted },
-  ratingPill: { backgroundColor: colors.primary, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  ratingPillText: { color: colors.white, fontSize: 12, fontWeight: '700' },
-  infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: spacing.sm },
-  infoText: { fontSize: 14, color: colors.textMuted, flex: 1, lineHeight: 20 },
+  body: { padding: 20 },
+  name: { fontSize: 24, fontWeight: '800', color: colors.text, letterSpacing: -0.3, marginBottom: 8 },
+  typeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  type: { fontSize: 15, color: colors.textMuted, textTransform: 'capitalize' },
+  ratingPill: { backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  ratingPillText: { color: colors.white, fontSize: 13, fontWeight: '700' },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8, paddingVertical: 2 },
+  infoText: { fontSize: 14, color: colors.textMuted, flex: 1, lineHeight: 22 },
   infoHighlight: { fontSize: 14, color: '#b45309', fontWeight: '500', flex: 1 },
-  highlightCard: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, backgroundColor: '#fffbeb', borderRadius: 10, borderWidth: 1, borderColor: '#fde68a', marginTop: spacing.sm },
-  highlightTitle: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 2 },
+  highlightCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, backgroundColor: '#fff9ed', borderRadius: 14, marginTop: 10 },
+  highlightTitle: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 4 },
   highlightText: { fontSize: 13, color: colors.textMuted, lineHeight: 20 },
-  hoursCard: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, backgroundColor: '#f0faf5', borderRadius: 10, borderWidth: 1, borderColor: '#b7e4cf', marginTop: spacing.sm },
-  contactRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
-  contactBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  contactText: { fontSize: 13, color: colors.primary, fontWeight: '600' },
-  transportCard: { marginTop: spacing.sm, padding: spacing.md, backgroundColor: colors.surface, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: spacing.xs },
-  transportRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  timeChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  timeChipBadge: { backgroundColor: '#fef3c7', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  timeChipBadgeText: { fontSize: 12, color: '#92400e', fontWeight: '500' },
+  hoursCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, backgroundColor: '#f0faf5', borderRadius: 14, marginTop: 10 },
+  contactRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  contactBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border },
+  contactText: { fontSize: 14, color: colors.primary, fontWeight: '600' },
+  transportCard: { marginTop: 10, padding: 14, backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.border, gap: 8 },
+  transportRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   transportText: { fontSize: 13, color: colors.textMuted, flex: 1 },
-  transportDist: { fontSize: 12, color: colors.primary, fontWeight: '600' },
+  transportDist: { fontSize: 13, color: colors.primary, fontWeight: '600' },
   hoursText: { fontSize: 13, color: colors.textMuted, lineHeight: 20 },
-  notifyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md, paddingVertical: spacing.xs, paddingHorizontal: spacing.md, backgroundColor: colors.surface, borderRadius: 10 },
-  notifyLabel: { flex: 1, fontSize: 14, color: colors.text },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.lg },
-  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.md },
-  sectionTitle: { fontSize: 17, fontWeight: '600', color: colors.text, marginBottom: spacing.md },
-  aboutText: { fontSize: 14, color: colors.textMuted, lineHeight: 22 },
-  amenityGrid: { flexDirection: 'row', gap: spacing.sm },
-  amenityCard: { flex: 1, alignItems: 'center', gap: 6, padding: spacing.sm, backgroundColor: colors.surface, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
-  amenityOff: { opacity: 0.4 },
-  amenityLabel: { fontSize: 12, fontWeight: '600', color: colors.text },
-  amenityLabelOff: { color: colors.textMuted },
-  amenityStatus: { fontSize: 11, color: colors.textMuted },
+  notifyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.border },
+  notifyLabel: { flex: 1, fontSize: 14, fontWeight: '500', color: colors.text },
+  divider: { height: 1, backgroundColor: '#eef0f2', marginVertical: 22 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: colors.text, letterSpacing: -0.2, marginBottom: 14 },
+  aboutText: { fontSize: 14, color: colors.textMuted, lineHeight: 24 },
+  amenityCard: { backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: spacing.md },
+  amenityRow: { gap: 10, marginTop: 8 },
+  amenityDivider: { height: 1, backgroundColor: '#f3f4f6', marginVertical: 10 },
+  amenityLine: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  amenityLineText: { fontSize: 14, color: colors.text, fontWeight: '500' },
+  amenityLineTextOff: { color: colors.textMuted, fontWeight: '400' },
+  amenityFeedbackHint: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', marginTop: 12 },
+  ratingCard: { alignItems: 'center', padding: 20, backgroundColor: '#fff9ed', borderRadius: 14, borderWidth: 1, borderColor: '#fde68a' },
+  ratingBig: { fontSize: 32, fontWeight: '800', color: '#b45309' },
+  ratingSub: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
+  ratingPlaceholder: { alignItems: 'center', padding: 20, backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.border },
+  ratingPlaceholderMain: { fontSize: 16, fontWeight: '600', color: colors.text },
+  ratingPlaceholderText: { fontSize: 13, color: colors.textMuted, marginTop: 6 },
   reviewPlaceholder: { alignItems: 'center', paddingVertical: spacing.lg, backgroundColor: colors.surface, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
   reviewPlaceholderText: { fontSize: 14, color: colors.textMuted, marginTop: spacing.sm },
-  miniMapWrap: { borderRadius: 12, overflow: 'hidden', height: 130, marginBottom: spacing.sm },
+  miniMapWrap: { borderRadius: 16, overflow: 'hidden', height: 140, marginBottom: 12 },
   miniMap: { width: '100%', height: '100%' },
-  directionsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.primary, borderRadius: 10, paddingVertical: spacing.md, marginBottom: spacing.sm },
-  directionsBtnText: { fontSize: 15, fontWeight: '600', color: colors.white },
-  bottomSpacer: { height: 100 },
-  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, paddingBottom: spacing.lg, backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.border },
-  bottomPrice: { flexDirection: 'row', alignItems: 'baseline' },
-  bottomPriceValue: { fontSize: 22, fontWeight: '700', color: colors.text },
+  directionsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 14, marginBottom: 8 },
+  directionsBtnText: { fontSize: 15, fontWeight: '700', color: colors.white },
+  bottomSpacer: { height: 110 },
+  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, paddingBottom: 28, backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: '#eef0f2', shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 8 },
+  bottomPrice: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  bottomPriceValue: { fontSize: 24, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
   bottomPriceUnit: { fontSize: 14, color: colors.textMuted },
   loginModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   loginModalCard: { width: '85%', backgroundColor: colors.white, borderRadius: 20, padding: spacing.xl, alignItems: 'center', gap: spacing.md },

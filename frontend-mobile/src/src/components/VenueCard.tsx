@@ -3,6 +3,7 @@ import { Heart, Bell } from 'lucide-react-native';
 import type { Venue } from '../types/venue';
 import { getVenueImage } from '../utils/venueImages';
 import { useFavorites } from '../context/FavoriteContext';
+import { useAuth } from '../context/AuthContext';
 import { useT } from '../context/LanguageContext';
 import { colors } from '../theme/colors';
 import { spacing } from '../theme/spacing';
@@ -20,6 +21,7 @@ type VenueCardProps = {
 export function VenueCard({ venue, compact = false, saved = false, alertOn = false, onPress, onBook, onBell }: VenueCardProps) {
   const { t } = useT();
   const { toggle, isFav } = useFavorites();
+  const { token } = useAuth();
   const favorited = isFav(venue.id);
   const hasWifi = venue.amenities?.includes('WiFi');
   const hasPlugs = venue.amenities?.includes('Power Outlets');
@@ -43,7 +45,7 @@ export function VenueCard({ venue, compact = false, saved = false, alertOn = fal
                   <Bell size={18} color={alertOn ? colors.primary : colors.textMuted} fill={alertOn ? colors.primary : 'transparent'} />
                 </Pressable>
               ) : null}
-              <Pressable onPress={() => toggle(venue.id)} hitSlop={8}>
+              <Pressable onPress={() => toggle(venue.id, token ?? undefined)} hitSlop={8}>
                 <Heart size={18} color={favorited ? colors.primary : colors.textMuted} fill={favorited ? colors.primary : 'transparent'} />
               </Pressable>
             </View>

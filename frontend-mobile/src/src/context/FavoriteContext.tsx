@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { favoritesStorage } from '../storage/favoritesStorage';
+import { apiDelete } from '../services/api';
 
 type Ctx = {
   ids: Set<string>;
-  toggle: (id: string) => void;
+  toggle: (id: string, token?: string) => void;
   isFav: (id: string) => boolean;
 };
 
@@ -17,10 +18,18 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
     favoritesStorage.getIds().then(arr => setIds(new Set(arr)));
   }, []);
 
-  const toggle = useCallback((id: string) => {
+  const toggle = useCallback((id: string, token?: string) => {
     setIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+        // Sync delete with backend
+        if (token) {
+          apiDelete(`/api/favorites/${id}`, token).catch(() => {});
+        }
+      } else {
+        next.add(id);
+      }
       favoritesStorage.setIds(Array.from(next));
       return next;
     });

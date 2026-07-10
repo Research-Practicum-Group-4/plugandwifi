@@ -123,6 +123,19 @@ export function SearchScreen({ navigation }: MainTabScreenProps<'Search'>) {
               ) : null,
             )}
           </MapView>
+          <View style={styles.zoomControls}>
+            <Pressable style={styles.zoomBtn} onPress={() => {
+              mapRef.current?.getCamera().then(cam => {
+                mapRef.current?.animateCamera({ zoom: (cam.zoom || 14) + 1 }, { duration: 300 });
+              });
+            }}><Text style={styles.zoomBtnText}>+</Text></Pressable>
+            <View style={styles.zoomDivider} />
+            <Pressable style={styles.zoomBtn} onPress={() => {
+              mapRef.current?.getCamera().then(cam => {
+                mapRef.current?.animateCamera({ zoom: (cam.zoom || 14) - 1 }, { duration: 300 });
+              });
+            }}><Text style={styles.zoomBtnText}>−</Text></Pressable>
+          </View>
         </View>
       )}
 
@@ -163,6 +176,10 @@ const styles = StyleSheet.create({
   noResults: { textAlign: 'center', color: colors.textMuted, marginTop: spacing.xl, fontSize: 15 },
   mapWrap: { flex: 1 },
   map: { width: '100%', height: '100%' },
+  zoomControls: { position: 'absolute', right: 12, bottom: 30, backgroundColor: colors.white, borderRadius: 10, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3 },
+  zoomBtn: { width: 40, height: 36, alignItems: 'center', justifyContent: 'center' },
+  zoomDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: 6 },
+  zoomBtnText: { fontSize: 20, fontWeight: '600', color: colors.text },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalCardWrap: { padding: spacing.md, paddingBottom: spacing.lg },
   closeBtn: { alignSelf: 'center', marginTop: spacing.md, backgroundColor: colors.white, borderRadius: 8, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },

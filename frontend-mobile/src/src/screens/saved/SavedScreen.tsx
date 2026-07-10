@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Heart, X } from 'lucide-react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { VenueCard } from '../../components/VenueCard';
 import { fetchVenues } from '../../services/venues';
@@ -22,21 +21,19 @@ export function SavedScreen({ navigation }: MainTabScreenProps<'Saved'>) {
   const [loading, setLoading] = useState(true);
   const [alertVenue, setAlertVenue] = useState<Venue | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      (async () => {
-        setLoading(true);
-        const idList = Array.from(ids);
-        if (idList.length === 0) { setVenues([]); setLoading(false); return; }
-        try {
-          const r = await fetchVenues({ lat: 40.7831, lon: -73.9712, limit: 200 });
-          const loaded = r.items.map(mapVenue).filter(v => ids.has(v.id));
-          setVenues(loaded);
-        } catch {}
-        setLoading(false);
-      })();
-    }, [ids]),
-  );
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const idList = Array.from(ids);
+      if (idList.length === 0) { setVenues([]); setLoading(false); return; }
+      try {
+        const r = await fetchVenues({ lat: 40.7831, lon: -73.9712, limit: 200 });
+        const loaded = r.items.map(mapVenue).filter(v => ids.has(v.id));
+        setVenues(loaded);
+      } catch {}
+      setLoading(false);
+    })();
+  }, [ids.size, ...Array.from(ids)]);
 
   function openAlertDrawer(venue: Venue) {
     setAlertVenue(venue);

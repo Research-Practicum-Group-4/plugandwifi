@@ -75,6 +75,22 @@ export async function fetchVenues(params: VenueFilterParams = {}): Promise<Venue
   return apiGet<VenueListResponse>(`/api/venues${query ? `?${query}` : ''}`);
 }
 
+export interface VenueAvailabilityResponse {
+  venue_id: string;
+  available_slots: Array<{
+    slot_id: number;
+    date: string;
+    start_time: string;
+    end_time: string;
+    available: boolean;
+    available_seats: number;
+  }>;
+}
+
 export async function fetchVenueById(venueId: string): Promise<VenueDetail> {
   return apiGet<VenueDetail>(`/api/venues/${venueId}`);
+}
+
+export async function fetchVenueAvailability(venueId: string): Promise<VenueAvailabilityResponse> {
+  return apiGet<VenueAvailabilityResponse>(`/api/venues/${venueId}/availability`);
 }

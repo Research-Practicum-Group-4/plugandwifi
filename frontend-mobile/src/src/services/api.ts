@@ -20,8 +20,15 @@ export async function apiPost<T>(path: string, body: unknown, token?: string): P
 export async function apiGet<T>(path: string, token?: string): Promise<T> {
   const h = await headersWithAuth(token);
   const response = await fetch(`${BASE_URL}${path}`, { method: 'GET', headers: h });
-  let data: any;
-  try { data = await response.json(); } catch { data = {}; }
+  let data: any; try { data = await response.json(); } catch { data = {}; }
+  if (!response.ok) throw new Error(data?.detail || `Request failed (${response.status})`);
+  return data as T;
+}
+
+export async function apiDelete<T>(path: string, token?: string): Promise<T> {
+  const h = await headersWithAuth(token);
+  const response = await fetch(`${BASE_URL}${path}`, { method: 'DELETE', headers: h });
+  let data: any; try { data = await response.json(); } catch { data = {}; }
   if (!response.ok) throw new Error(data?.detail || `Request failed (${response.status})`);
   return data as T;
 }
