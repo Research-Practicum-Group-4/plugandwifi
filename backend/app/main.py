@@ -24,6 +24,7 @@ from .schemas import (
     UserRegister,
     UserLogin,
     VenueListResponse,
+    VenueSuggestionsResponse,
     VenueCreate,
     VenueCreateResponse,
     VenueDetailResponse,
@@ -1298,6 +1299,61 @@ def get_venues(
         "total_pages": total_pages,
         "has_more": has_more
     }
+
+
+@app.get(
+    "/api/venues/suggestions",
+    response_model=VenueSuggestionsResponse
+)
+def get_venue_suggestions(
+    q: str = Query(min_length=1),
+    limit: int = Query(
+        8,
+        ge=1,
+        le=20
+    ),
+    db: Session = Depends(get_db)
+):
+    search_term = q.strip().lower()
+
+    if not search_term:
+        raise HTTPException(
+            status_code=422,
+            detail="q must not be blank"
+        )
+
+    venues = (
+        db.query(Venue)
+        .filter(
+            func.coalesce(
+                Venue.state,
+                "Active"
+            ) == "Active"
+        )
+        .filter(
+            func.lower(Venue.name).like(f"%{search_term}%")
+        )
+        .order_by(
+            Venue.name
+        )
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "items": [
+            {
+                "venue_id": venue.venue_id,
+                "name": venue.name,
+                "lat": venue.lat,
+                "lon": venue.lon,
+                "borough": venue.borough,
+                "type": "venue"
+            }
+            for venue in venues
+        ]
+    }
+
 
 @app.get(
     "/api/venues/{venue_id}",
