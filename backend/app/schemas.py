@@ -102,6 +102,26 @@ class VenueListResponse(BaseModel):
     has_more: bool
 
 
+class VenueSuggestion(BaseModel):
+
+    venue_id: str
+
+    name: str
+
+    lat: float
+
+    lon: float
+
+    borough: str
+
+    type: Literal["venue"] = "venue"
+
+
+class VenueSuggestionsResponse(BaseModel):
+
+    items: list[VenueSuggestion]
+
+
 class VenueCreate(BaseModel):
 
     name: str = Field(min_length=1)

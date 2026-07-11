@@ -252,6 +252,49 @@ def test_get_venues_pagination_metadata():
     assert second_page_data["has_more"] is False
     assert len(second_page_data["items"]) == 1
 
+
+def test_get_venue_suggestions_matches_partial_name_case_insensitive():
+    response = client.get("/api/venues/suggestions?q=library")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "venue_id": "osm_296568074",
+                "name": "UCD Library Shared Space",
+                "lat": 53.3078,
+                "lon": -6.223,
+                "borough": "Dublin South",
+                "type": "venue"
+            }
+        ]
+    }
+
+
+def test_get_venue_suggestions_respects_limit():
+    response = client.get("/api/venues/suggestions?q=ucd&limit=1")
+
+    assert response.status_code == 200
+    assert len(response.json()["items"]) == 1
+
+
+def test_get_venue_suggestions_excludes_suspended_venues():
+    db = TestingSessionLocal()
+    try:
+        venue = db.query(Venue).filter(
+            Venue.venue_id == "osm_296568074"
+        ).one()
+        venue.state = "Suspended"
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/venues/suggestions?q=library")
+
+    assert response.status_code == 200
+    assert response.json() == {"items": []}
+
+
 def test_get_venues_geospatial_sorting_and_radius():
     response = client.get(
         "/api/venues?borough=Dublin South&lat=53.3078&lon=-6.2230&radius=1"
