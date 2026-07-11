@@ -10,6 +10,11 @@ from sklearn.model_selection import train_test_split
 import re
 import joblib
 import json
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
+from busyness_predictor import BusynessPredictor
 
 # EXTRA TREES REGRESSOR MY BEST PERFORMER
 
@@ -29,6 +34,11 @@ def extract_subway_lines(station_complex):
 
 df["subway_lines"] = df["station_complex"].apply(extract_subway_lines)
 df["line_count"] = df["subway_lines"].apply(len)
+
+# To match venue .ccsv
+df["lat"] = df["latitude"]
+df["lon"] = df["longitude"]
+df["nearest_mta_line_count"] = df["line_count"]
 
 df["day_type"] = df["day_type"].str.lower()
 
@@ -58,7 +68,7 @@ train_df = df.drop(test_df.index).copy()
 
 train_stations = train_df[["station_complex_id", "latitude", "longitude"]].drop_duplicates().reset_index(drop=True)
 
-feat = ["latitude", "longitude", "day_type", "line_count", "hour_sin", "hour_cos",]
+feat = ["lat", "lon", "day_type", "nearest_mta_line_count", "hour_sin", "hour_cos",]
 
 x_train = train_df[feat]
 y_train = train_df["log_avg_ridership"]
@@ -73,13 +83,38 @@ xt_model = ExtraTreesRegressor(
     max_features=5,
     random_state=1,
 )
-
 xt_model.fit(x_train, y_train)
 xt_pred = xt_model.predict(x_test)
+
+final_model = ExtraTreesRegressor(
+    n_estimators=500,
+    max_features=5,
+    random_state=1,
+)
+final_model.fit(df[feat], df["log_avg_ridership"])
+
+score_low = df["avg_ridership"].quantile(0.10)
+score_high = df["avg_ridership"].quantile(0.95)
+
+busyness_predictor = BusynessPredictor(
+    model=final_model,
+    feature_names=feat,
+    day_type_mapping={
+        "weekday": 0,
+        "weekend": 1,
+    },
+    score_low=score_low,
+    score_high=score_high,
+)
 
 print("Extra Trees Regressor")
 print(f"MAE: {mean_absolute_error(y_true=np.exp(y_test), y_pred=np.exp(xt_pred))}")
 print(f"RMSE: {math.sqrt(mean_squared_error(y_true=np.exp(y_test), y_pred=np.exp(xt_pred)))}")
 print(f"r2: {r2_score(y_true=np.exp(y_test), y_pred=np.exp(xt_pred))}")
 
-joblib.dump({"model": xt_model, "feature_names": feat, "target":"log_avg_ridership", "pred_transform": "np.exp"}, "data-ml/models/extra_trees_model.joblib")
+joblib.dump({"model": final_model, "feature_names": feat, "target":"log_avg_ridership", "pred_transform": "np.exp", "day_type_mapping": {
+            "weekday": 0,
+            "weekend": 1,
+        },}, "data-ml/models/extra_trees_model.joblib")
+
+joblib.dump(busyness_predictor, "data-ml/models/busyness_predictor.joblib")

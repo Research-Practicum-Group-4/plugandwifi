@@ -7,3 +7,5 @@ passlib[bcrypt]
 bcrypt==4.0.1
 uvicorn
 email-validator
+scikit-learn
+joblib

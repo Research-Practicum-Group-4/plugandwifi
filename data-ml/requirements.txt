@@ -5,3 +5,5 @@ scipy
 sodapy
 xgboost
 matplotlib
+scikit-learn
+joblib
