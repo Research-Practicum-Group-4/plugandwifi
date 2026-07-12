@@ -47,6 +47,18 @@ class LogoutRequest(BaseModel):
     refresh_token: str = Field(min_length=32)
 
 
+class ChatbotRecommendRequest(BaseModel):
+
+    message: str = Field(min_length=1)
+
+
+class ChatbotRecommendResponse(BaseModel):
+
+    response: str
+
+    model: str
+
+
 class VenueResponse(BaseModel):
 
     venue_id: str

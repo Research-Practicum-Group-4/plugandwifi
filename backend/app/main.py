@@ -23,6 +23,8 @@ from sqlalchemy import func, text
 from .schemas import (
     UserRegister,
     UserLogin,
+    ChatbotRecommendRequest,
+    ChatbotRecommendResponse,
     VenueListResponse,
     VenueSuggestionsResponse,
     VenueCreate,
@@ -61,6 +63,7 @@ from math import asin, cos, radians, sin, sqrt
 
 from fastapi.middleware.cors import CORSMiddleware
 
+import httpx
 import os
 import uuid
 
@@ -88,6 +91,104 @@ FREE_CANCELLATION_HOURS = get_free_cancellation_hours()
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+
+GEMINI_SYSTEM_INSTRUCTION = (
+    "You are the Plug & Wifi workspace discovery assistant. "
+    "Help users find suitable venues for working or studying. "
+    "Focus on workspace needs such as location, Wi-Fi, plug access, "
+    "noise level, price, availability, group size, and study or work style. "
+    "Do not act as a general-purpose assistant. If the user asks for an "
+    "unrelated topic, briefly redirect them back to venue discovery."
+)
+
+
+def get_gemini_model():
+    return os.getenv(
+        "GEMINI_MODEL",
+        "gemini-2.0-flash"
+    )
+
+
+def call_gemini_chatbot(
+    message: str
+):
+    api_key = os.getenv("GEMINI_API_KEY")
+
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Gemini API key is not configured"
+        )
+
+    model = get_gemini_model()
+    url = (
+        "https://generativelanguage.googleapis.com/"
+        f"v1beta/models/{model}:generateContent"
+    )
+    payload = {
+        "systemInstruction": {
+            "parts": [
+                {
+                    "text": GEMINI_SYSTEM_INSTRUCTION
+                }
+            ]
+        },
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "text": message
+                    }
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.4,
+            "maxOutputTokens": 512
+        }
+    }
+
+    try:
+        response = httpx.post(
+            url,
+            params={
+                "key": api_key
+            },
+            json=payload,
+            timeout=15
+        )
+        response.raise_for_status()
+        data = response.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Gemini API request failed"
+        ) from exc
+
+    candidates = data.get("candidates") or []
+    parts = (
+        candidates[0]
+        .get("content", {})
+        .get("parts", [])
+        if candidates else []
+    )
+    text_parts = [
+        part.get("text", "")
+        for part in parts
+        if part.get("text")
+    ]
+    chatbot_response = "\n".join(text_parts).strip()
+
+    if not chatbot_response:
+        raise HTTPException(
+            status_code=502,
+            detail="Gemini API returned an empty response"
+        )
+
+    return chatbot_response
+
 
 def calculate_distance_km(
     origin_lat: float,
@@ -773,6 +874,31 @@ def health_check(db: Session = Depends(get_db)):
                 "message": "Critical structural failure: Cloud SQL database is unreachable."
             }
         )
+
+
+@app.post(
+    "/api/chatbot/recommend",
+    response_model=ChatbotRecommendResponse
+)
+def recommend_workspace(
+    payload: ChatbotRecommendRequest
+):
+    message = payload.message.strip()
+
+    if not message:
+        raise HTTPException(
+            status_code=422,
+            detail="message must not be blank"
+        )
+
+    chatbot_response = call_gemini_chatbot(
+        message
+    )
+
+    return {
+        "response": chatbot_response,
+        "model": get_gemini_model()
+    }
 
 
 # ==========================================

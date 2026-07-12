@@ -10,13 +10,15 @@ os.environ["ACCESS_TOKEN_EXPIRE_MINUTES"] = "60"
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
-from fastapi import Depends
+import httpx
+from fastapi import Depends, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.main import app
+from app import main as main_module
 from app.database import Base, build_engine_options, get_db
 from app.models import (
     User,
@@ -103,6 +105,87 @@ def test_postgresql_engine_options(monkeypatch):
         "keepalives_interval": 10,
         "keepalives_count": 5
     }
+
+
+def test_chatbot_recommend_returns_gemini_response(monkeypatch):
+    captured = {}
+
+    def fake_call_gemini_chatbot(message):
+        captured["message"] = message
+        return "Try UCD Library Shared Space for quiet study with Wi-Fi."
+
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_chatbot",
+        fake_call_gemini_chatbot
+    )
+    monkeypatch.setenv(
+        "GEMINI_MODEL",
+        "gemini-test-model"
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Find me a quiet place to study near UCD."
+        }
+    )
+
+    assert response.status_code == 200
+    assert captured["message"] == "Find me a quiet place to study near UCD."
+    assert response.json() == {
+        "response": "Try UCD Library Shared Space for quiet study with Wi-Fi.",
+        "model": "gemini-test-model"
+    }
+
+
+def test_chatbot_recommend_requires_message():
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": ""
+        }
+    )
+
+    assert response.status_code == 422
+
+
+def test_call_gemini_chatbot_requires_api_key(monkeypatch):
+    monkeypatch.delenv(
+        "GEMINI_API_KEY",
+        raising=False
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        main_module.call_gemini_chatbot(
+            "Find a workspace."
+        )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Gemini API key is not configured"
+
+
+def test_call_gemini_chatbot_handles_api_failure(monkeypatch):
+    def fake_post(*args, **kwargs):
+        raise httpx.HTTPError("Gemini is unavailable")
+
+    monkeypatch.setenv(
+        "GEMINI_API_KEY",
+        "test-key"
+    )
+    monkeypatch.setattr(
+        main_module.httpx,
+        "post",
+        fake_post
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        main_module.call_gemini_chatbot(
+            "Find a workspace."
+        )
+
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail == "Gemini API request failed"
 
 
 @pytest.fixture(autouse=True)
