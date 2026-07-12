@@ -134,4 +134,7 @@ if __name__ == "__main__":
     from normalise import apply_to_venues as apply_normalisation
     apply_normalisation(DB)
 
+    from nearest_mta_linecount import apply_to_venues as apply_mta_linecount
+    apply_mta_linecount(DB)
+
     print(df.dtypes)

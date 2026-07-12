@@ -34,7 +34,7 @@ def fetch_transit_stops():
         return pd.DataFrame(rows).drop_duplicates().reset_index(drop=True)
 
     subway_df = to_df(subway_elements)
-    bus_df    = to_df(bus_elements)
+    bus_df = to_df(bus_elements)
     print(f"Subway stations: {len(subway_df):,}")
     print(f"Bus stops: {len(bus_df):,}")
     return subway_df, bus_df
