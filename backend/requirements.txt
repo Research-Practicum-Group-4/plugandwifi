@@ -9,3 +9,6 @@ uvicorn
 email-validator
 scikit-learn
 joblib
+psycopg2-binary>=2.9.0
+pytest>=8.0.0
+httpx>=0.27.0

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -6,29 +6,110 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Separator } from "../components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
-import { CreditCard, Building2, CheckCircle } from "lucide-react";
+import { CreditCard, Building2, CheckCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "../contexts/AuthContext";
+
+import { api } from "../../services/api";
 
 export function CheckoutPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const bookingData = location.state || { venue: "Venue", duration: "2", price: 24 };
+  
+  const { isAuthenticated, user, loading: authLoading } = useAuth();
+
+  // Recover booking state if returning from login redirect, otherwise use location state
+  const bookingData = location.state?.bookingData || location.state || {
+    venueId: "osm_296568074",
+    venueName: "Starbucks Ranelagh (Sample)",
+    bookingDate: "2026-06-15",
+    startTime: "09:00:00",
+    endTime: "12:00:00",
+    duration: "3",
+    price: 10.5
+  };
 
   const [paymentMethod, setPaymentMethod] = useState("card");
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Form states for contact info
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      toast.error("Please sign in to complete your booking.");
+      navigate("/login", {
+        state: {
+          from: "/checkout",
+          bookingData: location.state
+        }
+      });
+    }
+  }, [isAuthenticated, authLoading, navigate, location.state]);
+
+  // Pre-populate details from user state
+  useEffect(() => {
+    if (user) {
+      const parts = user.full_name.trim().split(" ");
+      setFirstName(parts[0] || "");
+      setLastName(parts.slice(1).join(" ") || "");
+      setEmail(user.email || "");
+    }
+  }, [user]);
+
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAuthenticated || !user) {
+      toast.error("You must be signed in to book.");
+      return;
+    }
+
     setIsProcessing(true);
 
-    setTimeout(() => {
+    try {
+      const response = await api.createBooking({
+        venue_id: bookingData.venueId,
+        booking_date: bookingData.bookingDate || "2026-06-15",
+        start_time: bookingData.startTime || "09:00:00",
+        end_time: bookingData.endTime || "12:00:00",
+        seats_reserved: bookingData.seatsReserved || 1,
+      });
+      
       setIsProcessing(false);
       toast.success("Booking confirmed!", {
-        description: "You will receive a confirmation email shortly.",
+        description: `Booking ID: ${response.booking_id}. Check confirmation shortly.`,
       });
-      navigate("/");
-    }, 2000);
+      navigate("/bookings");
+    } catch (err: any) {
+      console.error("Booking failed:", err);
+      setIsProcessing(false);
+      const errorMsg = err.response?.data?.detail || "Booking placement failed.";
+      toast.error("Booking failed", {
+        description: errorMsg,
+      });
+    }
   };
+
+  if (authLoading) {
+    return (
+      <div className="container mx-auto px-4 py-12 text-center text-muted-foreground flex items-center justify-center gap-2 min-h-[400px]">
+        <Loader2 className="animate-spin size-5 text-primary" />
+        Checking session status...
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="container mx-auto px-4 py-12 text-center text-muted-foreground min-h-[400px]">
+        Redirecting to login...
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -45,20 +126,46 @@ export function CheckoutPage() {
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name</Label>
-                  <Input id="firstName" placeholder="John" required />
+                  <Input
+                    id="firstName"
+                    placeholder="John"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    required
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="lastName">Last Name</Label>
-                  <Input id="lastName" placeholder="Doe" required />
+                  <Input
+                    id="lastName"
+                    placeholder="Doe"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    required
+                  />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="john.doe@example.com" required />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="john.doe@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone Number</Label>
-                <Input id="phone" type="tel" placeholder="+1 (555) 123-4567" required />
+                <Input
+                  id="phone"
+                  type="tel"
+                  placeholder="+1 (555) 123-4567"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  required
+                />
               </div>
             </CardContent>
           </Card>
@@ -135,9 +242,12 @@ export function CheckoutPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <h4 className="mb-2">{bookingData.venue}</h4>
+                <h4 className="mb-2">{bookingData.venueName}</h4>
                 <p className="text-muted-foreground">
                   Duration: {bookingData.duration} hour{bookingData.duration !== "1" ? "s" : ""}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Seats: {bookingData.seatsReserved || 1} { (bookingData.seatsReserved || 1) === 1 ? "seat" : "seats" }
                 </p>
               </div>
 
@@ -167,7 +277,7 @@ export function CheckoutPage() {
                   <div>
                     <p>Free cancellation</p>
                     <p className="text-sm text-muted-foreground">
-                      Cancel up to 1 hour before your booking
+                      Cancel up to 24 hours before your booking
                     </p>
                   </div>
                 </div>
