@@ -22,6 +22,7 @@ export function HomePage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [limit] = useState(6);
   const [hasMore, setHasMore] = useState(false);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     setLoading(true);
@@ -29,6 +30,7 @@ export function HomePage() {
       .then((data) => {
         setVenues(data.items);
         setHasMore(data.has_more);
+        setTotalPages(data.total_pages || 1);
         setLoading(false);
       })
       .catch((err) => {
@@ -188,7 +190,7 @@ export function HomePage() {
               Previous
             </Button>
             <span className="text-sm font-semibold text-foreground bg-muted px-3 py-1.5 rounded-md">
-              Page {currentPage}
+              Page {currentPage} of {totalPages}
             </span>
             <Button
               variant="outline"

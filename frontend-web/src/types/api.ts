@@ -27,6 +27,7 @@ export interface Venue {
   rating: number;
   lat: number;
   lon: number;
+  borough?: string;
 }
 
 export interface HourlyProfileDetail {
@@ -172,6 +173,30 @@ export interface ProviderArrivalItem {
 
 export interface ProviderArrivalsResponse {
   items: ProviderArrivalItem[];
+}
+
+export interface VenueSuggestion {
+  venue_id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  borough: string;
+  type: "venue";
+}
+
+export interface VenueSuggestionsResponse {
+  items: VenueSuggestion[];
+}
+
+export interface ChatbotRecommendResponse {
+  response: string;
+  model: string;
+}
+
+export interface FavoriteResponse {
+  user_id: number;
+  venue_id: string;
+  message: string;
 }
 
 

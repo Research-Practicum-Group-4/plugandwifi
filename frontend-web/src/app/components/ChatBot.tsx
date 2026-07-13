@@ -3,8 +3,9 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ScrollArea } from "./ui/scroll-area";
-import { MessageCircle, X, Send, Sparkles } from "lucide-react";
+import { MessageCircle, X, Send, Sparkles, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { api } from "../../services/api";
 
 interface Message {
   id: string;
@@ -18,67 +19,50 @@ export function ChatBot() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
-      text: "Hi! I'm your Plug & Wifi assistant. I can help you find the perfect workspace. Try asking me things like 'Find a quiet place near Times Square' or 'I need a space with good coffee in Brooklyn'.",
+      text: "Hi! I'm your Plug & Wifi assistant. I can help you find the perfect workspace in Manhattan. Try asking me things like 'Find a quiet place near Times Square' or 'I need a space with power plugs'.",
       sender: "ai",
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
 
-  const generateAIResponse = (userMessage: string): string => {
-    const lowerMessage = userMessage.toLowerCase();
+  const handleSend = async () => {
+    if (!input.trim() || isTyping) return;
 
-    // Check for location-based queries
-    if (lowerMessage.includes("near") || lowerMessage.includes("nearby") || lowerMessage.includes("close")) {
-      return "I found 3 workspaces near you:\n\n1. **The Grand Hotel Lobby** - $5/hr, 5 mins away\n   Quiet atmosphere with complimentary coffee\n\n2. **Cafe Moderna** - $3/hr, 8 mins away\n   Relaxed vibe with power outlets at every table\n\n3. **Downtown Business Lounge** - $7/hr, 12 mins away\n   Professional setting with meeting rooms available\n\nWould you like to book one of these?";
-    }
-
-    // Check for travel/location queries
-    if (lowerMessage.includes("paris") || lowerMessage.includes("travel") || lowerMessage.includes("staying")) {
-      return "Great! For Paris, I recommend checking our partner workspaces:\n\n• **Le Marais Workspace** - Historic district, €6/hr\n• **Montmartre Creative Hub** - Artistic area, €8/hr\n• **Latin Quarter Study Lounge** - Student-friendly, €4/hr\n\nI can set up alerts for when you arrive. What dates will you be there?";
-    }
-
-    // Check for amenity-based queries
-    if (lowerMessage.includes("quiet") || lowerMessage.includes("silent") || lowerMessage.includes("no noise")) {
-      return "Here are our quietest spaces:\n\n1. **Downtown Business Lounge** - No loud music policy, $7/hr\n2. **The Grand Hotel Lobby** - Library-quiet atmosphere, $5/hr\n\nBoth have 4.8+ ratings for peaceful work environments!";
-    }
-
-    if (lowerMessage.includes("coffee") || lowerMessage.includes("drinks") || lowerMessage.includes("beverage")) {
-      return "Workspaces with great coffee:\n\n1. **Cafe Moderna** - Specialty coffee included, $3/hr\n2. **The Grand Hotel Lobby** - Complimentary coffee & tea, $5/hr\n\nBoth offer free refills during your booking!";
-    }
-
-    // Check for price-related queries
-    if (lowerMessage.includes("cheap") || lowerMessage.includes("affordable") || lowerMessage.includes("budget")) {
-      return "Here are our most affordable options:\n\n1. **Cafe Moderna** - $3/hr\n2. **Riverside Coffee House** - $4/hr\n3. **The Grand Hotel Lobby** - $5/hr\n\nAll include WiFi and power outlets!";
-    }
-
-    // Default response
-    return "I can help you find the perfect workspace! Try asking me:\n\n• 'Show me quiet places nearby'\n• 'Find affordable spaces with good coffee'\n• 'I need a workspace in [neighborhood]'\n• 'Places that allow phone calls'\n\nWhat are you looking for?";
-  };
-
-  const handleSend = () => {
-    if (!input.trim()) return;
-
+    const userText = input.trim();
     const userMessage: Message = {
       id: Date.now().toString(),
-      text: input,
+      text: userText,
       sender: "user",
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
+    setIsTyping(true);
 
-    // Simulate AI response delay
-    setTimeout(() => {
+    try {
+      const data = await api.getChatbotReply(userText);
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: generateAIResponse(input),
+        text: data.response,
         sender: "ai",
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, aiMessage]);
-    }, 1000);
+    } catch (err) {
+      console.error("Chatbot request failed:", err);
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: "I'm sorry, I failed to fetch recommendations from the AI agent. Please check your connectivity and try again.",
+        sender: "ai",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, aiMessage]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   return (
@@ -92,7 +76,7 @@ export function ChatBot() {
       >
         <Button
           size="lg"
-          className="size-16 rounded-full shadow-lg"
+          className="size-16 rounded-full shadow-lg cursor-pointer"
           style={{ backgroundColor: '#2f8a64' }}
           onClick={() => setIsOpen(!isOpen)}
         >
@@ -145,6 +129,15 @@ export function ChatBot() {
                         </div>
                       </div>
                     ))}
+                    
+                    {isTyping && (
+                      <div className="flex justify-start">
+                        <div className="bg-muted max-w-[80%] rounded-lg px-4 py-2 text-muted-foreground flex items-center gap-2 text-xs">
+                          <Loader2 className="animate-spin size-3.5 text-emerald-600" />
+                          Thinking...
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </ScrollArea>
 
@@ -161,11 +154,13 @@ export function ChatBot() {
                       onChange={(e) => setInput(e.target.value)}
                       placeholder="Ask me anything..."
                       className="flex-1"
+                      disabled={isTyping}
                     />
                     <Button
                       type="submit"
                       size="icon"
                       style={{ backgroundColor: '#2f8a64' }}
+                      disabled={isTyping}
                     >
                       <Send className="size-4" />
                     </Button>
