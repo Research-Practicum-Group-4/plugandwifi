@@ -95,6 +95,10 @@ class VenueResponse(BaseModel):
 
     distance_km: float | None = None
 
+    busyness_score: int | None = None
+
+    busyness_label: str | None = None
+
     class Config:
         from_attributes = True
 
@@ -266,6 +270,10 @@ class VenueDetailResponse(BaseModel):
     hourly_price: float | None = None
     
     actual_hourly_price: float | None = None
+
+    busyness_score: int | None = None
+
+    busyness_label: str | None = None
 
     class Config:
         from_attributes = True

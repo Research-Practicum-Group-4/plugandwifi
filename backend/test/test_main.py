@@ -314,6 +314,36 @@ def test_get_venues_with_data():
     assert data["items"][0]["hourly_fee"] == 3.5
     assert data["items"][0]["opening_hours_summary"] == "Mo-Fr 09:00-17:00"
 
+
+def test_get_venues_includes_busyness_fields(monkeypatch):
+    def fake_get_busyness_predictions(venue_ids, hour=None, day_type=None):
+        return {
+            "osm_296568074": {
+                "busyness_score": 32,
+                "busyness_label": "Low"
+            },
+            "osm_296568075": {
+                "busyness_score": 85,
+                "busyness_label": "High"
+            }
+        }
+
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        fake_get_busyness_predictions
+    )
+
+    response = client.get("/api/venues?borough=Dublin South")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["items"][0]["busyness_score"] == 32
+    assert data["items"][0]["busyness_label"] == "Low"
+    assert data["items"][1]["busyness_score"] == 85
+    assert data["items"][1]["busyness_label"] == "High"
+
+
 def test_get_venues_pagination_metadata():
     first_page = client.get("/api/venues?borough=Dublin South&limit=1&page=1")
     assert first_page.status_code == 200
@@ -1607,6 +1637,28 @@ def test_get_venue_by_id():
     # Non-existent venue ID lookup
     res_404 = client.get("/api/venues/ghost_venue_id")
     assert res_404.status_code == 404
+
+
+def test_get_venue_by_id_includes_busyness_fields(monkeypatch):
+    def fake_get_busyness_predictions(venue_ids, hour=None, day_type=None):
+        return {
+            "osm_296568074": {
+                "busyness_score": 32,
+                "busyness_label": "Low"
+            }
+        }
+
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        fake_get_busyness_predictions
+    )
+
+    response = client.get("/api/venues/osm_296568074")
+
+    assert response.status_code == 200
+    assert response.json()["busyness_score"] == 32
+    assert response.json()["busyness_label"] == "Low"
 
 
 def test_get_venue_availability_returns_real_slots():
