@@ -65,7 +65,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import httpx
 import os
+import sys
 import uuid
+from pathlib import Path
 
 
 def get_free_cancellation_hours():
@@ -108,6 +110,159 @@ def get_gemini_model():
         "GEMINI_MODEL",
         "gemini-2.0-flash"
     )
+
+
+def get_busyness_model_path():
+    return os.getenv(
+        "BUSYNESS_MODEL_PATH",
+        "data-ml/models/busyness_predictor.joblib"
+    )
+
+
+def get_busyness_venues_csv_path():
+    return os.getenv(
+        "BUSYNESS_VENUES_CSV",
+        "data/processed/nyc_venues.csv"
+    )
+
+
+def get_default_day_type():
+    if date.today().weekday() >= 5:
+        return "weekend"
+
+    return "weekday"
+
+
+def get_busyness_predictions(
+    venue_ids: list[str],
+    hour: int | None = None,
+    day_type: str | None = None
+):
+    if not venue_ids:
+        return {}
+
+    model_path = Path(get_busyness_model_path())
+    venues_csv_path = Path(get_busyness_venues_csv_path())
+    data_ml_src_path = Path("data-ml/src")
+
+    if (
+        not model_path.exists()
+        or not venues_csv_path.exists()
+        or not data_ml_src_path.exists()
+    ):
+        return {}
+
+    if str(data_ml_src_path) not in sys.path:
+        sys.path.append(str(data_ml_src_path))
+
+    try:
+        import pandas as pd
+        from busyness_predictor import load_busyness_predictor
+
+        predictor = load_busyness_predictor(
+            str(model_path)
+        )
+        venues = pd.read_csv(
+            venues_csv_path
+        )
+        selected_venues = venues[
+            venues["venue_id"].isin(venue_ids)
+        ]
+
+        if selected_venues.empty:
+            return {}
+
+        prediction_results = predictor.predict_many(
+            selected_venues,
+            hour=hour if hour is not None else datetime.now().hour,
+            day_type=day_type or get_default_day_type()
+        )
+    except Exception:
+        return {}
+
+    return {
+        result["venue_id"]: {
+            "busyness_score": result.get("busyness_score"),
+            "busyness_label": result.get("busyness_label")
+        }
+        for result in prediction_results
+    }
+
+
+def build_venue_response(
+    venue: Venue,
+    distance_km=None,
+    busyness=None
+):
+    busyness = busyness or {}
+
+    return {
+        "venue_id": venue.venue_id,
+        "name": venue.name,
+        "state": venue.state,
+        "lat": venue.lat,
+        "lon": venue.lon,
+        "borough": venue.borough,
+        "cuisine_type": venue.cuisine_type,
+        "has_wifi": venue.has_wifi,
+        "noise_level": venue.noise_level,
+        "noise_score": venue.noise_score,
+        "rating": venue.rating,
+        "plug_access": venue.plug_access,
+        "hourly_price": venue.hourly_price,
+        "plugs_available": venue.plug_access,
+        "hourly_fee": venue.hourly_price,
+        "availability_window": None,
+        "opening_hours_summary": venue.opening_hours,
+        "distance_km": distance_km,
+        "busyness_score": busyness.get("busyness_score"),
+        "busyness_label": busyness.get("busyness_label")
+    }
+
+
+def build_venue_detail_response(
+    venue: Venue,
+    busyness=None
+):
+    busyness = busyness or {}
+
+    return {
+        "venue_id": venue.venue_id,
+        "name": venue.name,
+        "state": venue.state,
+        "osm_type": venue.osm_type,
+        "cuisine_type": venue.cuisine_type,
+        "cuisine_detail": venue.cuisine_detail,
+        "phone": venue.phone,
+        "website": venue.website,
+        "building_number": venue.building_number,
+        "street": venue.street,
+        "zipcode": venue.zipcode,
+        "lat": venue.lat,
+        "lon": venue.lon,
+        "opening_hours": venue.opening_hours,
+        "has_wifi": venue.has_wifi,
+        "noise_level": venue.noise_level,
+        "noise_score": venue.noise_score,
+        "best_hours_for_work": venue.best_hours_for_work,
+        "hourly_profile": venue.hourly_profile,
+        "partner": venue.partner,
+        "borough": venue.borough,
+        "inferred_wifi": venue.inferred_wifi,
+        "wifi_user_reported": venue.wifi_user_reported,
+        "nearest_subway": venue.nearest_subway,
+        "nearest_subway_m": venue.nearest_subway_m,
+        "nearest_bus": venue.nearest_bus,
+        "nearest_bus_m": venue.nearest_bus_m,
+        "plug_access": venue.plug_access,
+        "plug_user_reported": venue.plug_user_reported,
+        "rating": venue.rating,
+        "rating_user_reported": venue.rating_user_reported,
+        "hourly_price": venue.hourly_price,
+        "actual_hourly_price": venue.actual_hourly_price,
+        "busyness_score": busyness.get("busyness_score"),
+        "busyness_label": busyness.get("busyness_label")
+    }
 
 
 def call_gemini_chatbot(
@@ -1393,27 +1548,19 @@ def get_venues(
             for venue in venues
         ]
 
+    busyness_predictions = get_busyness_predictions(
+        [
+            venue.venue_id
+            for venue, _ in selected_venues
+        ]
+    )
+
     items = [
-        {
-            "venue_id": venue.venue_id,
-            "name": venue.name,
-            "state": venue.state,
-            "lat": venue.lat,
-            "lon": venue.lon,
-            "borough": venue.borough,
-            "cuisine_type": venue.cuisine_type,
-            "has_wifi": venue.has_wifi,
-            "noise_level": venue.noise_level,
-            "noise_score": venue.noise_score,
-            "rating": venue.rating,
-            "plug_access": venue.plug_access,
-            "hourly_price": venue.hourly_price,
-            "plugs_available": venue.plug_access,
-            "hourly_fee": venue.hourly_price,
-            "availability_window": None,
-            "opening_hours_summary": venue.opening_hours,
-            "distance_km": distance_km
-        }
+        build_venue_response(
+            venue,
+            distance_km,
+            busyness_predictions.get(venue.venue_id)
+        )
         for venue, distance_km in selected_venues
     ]
 
@@ -1504,7 +1651,16 @@ def get_venue_by_id(
             detail = "Venue not found"
         )
     
-    return venue
+    busyness_predictions = get_busyness_predictions(
+        [
+            venue.venue_id
+        ]
+    )
+
+    return build_venue_detail_response(
+        venue,
+        busyness_predictions.get(venue.venue_id)
+    )
 
 
 @app.get(
