@@ -7,20 +7,32 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Label } from "../components/ui/label";
 import { Slider } from "../components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Search, Star, Wifi, Volume2, Filter, Clock } from "lucide-react";
+import { Search, Star, Wifi, Volume2, Filter, Clock, MapPin, Sparkles } from "lucide-react";
 import { api } from "../../services/api";
 import { Venue } from "../../types/api";
 import { MapView } from "../components/MapView";
 
 const LANDMARKS: Record<string, { lat: number; lon: number }> = {
-  "times square": { lat: 40.7580, lon: -73.9855 },
-  "central park": { lat: 40.7829, lon: -73.9654 },
-  "empire state building": { lat: 40.7484, lon: -73.9857 },
-  "grand canal dock": { lat: 53.3421, lon: -6.2397 },
-  "ranelagh": { lat: 53.3262, lon: -6.2546 },
-  "belfield": { lat: 53.3078, lon: -6.2230 },
-  "dublin": { lat: 53.3498, lon: -6.2603 },
-  "manhattan": { lat: 40.7831, lon: -73.9712 },
+  "Times Square": { lat: 40.7580, lon: -73.9855 },
+  "Central Park": { lat: 40.7829, lon: -73.9654 },
+  "Empire State Building": { lat: 40.7484, lon: -73.9857 },
+  "Grand Central Terminal": { lat: 40.7527, lon: -73.9772 },
+  "Bryant Park": { lat: 40.7536, lon: -73.9832 },
+  "Rockefeller Center": { lat: 40.7587, lon: -73.9787 },
+  "Columbus Circle": { lat: 40.7681, lon: -73.9819 },
+  "Union Square": { lat: 40.7359, lon: -73.9911 },
+  "Washington Square Park": { lat: 40.7308, lon: -73.9973 },
+  "Madison Square Park": { lat: 40.7420, lon: -73.9880 },
+  "Flatiron Building": { lat: 40.7411, lon: -73.9897 },
+  "Chelsea Market": { lat: 40.7420, lon: -74.0062 },
+  "The High Line": { lat: 40.7480, lon: -74.0048 },
+  "Hudson Yards": { lat: 40.7538, lon: -74.0022 },
+  "Penn Station": { lat: 40.7505, lon: -73.9934 },
+  "Wall Street": { lat: 40.7074, lon: -74.0113 },
+  "World Trade Center": { lat: 40.7126, lon: -74.0099 },
+  "Battery Park": { lat: 40.7033, lon: -74.0170 },
+  "Columbia University": { lat: 40.8075, lon: -73.9626 },
+  "NYU": { lat: 40.7295, lon: -73.9965 },
 };
 
 export function SearchPage() {
@@ -37,23 +49,73 @@ export function SearchPage() {
     fourPlusStars: false,
   });
   const [priceRange, setPriceRange] = useState([1, 10]);
-  const [venues, setVenues] = useState<Venue[]>([]);
+  
+  // paginatedVenues for List View; allVenues for Map View
+  const [paginatedVenues, setPaginatedVenues] = useState<Venue[]>([]);
+  const [allVenues, setAllVenues] = useState<Venue[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [limit] = useState(10);
+  const [limit] = useState(6);
   const [hasMore, setHasMore] = useState(false);
+  const [totalPages, setTotalPages] = useState(1);
+
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [autocompleteItems, setAutocompleteItems] = useState<{ name: string; type: "landmark" | "venue"; id?: string; coords?: { lat: number; lon: number } }[]>([]);
 
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
 
-  // Debounce search query to limit geocoding API hits
+  // Debounce search input to limit suggestions / geocoding queries
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
-    }, 500);
+    }, 400);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Sync state variables back to URL search params & sessionStorage
+  // Handle Autocomplete List Filtering
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setAutocompleteItems([]);
+      return;
+    }
+
+    const clean = searchQuery.trim().toLowerCase();
+
+    // 1. Match local Manhattan landmarks
+    const matchedLandmarks = Object.entries(LANDMARKS)
+      .filter(([name]) => name.toLowerCase().includes(clean))
+      .map(([name, coords]) => ({
+        name,
+        type: "landmark" as const,
+        coords
+      }));
+
+    // 2. Fetch matching venue suggestions from backend suggestions API
+    const fetchVenueSuggestions = async () => {
+      try {
+        const res = await api.getSuggestions(searchQuery.trim(), 6);
+        const matchedVenues = res.items.map(v => ({
+          name: v.name,
+          type: "venue" as const,
+          id: v.venue_id
+        }));
+
+        setAutocompleteItems([...matchedLandmarks, ...matchedVenues]);
+      } catch (err) {
+        console.warn("Autocomplete suggestions API failed:", err);
+        setAutocompleteItems(matchedLandmarks);
+      }
+    };
+
+    const delayDebounceFn = setTimeout(() => {
+      fetchVenueSuggestions();
+    }, 150);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery]);
+
+  // Sync state back to URL parameters & sessionStorage
   useEffect(() => {
     const params: any = {};
     if (searchQuery) params.query = searchQuery;
@@ -69,84 +131,117 @@ export function SearchPage() {
     sessionStorage.setItem("seatsRequired", seatsRequired.toString());
   }, [searchQuery, searchDate, startTime, endTime, seatsRequired]);
 
+  // Main Data Fetching Engine (No Backend Modifications)
   useEffect(() => {
-    const fetchVenues = async () => {
+    const executeQuery = async () => {
       setLoading(true);
 
       let lat: number | undefined = undefined;
       let lon: number | undefined = undefined;
       let nameFilter: string | undefined = undefined;
+      let isLandmarkSearch = false;
 
       if (debouncedSearchQuery) {
         const clean = debouncedSearchQuery.trim().toLowerCase();
-        let matched = false;
 
-        // Local lookup for instant matching
-        for (const [key, coords] of Object.entries(LANDMARKS)) {
-          if (clean.includes(key) || key.includes(clean)) {
+        // Check Manhattan Landmark dictionary
+        for (const [name, coords] of Object.entries(LANDMARKS)) {
+          if (clean.includes(name.toLowerCase()) || name.toLowerCase().includes(clean)) {
             lat = coords.lat;
             lon = coords.lon;
-            matched = true;
+            isLandmarkSearch = true;
             break;
           }
         }
 
-        // Fallback to OSM Nominatim API if no local match is found
-        if (!matched) {
-          try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(debouncedSearchQuery)}&limit=1`);
-            const data = await res.json();
-            if (data && data.length > 0) {
-              lat = parseFloat(data[0].lat);
-              lon = parseFloat(data[0].lon);
-              matched = true;
-            }
-          } catch (e) {
-            console.warn("OSM Geocoding API failed:", e);
-          }
-        }
-
-        // If it is not a landmark (no coordinates resolved), query standard venues
-        if (!matched) {
+        // If not a landmark, we treat it as a database venue name search (uses suggestions query match)
+        if (!isLandmarkSearch) {
           nameFilter = debouncedSearchQuery;
         }
       }
 
       try {
-        const data = await api.getVenues({
+        const queryParams = {
           noise_level: filters.noLoudMusic ? "quiet" : undefined,
           wifi_free: filters.freeWifi ? true : undefined,
           max_price: priceRange[1],
-          page: currentPage,
-          limit: limit,
-          name: nameFilter,
-          lat,
-          lon,
-          radius: (lat !== undefined && lon !== undefined) ? 2.0 : undefined,
           date: searchDate || undefined,
           start_time: startTime ? `${startTime}:00` : undefined,
           end_time: endTime ? `${endTime}:00` : undefined,
           seats_required: seatsRequired,
-        });
+        };
 
-        let result = [...data.items];
-        setHasMore(data.has_more);
+        if (isLandmarkSearch && lat !== undefined && lon !== undefined) {
+          // Landmark Search: Fetch all matching venues within a 2km radius
+          const allData = await api.getVenues({
+            ...queryParams,
+            lat,
+            lon,
+            radius: 2.0,
+            page: 1,
+            limit: 1000 // get all matches for map & client pagination
+          });
 
-        // Local filters for ratings and price range
-        if (filters.fourPlusStars) {
-          result = result.filter(v => v.rating >= 4.0);
+          let matched = [...allData.items];
+          if (filters.fourPlusStars) {
+            matched = matched.filter(v => v.rating >= 4.0);
+          }
+          matched = matched.filter(v => v.hourly_price >= priceRange[0] && v.hourly_price <= priceRange[1]);
+
+          setAllVenues(matched);
+          setTotalPages(Math.ceil(matched.length / limit) || 1);
+          setPaginatedVenues(matched.slice((currentPage - 1) * limit, currentPage * limit));
+          setHasMore(matched.length > currentPage * limit);
+        } 
+        else if (nameFilter) {
+          // Venue Name Search: Fetch all matching venues and filter locally
+          const allData = await api.getVenues({
+            ...queryParams,
+            page: 1,
+            limit: 1000
+          });
+
+          let matched = allData.items.filter(v => v.name.toLowerCase().includes(nameFilter!.toLowerCase()));
+          if (filters.fourPlusStars) {
+            matched = matched.filter(v => v.rating >= 4.0);
+          }
+          matched = matched.filter(v => v.hourly_price >= priceRange[0] && v.hourly_price <= priceRange[1]);
+
+          setAllVenues(matched);
+          setTotalPages(Math.ceil(matched.length / limit) || 1);
+          setPaginatedVenues(matched.slice((currentPage - 1) * limit, currentPage * limit));
+          setHasMore(matched.length > currentPage * limit);
+        } 
+        else {
+          // Standard Search (No Query text): fetch dynamically using standard endpoints
+          const [allData, pageData] = await Promise.all([
+            api.getVenues({ ...queryParams, page: 1, limit: 1000 }),
+            api.getVenues({ ...queryParams, page: currentPage, limit: limit })
+          ]);
+
+          let finalAll = [...allData.items];
+          let finalPage = [...pageData.items];
+
+          if (filters.fourPlusStars) {
+            finalAll = finalAll.filter(v => v.rating >= 4.0);
+            finalPage = finalPage.filter(v => v.rating >= 4.0);
+          }
+          finalAll = finalAll.filter(v => v.hourly_price >= priceRange[0] && v.hourly_price <= priceRange[1]);
+          finalPage = finalPage.filter(v => v.hourly_price >= priceRange[0] && v.hourly_price <= priceRange[1]);
+
+          setAllVenues(finalAll);
+          setPaginatedVenues(finalPage);
+          setTotalPages(pageData.total_pages || 1);
+          setHasMore(pageData.has_more);
         }
-        result = result.filter(v => v.hourly_price >= priceRange[0] && v.hourly_price <= priceRange[1]);
-
-        setVenues(result);
       } catch (err) {
-        console.error("Failed to fetch venues:", err);
+        console.error("Failed to load search data:", err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchVenues();
+    executeQuery();
   }, [filters, debouncedSearchQuery, priceRange, currentPage, limit, searchDate, startTime, endTime, seatsRequired]);
 
   const getVenueImage = (venueId: string) => {
@@ -168,7 +263,6 @@ export function SearchPage() {
     if (venue.seats_avail > 0) amenities.push(`${venue.seats_avail} seats left`);
     return amenities;
   };
-
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -248,7 +342,7 @@ export function SearchPage() {
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-4 border-t pt-4">
             <h3 className="mb-4 flex items-center gap-2">
               <Clock className="size-5" />
               Availability
@@ -279,7 +373,7 @@ export function SearchPage() {
                       setStartTime(e.target.value);
                       setCurrentPage(1);
                     }}
-                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <option value="">Any</option>
                     {Array.from({ length: 15 }, (_, i) => {
@@ -299,7 +393,7 @@ export function SearchPage() {
                       setEndTime(e.target.value);
                       setCurrentPage(1);
                     }}
-                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <option value="">Any</option>
                     {Array.from({ length: 15 }, (_, i) => {
@@ -320,7 +414,7 @@ export function SearchPage() {
                     setSeatsRequired(parseInt(e.target.value));
                     setCurrentPage(1);
                   }}
-                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {[1, 2, 3, 4, 5, 6, 8, 10].map((num) => (
                     <option key={num} value={num}>{num} {num === 1 ? "seat" : "seats"}</option>
@@ -332,7 +426,7 @@ export function SearchPage() {
 
           <Button
             variant="outline"
-            className="w-full"
+            className="w-full cursor-pointer"
             onClick={() => {
               setFilters({ freeWifi: false, noLoudMusic: false, fourPlusStars: false });
               setPriceRange([1, 10]);
@@ -354,14 +448,47 @@ export function SearchPage() {
             <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
               <Input
-                placeholder="Search by city or venue name..."
+                placeholder="Search by landmark or venue name..."
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
                   setCurrentPage(1);
+                  setShowSuggestions(true);
                 }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                 className="pl-10 h-12"
               />
+
+              {/* Autocomplete Suggestions Panel */}
+              {showSuggestions && autocompleteItems.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-popover text-popover-foreground border rounded-md shadow-lg z-50 max-h-[250px] overflow-y-auto">
+                  {autocompleteItems.map((item, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery(item.name);
+                        setShowSuggestions(false);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full text-left px-4 py-2.5 hover:bg-accent hover:text-accent-foreground text-sm flex items-center justify-between border-b border-border last:border-0 cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        {item.type === "landmark" ? (
+                          <MapPin className="size-4 text-emerald-600" />
+                        ) : (
+                          <Sparkles className="size-4 text-sky-500" />
+                        )}
+                        <span className="font-medium">{item.name}</span>
+                      </span>
+                      <span className="text-xs text-muted-foreground capitalize">
+                        {item.type}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <Tabs defaultValue="list" className="w-full">
@@ -372,15 +499,15 @@ export function SearchPage() {
 
               <TabsContent value="list" className="space-y-4">
                 <p className="text-muted-foreground">
-                  {venues.length} spaces available
+                  {allVenues.length} spaces available
                 </p>
 
                 {loading ? (
                   <div className="text-center py-12 text-muted-foreground">Loading workspaces...</div>
-                ) : venues.length === 0 ? (
+                ) : paginatedVenues.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">No spaces found matching filters.</div>
                 ) : (
-                  venues.map((venue) => (
+                  paginatedVenues.map((venue) => (
                     <Card key={venue.venue_id} className="overflow-hidden hover:shadow-lg transition-shadow">
                       <div className="grid md:grid-cols-[250px_1fr] gap-4">
                         <div className="aspect-video md:aspect-square overflow-hidden">
@@ -395,15 +522,12 @@ export function SearchPage() {
                             <div>
                               <h3 className="mb-1">{venue.name}</h3>
                               <p className="text-muted-foreground">
-                                {venue.cuisine_type} • {venue.distance_km} km away
+                                {venue.cuisine_type} • {venue.distance_km ? `${venue.distance_km} km away` : venue.borough}
                               </p>
                             </div>
                             <div className="flex items-center gap-1">
                               <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
                               <span>{venue.rating}</span>
-                              <span className="text-muted-foreground">
-                                ({venue.seats_avail * 3 + 12})
-                              </span>
                             </div>
                           </div>
 
@@ -438,7 +562,7 @@ export function SearchPage() {
                                   seatsRequired
                                 }}
                               >
-                                <Button style={{ backgroundColor: '#253c50' }}>
+                                <Button style={{ backgroundColor: '#253c50' }} className="cursor-pointer">
                                   Book a Space
                                 </Button>
                               </Link>
@@ -450,8 +574,8 @@ export function SearchPage() {
                   ))
                 )}
 
-                {/* Pagination controls */}
-                {!loading && venues.length > 0 && (
+                {/* Pagination UI Indicator */}
+                {!loading && paginatedVenues.length > 0 && (
                   <div className="flex items-center justify-center gap-4 mt-8">
                     <Button
                       variant="outline"
@@ -460,12 +584,12 @@ export function SearchPage() {
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
                       disabled={currentPage === 1}
-                      className="px-4 py-2"
+                      className="px-4 py-2 cursor-pointer"
                     >
                       Previous
                     </Button>
                     <span className="text-sm font-semibold text-foreground bg-muted px-3 py-1.5 rounded-md">
-                      Page {currentPage}
+                      Page {currentPage} of {totalPages}
                     </span>
                     <Button
                       variant="outline"
@@ -474,7 +598,7 @@ export function SearchPage() {
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
                       disabled={!hasMore}
-                      className="px-4 py-2"
+                      className="px-4 py-2 cursor-pointer"
                     >
                       Next
                     </Button>
@@ -489,7 +613,7 @@ export function SearchPage() {
                       Loading map and active venues...
                     </div>
                   ) : (
-                    <MapView venues={venues} height="600px" />
+                    <MapView venues={allVenues} height="600px" />
                   )}
                 </Card>
               </TabsContent>

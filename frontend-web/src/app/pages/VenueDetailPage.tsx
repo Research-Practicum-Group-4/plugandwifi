@@ -103,9 +103,42 @@ export function VenueDetailPage() {
     });
   };
 
-  const handleSave = () => {
-    setIsSaved(!isSaved);
-    toast.success(isSaved ? "Removed from saved places" : "Added to saved places");
+  useEffect(() => {
+    if (!id) return;
+    const favsStr = localStorage.getItem("plugandwifi_favorites");
+    const favs = favsStr ? JSON.parse(favsStr) : [];
+    setIsSaved(favs.includes(id));
+  }, [id]);
+
+  const handleSave = async () => {
+    if (!venue) return;
+    try {
+      const favsStr = localStorage.getItem("plugandwifi_favorites");
+      let favs: string[] = favsStr ? JSON.parse(favsStr) : [];
+      
+      if (isSaved) {
+        await api.removeFavorite(venue.venue_id);
+        favs = favs.filter(fid => fid !== venue.venue_id);
+        localStorage.setItem("plugandwifi_favorites", JSON.stringify(favs));
+        setIsSaved(false);
+        toast.success("Removed from saved places");
+      } else {
+        await api.addFavorite(venue.venue_id);
+        if (!favs.includes(venue.venue_id)) {
+          favs.push(venue.venue_id);
+        }
+        localStorage.setItem("plugandwifi_favorites", JSON.stringify(favs));
+        setIsSaved(true);
+        toast.success("Added to saved places");
+      }
+    } catch (err: any) {
+      console.error("Failed to toggle favorite:", err);
+      if (err.response?.status === 401) {
+        toast.error("Please sign in to save workspaces.");
+      } else {
+        toast.error("Failed to update favorite status.");
+      }
+    }
   };
 
   const getVenueImages = (venueId: string) => {
