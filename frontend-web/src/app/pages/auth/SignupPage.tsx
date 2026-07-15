@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useState } from "react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
@@ -6,10 +6,52 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Separator } from "../../components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "../../components/ui/radio-group";
-import { MapPin } from "lucide-react";
+import { MapPin, Loader2 } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
+import { toast } from "sonner";
 
 export function SignupPage() {
   const [userType, setUserType] = useState("space-user");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const { register } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!firstName || !lastName || !email || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    if (password.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+
+    setLoading(true);
+    const fullName = `${firstName.trim()} ${lastName.trim()}`;
+
+    try {
+      await register(fullName, email, password);
+      toast.success("Account created!", {
+        description: "You can now log in with your credentials.",
+      });
+      navigate("/login");
+    } catch (err: any) {
+      console.error("Signup page submit failed:", err);
+      const errorMsg = err.response?.data?.detail || "Registration failed. Try again.";
+      toast.error("Signup failed", {
+        description: errorMsg,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="container mx-auto px-4 py-12 flex items-center justify-center min-h-[calc(100vh-200px)]">
@@ -26,7 +68,7 @@ export function SignupPage() {
         <CardContent className="space-y-6">
           <div className="space-y-3">
             <Label>I want to</Label>
-            <RadioGroup value={userType} onValueChange={setUserType}>
+            <RadioGroup value={userType} onValueChange={setUserType} disabled={loading}>
               <div className="flex items-center space-x-2 p-3 rounded-lg border">
                 <RadioGroupItem value="space-user" id="space-user" />
                 <Label htmlFor="space-user" className="cursor-pointer flex-1">
@@ -52,15 +94,29 @@ export function SignupPage() {
             </RadioGroup>
           </div>
 
-          <form className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="firstName">First Name</Label>
-                <Input id="firstName" placeholder="John" required />
+                <Input
+                  id="firstName"
+                  placeholder="John"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  required
+                  disabled={loading}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="lastName">Last Name</Label>
-                <Input id="lastName" placeholder="Doe" required />
+                <Input
+                  id="lastName"
+                  placeholder="Doe"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  required
+                  disabled={loading}
+                />
               </div>
             </div>
             <div className="space-y-2">
@@ -69,15 +125,32 @@ export function SignupPage() {
                 id="email"
                 type="email"
                 placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" required />
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={loading}
+              />
             </div>
-            <Button type="submit" className="w-full" size="lg">
-              Create Account
+            <Button type="submit" className="w-full" size="lg" disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating Account...
+                </>
+              ) : (
+                "Create Account"
+              )}
             </Button>
           </form>
 
@@ -89,8 +162,8 @@ export function SignupPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Button variant="outline">Google</Button>
-            <Button variant="outline">Apple</Button>
+            <Button variant="outline" disabled={loading}>Google</Button>
+            <Button variant="outline" disabled={loading}>Apple</Button>
           </div>
 
           <p className="text-center text-sm text-muted-foreground">
@@ -104,3 +177,4 @@ export function SignupPage() {
     </div>
   );
 }
+
