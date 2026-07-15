@@ -11,12 +11,12 @@ CSV_OUT = "data/processed/nyc_venues.csv"
 
 
 def extract_subway_lines(station_complex):
-    groups = re.findall(r"\(([^()]*)\)", str(station_complex))
+    m = re.findall(r"\(([^()]*)\)", str(station_complex))
 
-    if not groups:
+    if not m:
         return []
 
-    route_group = groups[-1]
+    route_group = m[-1]
 
     return [
         line.strip()
@@ -130,16 +130,3 @@ def apply_to_venues(db_path: str = "data/processed/venues.db"):
 
 if __name__ == "__main__":
     df = apply_to_venues()
-
-    print(
-        df[
-            [
-                "name",
-                "nearest_mta_station",
-                "nearest_mta_station_m",
-                "nearest_mta_line_count",
-            ]
-        ]
-        .head(20)
-        .to_string(index=False)
-    )

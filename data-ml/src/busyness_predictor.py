@@ -4,16 +4,8 @@ import joblib
 
 
 class BusynessPredictor:
-    def __init__(
-        self,
-        model,
-        feature_names,
-        day_type_mapping,
-        score_low,
-        score_high,
-        low_max=33,
-        medium_max=66,
-    ):
+    def __init__(self, model, feature_names, day_type_mapping, score_low, score_high, low_max=33, medium_max=66,):
+
         self.model = model
         self.feature_names = feature_names
         self.day_type_mapping = day_type_mapping
@@ -86,6 +78,5 @@ class BusynessPredictor:
 
 
 def load_busyness_predictor(
-    model_path="data-ml/models/busyness_predictor.joblib",
-):
+    model_path="data-ml/models/busyness_predictor.joblib"):
     return joblib.load(model_path)
