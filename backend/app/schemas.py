@@ -52,11 +52,32 @@ class ChatbotRecommendRequest(BaseModel):
     message: str = Field(min_length=1)
 
 
+class ChatbotSearchParameters(BaseModel):
+
+    location: str | None = None
+
+    radius_km: float | None = None
+
+    venue_type: str | None = None
+
+    wifi: bool | None = None
+
+    busyness: str | None = None
+
+    time: str | None = None
+
+
 class ChatbotRecommendResponse(BaseModel):
 
     response: str
 
     model: str
+
+    search_parameters: ChatbotSearchParameters | None = None
+
+    venues: list["VenueResponse"] = Field(default_factory=list)
+
+    follow_up_question: str | None = None
 
 
 class VenueResponse(BaseModel):
