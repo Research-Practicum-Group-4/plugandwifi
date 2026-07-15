@@ -25,6 +25,7 @@ from .schemas import (
     UserLogin,
     ChatbotRecommendRequest,
     ChatbotRecommendResponse,
+    ChatbotSearchParameters,
     VenueListResponse,
     VenueSuggestionsResponse,
     VenueCreate,
@@ -64,7 +65,9 @@ from math import asin, cos, radians, sin, sqrt
 from fastapi.middleware.cors import CORSMiddleware
 
 import httpx
+import json
 import os
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -263,6 +266,392 @@ def build_venue_detail_response(
         "busyness_score": busyness.get("busyness_score"),
         "busyness_label": busyness.get("busyness_label")
     }
+
+
+def extract_json_object(text_value: str):
+    try:
+        return json.loads(text_value)
+    except json.JSONDecodeError:
+        pass
+
+    match = re.search(
+        r"\{.*\}",
+        text_value,
+        re.DOTALL
+    )
+
+    if not match:
+        return None
+
+    try:
+        return json.loads(
+            match.group(0)
+        )
+    except json.JSONDecodeError:
+        return None
+
+
+def call_gemini_search_parameter_extraction(
+    message: str
+):
+    api_key = os.getenv("GEMINI_API_KEY")
+
+    if not api_key:
+        return None
+
+    model = get_gemini_model()
+    url = (
+        "https://generativelanguage.googleapis.com/"
+        f"v1beta/models/{model}:generateContent"
+    )
+    prompt = (
+        "Extract venue search parameters from the user message. "
+        "Return only JSON with these keys: location, radius_km, "
+        "venue_type, wifi, busyness, time. Use null when unknown. "
+        "busyness must be one of low, moderate, high, or null. "
+        f"User message: {message}"
+    )
+
+    try:
+        response = httpx.post(
+            url,
+            params={
+                "key": api_key
+            },
+            json={
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0.1,
+                    "maxOutputTokens": 256
+                }
+            },
+            timeout=15
+        )
+        response.raise_for_status()
+        data = response.json()
+    except httpx.HTTPError:
+        return None
+
+    candidates = data.get("candidates") or []
+    parts = (
+        candidates[0]
+        .get("content", {})
+        .get("parts", [])
+        if candidates else []
+    )
+    text_parts = [
+        part.get("text", "")
+        for part in parts
+        if part.get("text")
+    ]
+
+    return extract_json_object(
+        "\n".join(text_parts).strip()
+    )
+
+
+def normalize_busyness_preference(
+    value
+):
+    if value is None:
+        return None
+
+    lowered_value = str(value).strip().lower()
+
+    if lowered_value in {"low", "quiet", "not busy", "less busy"}:
+        return "low"
+
+    if lowered_value in {"moderate", "medium"}:
+        return "moderate"
+
+    if lowered_value in {"high", "busy", "crowded"}:
+        return "high"
+
+    return None
+
+
+def infer_chatbot_search_parameters(
+    message: str
+):
+    extracted = call_gemini_search_parameter_extraction(
+        message
+    ) or {}
+    message_lower = message.lower()
+
+    radius_match = re.search(
+        r"(?:within|under|up to|inside)\s+(\d+(?:\.\d+)?)\s*(?:km|kilometer|kilometers)",
+        message_lower
+    )
+    radius_km = extracted.get("radius_km")
+
+    if radius_km is None and radius_match:
+        radius_km = float(
+            radius_match.group(1)
+        )
+
+    venue_type = extracted.get("venue_type")
+
+    for candidate in ("cafe", "library", "restaurant", "workspace", "study"):
+        if venue_type is None and candidate in message_lower:
+            venue_type = candidate
+
+    wifi = extracted.get("wifi")
+
+    if wifi is None:
+        if any(term in message_lower for term in ("wi-fi", "wifi", "wireless")):
+            wifi = True
+        elif "without wifi" in message_lower or "no wifi" in message_lower:
+            wifi = False
+
+    busyness = normalize_busyness_preference(
+        extracted.get("busyness")
+    )
+
+    if busyness is None:
+        if any(term in message_lower for term in ("not too busy", "less busy", "low busyness", "not crowded")):
+            busyness = "low"
+        elif "moderate" in message_lower:
+            busyness = "moderate"
+        elif "busy" in message_lower or "crowded" in message_lower:
+            busyness = "high"
+
+    requested_time = extracted.get("time")
+
+    if requested_time is None and any(term in message_lower for term in ("now", "current", "currently")):
+        requested_time = "now"
+
+    location = extracted.get("location")
+
+    if not location:
+        location_match = re.search(
+            r"(?:within\s+\d+(?:\.\d+)?\s*(?:km|kilometer|kilometers)\s+of|near|around|close to|in)\s+(.+?)(?:\s+that|\s+with|\s+and|\s+for|\s+where|\s+now|$)",
+            message,
+            re.IGNORECASE
+        )
+
+        if location_match:
+            location = location_match.group(1).strip(" .,!?:;")
+
+    return ChatbotSearchParameters(
+        location=location,
+        radius_km=radius_km,
+        venue_type=venue_type,
+        wifi=wifi,
+        busyness=busyness,
+        time=requested_time
+    )
+
+
+def has_chatbot_search_signal(
+    search_parameters: ChatbotSearchParameters
+):
+    return any(
+        value is not None
+        for value in (
+            search_parameters.location,
+            search_parameters.radius_km,
+            search_parameters.venue_type,
+            search_parameters.wifi,
+            search_parameters.busyness,
+            search_parameters.time
+        )
+    )
+
+
+def resolve_chatbot_location(
+    location: str | None,
+    db: Session
+):
+    if not location:
+        return None
+
+    search_term = location.strip().lower()
+
+    if not search_term:
+        return None
+
+    return (
+        db.query(Venue)
+        .filter(
+            func.coalesce(
+                Venue.state,
+                "Active"
+            ) != "Suspended"
+        )
+        .filter(
+            (
+                func.lower(Venue.name).like(f"%{search_term}%")
+            )
+            |
+            (
+                func.lower(Venue.borough).like(f"%{search_term}%")
+            )
+        )
+        .order_by(Venue.venue_id)
+        .first()
+    )
+
+
+def search_venues_for_chatbot(
+    search_parameters: ChatbotSearchParameters,
+    db: Session,
+    limit: int = 5
+):
+    query = db.query(Venue).filter(
+        func.coalesce(
+            Venue.state,
+            "Active"
+        ) != "Suspended"
+    )
+
+    if search_parameters.wifi is not None:
+        query = query.filter(
+            Venue.has_wifi == search_parameters.wifi
+        )
+
+    if search_parameters.venue_type:
+        venue_type = search_parameters.venue_type.lower()
+        query = query.filter(
+            (
+                func.lower(Venue.name).like(f"%{venue_type}%")
+            )
+            |
+            (
+                func.lower(Venue.cuisine_type).like(f"%{venue_type}%")
+            )
+            |
+            (
+                func.lower(Venue.cuisine_detail).like(f"%{venue_type}%")
+            )
+        )
+
+    resolved_location = resolve_chatbot_location(
+        search_parameters.location,
+        db
+    )
+
+    if search_parameters.location and resolved_location is None:
+        return [], False
+
+    venues_with_distance = []
+    venues = query.all()
+
+    for venue in venues:
+        distance_km = None
+
+        if resolved_location is not None:
+            if venue.lat is None or venue.lon is None:
+                continue
+
+            distance_km = calculate_distance_km(
+                resolved_location.lat,
+                resolved_location.lon,
+                venue.lat,
+                venue.lon
+            )
+
+            if (
+                search_parameters.radius_km is not None
+                and distance_km > search_parameters.radius_km
+            ):
+                continue
+
+        venues_with_distance.append(
+            (
+                venue,
+                distance_km
+            )
+        )
+
+    if resolved_location is not None:
+        venues_with_distance.sort(
+            key=lambda venue_with_distance: venue_with_distance[1]
+        )
+    else:
+        venues_with_distance.sort(
+            key=lambda venue_with_distance: venue_with_distance[0].venue_id
+        )
+
+    candidate_venues = [
+        venue
+        for venue, _ in venues_with_distance
+    ]
+    busyness_predictions = get_busyness_predictions(
+        [
+            venue.venue_id
+            for venue in candidate_venues
+        ]
+    )
+
+    if search_parameters.busyness:
+        venues_with_distance = [
+            (
+                venue,
+                distance_km
+            )
+            for venue, distance_km in venues_with_distance
+            if (
+                busyness_predictions.get(
+                    venue.venue_id,
+                    {}
+                ).get("busyness_label", "").lower()
+                == search_parameters.busyness.lower()
+            )
+        ]
+
+    selected_venues = venues_with_distance[:limit]
+
+    return [
+        build_venue_response(
+            venue,
+            distance_km,
+            busyness_predictions.get(venue.venue_id)
+        )
+        for venue, distance_km in selected_venues
+    ], True
+
+
+def build_chatbot_venue_response(
+    search_parameters: ChatbotSearchParameters,
+    venues: list[dict],
+    location_resolved: bool
+):
+    if not has_chatbot_search_signal(search_parameters):
+        return (
+            "Could you share the area, venue type, or workspace features you need?",
+            "Could you share the area, venue type, or workspace features you need?"
+        )
+
+    if not location_resolved:
+        return (
+            "I could not identify that location from the current venue data. Could you try a nearby venue name or borough?",
+            "Could you try a nearby venue name or borough?"
+        )
+
+    if not venues:
+        return (
+            "I could not find matching venues. Try increasing the radius or relaxing one of the filters.",
+            None
+        )
+
+    venue_names = ", ".join(
+        venue["name"]
+        for venue in venues[:3]
+    )
+
+    return (
+        f"I found {len(venues)} matching venue suggestion(s): {venue_names}.",
+        None
+    )
 
 
 def call_gemini_chatbot(
@@ -1036,7 +1425,8 @@ def health_check(db: Session = Depends(get_db)):
     response_model=ChatbotRecommendResponse
 )
 def recommend_workspace(
-    payload: ChatbotRecommendRequest
+    payload: ChatbotRecommendRequest,
+    db: Session = Depends(get_db)
 ):
     message = payload.message.strip()
 
@@ -1046,13 +1436,40 @@ def recommend_workspace(
             detail="message must not be blank"
         )
 
-    chatbot_response = call_gemini_chatbot(
+    search_parameters = infer_chatbot_search_parameters(
         message
+    )
+    if not has_chatbot_search_signal(search_parameters):
+        chatbot_response, follow_up_question = build_chatbot_venue_response(
+            search_parameters,
+            [],
+            True
+        )
+
+        return {
+            "response": chatbot_response,
+            "model": get_gemini_model(),
+            "search_parameters": search_parameters,
+            "venues": [],
+            "follow_up_question": follow_up_question
+        }
+
+    venues, location_resolved = search_venues_for_chatbot(
+        search_parameters,
+        db
+    )
+    chatbot_response, follow_up_question = build_chatbot_venue_response(
+        search_parameters,
+        venues,
+        location_resolved
     )
 
     return {
         "response": chatbot_response,
-        "model": get_gemini_model()
+        "model": get_gemini_model(),
+        "search_parameters": search_parameters,
+        "venues": venues,
+        "follow_up_question": follow_up_question
     }
 
 

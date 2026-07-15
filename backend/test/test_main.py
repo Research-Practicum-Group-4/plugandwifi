@@ -107,17 +107,24 @@ def test_postgresql_engine_options(monkeypatch):
     }
 
 
-def test_chatbot_recommend_returns_gemini_response(monkeypatch):
-    captured = {}
-
-    def fake_call_gemini_chatbot(message):
-        captured["message"] = message
-        return "Try UCD Library Shared Space for quiet study with Wi-Fi."
+def test_chatbot_recommend_returns_real_venue_suggestions(monkeypatch):
+    def fake_get_busyness_predictions(venue_ids, hour=None, day_type=None):
+        return {
+            "osm_296568074": {
+                "busyness_score": 32,
+                "busyness_label": "Low"
+            }
+        }
 
     monkeypatch.setattr(
         main_module,
-        "call_gemini_chatbot",
-        fake_call_gemini_chatbot
+        "call_gemini_search_parameter_extraction",
+        lambda message: None
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        fake_get_busyness_predictions
     )
     monkeypatch.setenv(
         "GEMINI_MODEL",
@@ -127,16 +134,112 @@ def test_chatbot_recommend_returns_gemini_response(monkeypatch):
     response = client.post(
         "/api/chatbot/recommend",
         json={
-            "message": "Find me a quiet place to study near UCD."
+            "message": "Find me a library with Wi-Fi near UCD that is not too busy now."
         }
     )
 
     assert response.status_code == 200
-    assert captured["message"] == "Find me a quiet place to study near UCD."
-    assert response.json() == {
-        "response": "Try UCD Library Shared Space for quiet study with Wi-Fi.",
-        "model": "gemini-test-model"
+    data = response.json()
+    assert data["model"] == "gemini-test-model"
+    assert data["search_parameters"] == {
+        "location": "UCD",
+        "radius_km": None,
+        "venue_type": "library",
+        "wifi": True,
+        "busyness": "low",
+        "time": "now"
     }
+    assert data["venues"][0]["venue_id"] == "osm_296568074"
+    assert data["venues"][0]["busyness_label"] == "Low"
+    assert data["follow_up_question"] is None
+
+
+def test_chatbot_recommend_uses_extracted_radius_and_location(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message: {
+            "location": "UCD Library",
+            "radius_km": 0.1,
+            "venue_type": None,
+            "wifi": True,
+            "busyness": None,
+            "time": "now"
+        }
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, hour=None, day_type=None: {}
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Find a Wi-Fi workspace within 0.1km of UCD Library now."
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["search_parameters"]["location"] == "UCD Library"
+    assert data["search_parameters"]["radius_km"] == 0.1
+    assert [
+        venue["venue_id"]
+        for venue in data["venues"]
+    ] == ["osm_296568074"]
+
+
+def test_chatbot_recommend_asks_follow_up_for_unclear_request(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message: None
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Can you help me?"
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["venues"] == []
+    assert data["follow_up_question"] == (
+        "Could you share the area, venue type, or workspace features you need?"
+    )
+
+
+def test_chatbot_recommend_returns_useful_no_result(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message: {
+            "location": None,
+            "radius_km": None,
+            "venue_type": "restaurant",
+            "wifi": False,
+            "busyness": None,
+            "time": None
+        }
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Find a restaurant without Wi-Fi."
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["venues"] == []
+    assert data["follow_up_question"] is None
+    assert data["response"] == (
+        "I could not find matching venues. Try increasing the radius or relaxing one of the filters."
+    )
 
 
 def test_chatbot_recommend_requires_message():
