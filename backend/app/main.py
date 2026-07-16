@@ -136,6 +136,113 @@ def get_default_day_type():
     return "weekday"
 
 
+SUITABILITY_WEIGHTS = {
+    "wifi": 0.35,
+    "plug": 0.30,
+    "noise": 0.25,
+    "rating": 0.10,
+    "bus": 0.10,
+    "train": 0.20
+}
+
+
+def clamp_normalized_score(value):
+    if value is None:
+        return 0.0
+
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+    return max(
+        0.0,
+        min(
+            1.0,
+            numeric_value
+        )
+    )
+
+
+def get_noise_suitability_score(
+    venue: Venue,
+    hour: int | None = None
+):
+    selected_hour = str(
+        hour if hour is not None else datetime.now().hour
+    )
+
+    if venue.hourly_profile:
+        try:
+            profile = json.loads(
+                venue.hourly_profile
+            )
+            hourly_score = (
+                profile
+                .get(selected_hour, {})
+                .get("score")
+            )
+
+            if hourly_score is not None:
+                return 1 - clamp_normalized_score(
+                    hourly_score
+                )
+        except (TypeError, ValueError, json.JSONDecodeError):
+            pass
+
+    if venue.noise_score is not None:
+        return 1 - clamp_normalized_score(
+            venue.noise_score
+        )
+
+    if venue.noise_level:
+        noise_level = venue.noise_level.lower()
+
+        if noise_level in {"quiet", "low"}:
+            return 1.0
+
+        if noise_level in {"moderate", "medium"}:
+            return 0.5
+
+        if noise_level in {"loud", "high"}:
+            return 0.0
+
+    return 0.0
+
+
+def calculate_suitability_score(
+    venue: Venue,
+    hour: int | None = None
+):
+    components = {
+        "wifi": clamp_normalized_score(venue.wifi_norm),
+        "plug": clamp_normalized_score(venue.plug_norm),
+        "noise": get_noise_suitability_score(
+            venue,
+            hour
+        ),
+        "rating": clamp_normalized_score(venue.rating_norm),
+        "bus": clamp_normalized_score(venue.bus_norm),
+        "train": clamp_normalized_score(venue.train_norm)
+    }
+    total_weight = sum(
+        SUITABILITY_WEIGHTS.values()
+    )
+
+    if total_weight == 0:
+        return None
+
+    score = sum(
+        components[name] * weight / total_weight
+        for name, weight in SUITABILITY_WEIGHTS.items()
+    )
+
+    return round(
+        score * 100,
+        2
+    )
+
+
 def get_busyness_predictions(
     venue_ids: list[str],
     hour: int | None = None,
@@ -195,7 +302,8 @@ def get_busyness_predictions(
 def build_venue_response(
     venue: Venue,
     distance_km=None,
-    busyness=None
+    busyness=None,
+    suitability_score=None
 ):
     busyness = busyness or {}
 
@@ -219,7 +327,12 @@ def build_venue_response(
         "opening_hours_summary": venue.opening_hours,
         "distance_km": distance_km,
         "busyness_score": busyness.get("busyness_score"),
-        "busyness_label": busyness.get("busyness_label")
+        "busyness_label": busyness.get("busyness_label"),
+        "suitability_score": (
+            suitability_score
+            if suitability_score is not None
+            else calculate_suitability_score(venue)
+        )
     }
 
 
@@ -465,6 +578,13 @@ def has_chatbot_search_signal(
             search_parameters.time
         )
     )
+
+
+def is_suitability_sort(sort: str | None):
+    return sort in {
+        "recommended",
+        "suitability"
+    }
 
 
 def resolve_chatbot_location(
@@ -1795,6 +1915,10 @@ def get_venues(
         ge=0
     ),
 
+    sort: str | None = Query(
+        None
+    ),
+
     db: Session = Depends(get_db)
 ):
     if (lat is None) != (lon is None):
@@ -1894,6 +2018,12 @@ def get_venues(
                 available_venue_ids
             )
         )
+
+    if sort is not None and not is_suitability_sort(sort):
+        raise HTTPException(
+            status_code=400,
+            detail="sort must be one of: recommended, suitability"
+        )
     
     offset = (
         page - 1
@@ -1923,9 +2053,19 @@ def get_venues(
                 )
             )
 
-        venues_with_distance.sort(
-            key=lambda venue_with_distance: venue_with_distance[1]
-        )
+        if is_suitability_sort(sort):
+            venues_with_distance.sort(
+                key=lambda venue_with_distance: (
+                    -calculate_suitability_score(
+                        venue_with_distance[0]
+                    ),
+                    venue_with_distance[1]
+                )
+            )
+        else:
+            venues_with_distance.sort(
+                key=lambda venue_with_distance: venue_with_distance[1]
+            )
 
         total_items = len(
             venues_with_distance
@@ -1941,19 +2081,40 @@ def get_venues(
 
         has_more = page < total_pages
     else:
-        total_items = query.count()
+        if is_suitability_sort(sort):
+            venues = query.all()
+            venues.sort(
+                key=lambda venue: (
+                    -calculate_suitability_score(venue),
+                    venue.venue_id
+                )
+            )
 
-        total_pages = (
-            total_items + limit - 1
-        ) // limit
+            total_items = len(
+                venues
+            )
 
-        venues = query.order_by(
-            Venue.venue_id
-        ).offset(
-            offset
-        ).limit(
-            limit
-        ).all()
+            total_pages = (
+                total_items + limit - 1
+            ) // limit
+
+            venues = venues[
+                offset: offset + limit
+            ]
+        else:
+            total_items = query.count()
+
+            total_pages = (
+                total_items + limit - 1
+            ) // limit
+
+            venues = query.order_by(
+                Venue.venue_id
+            ).offset(
+                offset
+            ).limit(
+                limit
+            ).all()
 
         has_more = page < total_pages
 
@@ -1976,7 +2137,8 @@ def get_venues(
         build_venue_response(
             venue,
             distance_km,
-            busyness_predictions.get(venue.venue_id)
+            busyness_predictions.get(venue.venue_id),
+            calculate_suitability_score(venue)
         )
         for venue, distance_km in selected_venues
     ]
