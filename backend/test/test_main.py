@@ -318,7 +318,12 @@ def setup_and_seed_database():
             lon=-6.2230,
             noise_score=0.12,
             rating=4.8,
-            plug_access=1
+            plug_access=1,
+            wifi_norm=1.0,
+            plug_norm=1.0,
+            rating_norm=0.96,
+            bus_norm=0.8,
+            train_norm=0.7
         )
         db.add(test_venue)
 
@@ -334,7 +339,12 @@ def setup_and_seed_database():
             lon=-6.2218,
             noise_score=0.35,
             rating=4.4,
-            plug_access=1
+            plug_access=1,
+            wifi_norm=0.8,
+            plug_norm=0.5,
+            rating_norm=0.88,
+            bus_norm=0.2,
+            train_norm=0.3
         )
         db.add(second_venue)
 
@@ -445,6 +455,107 @@ def test_get_venues_includes_busyness_fields(monkeypatch):
     assert data["items"][0]["busyness_label"] == "Low"
     assert data["items"][1]["busyness_score"] == 85
     assert data["items"][1]["busyness_label"] == "High"
+
+
+def test_get_venues_includes_suitability_score():
+    response = client.get("/api/venues?borough=Dublin South")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["items"][0]["suitability_score"] == 91.23
+    assert data["items"][1]["suitability_score"] == 58.5
+
+
+def test_get_venues_can_sort_by_suitability():
+    db = TestingSessionLocal()
+    try:
+        venue = db.query(Venue).filter(
+            Venue.venue_id == "osm_296568075"
+        ).one()
+        venue.wifi_norm = 1.0
+        venue.plug_norm = 1.0
+        venue.rating_norm = 1.0
+        venue.bus_norm = 1.0
+        venue.train_norm = 1.0
+        venue.noise_score = 0.0
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/venues?borough=Dublin South&sort=suitability")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [
+        item["venue_id"]
+        for item in data["items"]
+    ] == [
+        "osm_296568075",
+        "osm_296568074"
+    ]
+    assert data["total_items"] == 2
+    assert data["total_pages"] == 1
+
+
+def test_get_venues_radius_search_can_sort_by_suitability():
+    db = TestingSessionLocal()
+    try:
+        venue = db.query(Venue).filter(
+            Venue.venue_id == "osm_296568075"
+        ).one()
+        venue.wifi_norm = 1.0
+        venue.plug_norm = 1.0
+        venue.rating_norm = 1.0
+        venue.bus_norm = 1.0
+        venue.train_norm = 1.0
+        venue.noise_score = 0.0
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(
+        "/api/venues?borough=Dublin South&lat=53.3078&lon=-6.2230&radius=1&sort=recommended"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [
+        item["venue_id"]
+        for item in data["items"]
+    ] == [
+        "osm_296568075",
+        "osm_296568074"
+    ]
+    assert data["items"][0]["distance_km"] is not None
+
+
+def test_get_venues_suitability_score_handles_null_fields():
+    db = TestingSessionLocal()
+    try:
+        venue = db.query(Venue).filter(
+            Venue.venue_id == "osm_296568074"
+        ).one()
+        venue.wifi_norm = None
+        venue.plug_norm = None
+        venue.rating_norm = None
+        venue.bus_norm = None
+        venue.train_norm = None
+        venue.noise_score = None
+        venue.noise_level = None
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/venues?borough=Dublin South&sort=suitability")
+
+    assert response.status_code == 200
+    data = response.json()
+    null_field_venue = next(
+        item
+        for item in data["items"]
+        if item["venue_id"] == "osm_296568074"
+    )
+    assert null_field_venue["suitability_score"] == 0.0
 
 
 def test_get_venues_pagination_metadata():

@@ -120,6 +120,8 @@ class VenueResponse(BaseModel):
 
     busyness_label: str | None = None
 
+    suitability_score: float | None = None
+
     class Config:
         from_attributes = True
 
