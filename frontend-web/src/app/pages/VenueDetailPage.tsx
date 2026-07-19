@@ -1,84 +1,225 @@
-import { useState } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useState, useEffect } from "react";
+import { useParams, useNavigate, useLocation } from "react-router";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Separator } from "../components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Label } from "../components/ui/label";
 import { Star, MapPin, Wifi, Zap, Clock, Heart, Share2 } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "../../services/api";
+import { VenueDetail, AvailabilitySlot } from "../../types/api";
 
 export function VenueDetailPage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [selectedDuration, setSelectedDuration] = useState("2");
-  const [isSaved, setIsSaved] = useState(false);
+  const location = useLocation();
+  const stateParams = location.state || {};
 
-  const venue = {
-    id,
-    name: "The Grand Hotel Lobby",
-    type: "Hotel Lobby",
-    rating: 4.8,
-    reviewCount: 142,
-    address: "123 Main Street, Downtown",
-    distance: 0.5,
-    price: 5,
-    images: [
-      "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",
-      "https://images.unsplash.com/photo-1519167758481-83f29da8c851?w=800",
-      "https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=800",
-    ],
-    amenities: ["WiFi", "Power Outlets", "Quiet Environment"],
-    complimentaryDrinks: ["Bottled Water", "Coffee", "Tea"],
-    description:
-      "Spacious and elegant hotel lobby perfect for focused work. Enjoy comfortable seating, excellent lighting, and a professional atmosphere.",
-    termsAndConditions: [
-      "Please maintain a professional and quiet atmosphere",
-      "Laptop and mobile device use is encouraged",
-      "The venue reserves the right to limit noise levels",
-      "You may not ask guests to leave during their booked time",
-      "Complimentary beverages are provided as listed",
-    ],
-    timeSlots: [
-      { time: "2:00 PM - 3:00 PM", available: true },
-      { time: "3:00 PM - 4:00 PM", available: true },
-      { time: "4:00 PM - 5:00 PM", available: false },
-      { time: "5:00 PM - 6:00 PM", available: true },
-    ],
-    reviews: [
-      {
-        id: 1,
-        author: "Sarah Johnson",
-        rating: 5,
-        date: "2 days ago",
-        comment: "Perfect spot for getting work done! Quiet, professional atmosphere and excellent WiFi.",
-      },
-      {
-        id: 2,
-        author: "Michael Chen",
-        rating: 4,
-        date: "1 week ago",
-        comment: "Great location and comfortable seating. The complimentary water was a nice touch.",
-      },
-    ],
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  const [bookingDate, setBookingDate] = useState(
+    stateParams.searchDate || sessionStorage.getItem("searchDate") || todayStr
+  );
+  const [startTime, setStartTime] = useState(
+    stateParams.startTime || sessionStorage.getItem("startTime") || "09:00"
+  );
+  const [endTime, setEndTime] = useState(
+    stateParams.endTime || sessionStorage.getItem("endTime") || "12:00"
+  );
+  const [seatsReserved, setSeatsReserved] = useState(
+    stateParams.seatsRequired || parseInt(sessionStorage.getItem("seatsRequired") || "1")
+  );
+
+  const [isSaved, setIsSaved] = useState(false);
+  const [venue, setVenue] = useState<VenueDetail | null>(null);
+  const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const getDurationHours = (start: string, end: string) => {
+    try {
+      const [startH, startM] = start.split(":").map(Number);
+      const [endH, endM] = end.split(":").map(Number);
+      const diff = (endH + endM / 60) - (startH + startM / 60);
+      return diff > 0 ? diff : 0;
+    } catch {
+      return 0;
+    }
   };
 
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    Promise.all([
+      api.getVenueDetail(id),
+      api.getAvailability(id).catch(e => {
+        console.warn("Could not load slots:", e);
+        return { venue_id: id, available_slots: [] };
+      })
+    ])
+      .then(([venueData, availabilityData]) => {
+        setVenue(venueData);
+        setSlots(availabilityData.available_slots);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to load venue:", err);
+        setLoading(false);
+        toast.error("Failed to load workspace details.");
+      });
+  }, [id]);
+
+  const duration = getDurationHours(startTime, endTime);
+  const totalPrice = venue ? venue.hourly_price * duration * seatsReserved : 0;
+
   const handleBooking = () => {
+    if (!venue) return;
+    if (!bookingDate) {
+      toast.error("Please select a booking date.");
+      return;
+    }
+    if (!startTime || !endTime) {
+      toast.error("Please select both start and end times.");
+      return;
+    }
+    if (duration <= 0) {
+      toast.error("End time must be after start time.");
+      return;
+    }
+
     navigate("/checkout", {
       state: {
-        venue: venue.name,
-        duration: selectedDuration,
-        price: venue.price * parseInt(selectedDuration),
+        venueId: venue.venue_id,
+        venueName: venue.name,
+        bookingDate,
+        startTime: `${startTime}:00`,
+        endTime: `${endTime}:00`,
+        duration: duration.toString(),
+        price: totalPrice,
+        seatsReserved,
       },
     });
   };
 
-  const handleSave = () => {
-    setIsSaved(!isSaved);
-    toast.success(isSaved ? "Removed from saved places" : "Added to saved places");
+  useEffect(() => {
+    if (!id) return;
+    const favsStr = localStorage.getItem("plugandwifi_favorites");
+    const favs = favsStr ? JSON.parse(favsStr) : [];
+    setIsSaved(favs.includes(id));
+  }, [id]);
+
+  const handleSave = async () => {
+    if (!venue) return;
+    try {
+      const favsStr = localStorage.getItem("plugandwifi_favorites");
+      let favs: string[] = favsStr ? JSON.parse(favsStr) : [];
+      
+      if (isSaved) {
+        await api.removeFavorite(venue.venue_id);
+        favs = favs.filter(fid => fid !== venue.venue_id);
+        localStorage.setItem("plugandwifi_favorites", JSON.stringify(favs));
+        setIsSaved(false);
+        toast.success("Removed from saved places");
+      } else {
+        await api.addFavorite(venue.venue_id);
+        if (!favs.includes(venue.venue_id)) {
+          favs.push(venue.venue_id);
+        }
+        localStorage.setItem("plugandwifi_favorites", JSON.stringify(favs));
+        setIsSaved(true);
+        toast.success("Added to saved places");
+      }
+    } catch (err: any) {
+      console.error("Failed to toggle favorite:", err);
+      if (err.response?.status === 401) {
+        toast.error("Please sign in to save workspaces.");
+      } else {
+        toast.error("Failed to update favorite status.");
+      }
+    }
   };
+
+  const getVenueImages = (venueId: string) => {
+    const defaultImages = [
+      "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",
+      "https://images.unsplash.com/photo-1519167758481-83f29da8c851?w=800",
+      "https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=800",
+    ];
+    // Vary based on ID for visual difference
+    if (venueId === "osm_12346") {
+      return [
+        "https://images.unsplash.com/photo-1497366216548-37526070297c?w=800",
+        "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=800",
+        "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=800",
+      ];
+    }
+    return defaultImages;
+  };
+
+  const formatSlotTime = (startTime: string, endTime: string) => {
+    try {
+      const start = startTime.split("T")[1].substring(0, 5);
+      const end = endTime.split("T")[1].substring(0, 5);
+      return `${start} - ${end}`;
+    } catch {
+      return `${startTime} - ${endTime}`;
+    }
+  };
+
+  const getAddress = (v: VenueDetail) => {
+    return [v.building_number, v.street, v.borough, v.zipcode].filter(Boolean).join(", ");
+  };
+
+  const getDescription = (v: VenueDetail) => {
+    return `A premium ${v.cuisine_type || 'workspace'} located in ${v.borough}. Equipped with verified ${v.has_wifi ? 'high-speed WiFi' : 'basic WiFi'}, plug access, and a ${v.noise_level} noise level environment. Ideal for focus sessions, remote calls, and short-term study.`;
+  };
+
+  const complimentaryDrinks = ["Bottled Water", "Coffee", "Tea"];
+
+  const termsAndConditions = [
+    "Please maintain a professional and quiet atmosphere",
+    "Laptop and mobile device use is encouraged",
+    "The venue reserves the right to limit noise levels",
+    "You may not ask guests to leave during their booked time",
+    "Complimentary beverages are provided as listed",
+  ];
+
+  const defaultReviews = [
+    {
+      id: 1,
+      author: "Sarah Johnson",
+      rating: 5,
+      date: "2 days ago",
+      comment: "Perfect spot for getting work done! Quiet, professional atmosphere and excellent WiFi.",
+    },
+    {
+      id: 2,
+      author: "Michael Chen",
+      rating: 4,
+      date: "1 week ago",
+      comment: "Great location and comfortable seating. The complimentary water was a nice touch.",
+    },
+  ];
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-12 text-center text-muted-foreground">
+        Loading workspace details...
+      </div>
+    );
+  }
+
+  if (!venue) {
+    return (
+      <div className="container mx-auto px-4 py-12 text-center text-muted-foreground">
+        Workspace not found.
+      </div>
+    );
+  }
+
+  const images = getVenueImages(venue.venue_id);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -86,13 +227,13 @@ export function VenueDetailPage() {
       <div className="grid md:grid-cols-2 gap-4 mb-8">
         <div className="aspect-video overflow-hidden rounded-lg">
           <img
-            src={venue.images[0]}
+            src={images[0]}
             alt={venue.name}
             className="w-full h-full object-cover"
           />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          {venue.images.slice(1).map((image, idx) => (
+          {images.slice(1).map((image, idx) => (
             <div key={idx} className="aspect-video overflow-hidden rounded-lg">
               <img src={image} alt={`${venue.name} ${idx + 2}`} className="w-full h-full object-cover" />
             </div>
@@ -110,10 +251,10 @@ export function VenueDetailPage() {
                 <div className="flex items-center gap-4 text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <MapPin className="size-4" />
-                    {venue.address}
+                    {getAddress(venue)}
                   </span>
                   <span>•</span>
-                  <span>{venue.distance} km away</span>
+                  <span>{venue.distance_km} km away</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -131,8 +272,8 @@ export function VenueDetailPage() {
                 <Star className="size-5 fill-yellow-400 stroke-yellow-400" />
                 <span>{venue.rating}</span>
               </div>
-              <span className="text-muted-foreground">({venue.reviewCount} reviews)</span>
-              <Badge>{venue.type}</Badge>
+              <span className="text-muted-foreground">(142 reviews)</span>
+              <Badge>{venue.cuisine_type}</Badge>
             </div>
           </div>
 
@@ -160,7 +301,7 @@ export function VenueDetailPage() {
 
           <div className="mb-6">
             <h3 className="mb-4">About this space</h3>
-            <p className="text-muted-foreground">{venue.description}</p>
+            <p className="text-muted-foreground">{getDescription(venue)}</p>
           </div>
 
           <Separator className="my-6" />
@@ -168,7 +309,7 @@ export function VenueDetailPage() {
           <div className="mb-6">
             <h3 className="mb-4">Complimentary Drinks</h3>
             <div className="flex flex-wrap gap-2">
-              {venue.complimentaryDrinks.map((drink) => (
+              {complimentaryDrinks.map((drink) => (
                 <span
                   key={drink}
                   className="px-3 py-2 rounded-lg text-white"
@@ -185,7 +326,7 @@ export function VenueDetailPage() {
           <div className="mb-6">
             <h3 className="mb-4">Terms & Conditions</h3>
             <ul className="space-y-2">
-              {venue.termsAndConditions.map((term, idx) => (
+              {termsAndConditions.map((term, idx) => (
                 <li key={idx} className="flex items-start gap-2 text-muted-foreground">
                   <span className="text-primary mt-1">•</span>
                   <span>{term}</span>
@@ -203,7 +344,7 @@ export function VenueDetailPage() {
             </TabsList>
 
             <TabsContent value="reviews" className="space-y-4 mt-6">
-              {venue.reviews.map((review) => (
+              {defaultReviews.map((review) => (
                 <Card key={review.id}>
                   <CardContent className="pt-6">
                     <div className="flex items-start justify-between mb-2">
@@ -224,22 +365,26 @@ export function VenueDetailPage() {
 
             <TabsContent value="availability" className="mt-6">
               <div className="space-y-2">
-                {venue.timeSlots.map((slot, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex items-center justify-between p-4 rounded-lg border ${
-                      slot.available ? "bg-card" : "bg-muted opacity-50"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Clock className="size-4" />
-                      <span>{slot.time}</span>
+                {slots.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-4">No available time slots for today.</p>
+                ) : (
+                  slots.map((slot) => (
+                    <div
+                      key={slot.slot_id}
+                      className={`flex items-center justify-between p-4 rounded-lg border ${
+                        slot.available ? "bg-card" : "bg-muted opacity-50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Clock className="size-4" />
+                        <span>{formatSlotTime(slot.start_time, slot.end_time)}</span>
+                      </div>
+                      <Badge variant={slot.available ? "default" : "secondary"}>
+                        {slot.available ? "Available" : "Booked"}
+                      </Badge>
                     </div>
-                    <Badge variant={slot.available ? "default" : "secondary"}>
-                      {slot.available ? "Available" : "Booked"}
-                    </Badge>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </TabsContent>
           </Tabs>
@@ -254,51 +399,93 @@ export function VenueDetailPage() {
             <CardContent className="space-y-6">
               <div>
                 <div className="flex items-baseline gap-2 mb-4">
-                  <span className="text-3xl">${venue.price}</span>
+                  <span className="text-3xl">${venue.hourly_price}</span>
                   <span className="text-muted-foreground">per hour</span>
                 </div>
 
-                <div className="space-y-3">
-                  <Label>Select Duration</Label>
-                  <RadioGroup value={selectedDuration} onValueChange={setSelectedDuration}>
-                    <div className="flex items-center justify-between p-3 rounded-lg border">
-                      <div className="flex items-center gap-2">
-                        <RadioGroupItem value="1" id="1hr" />
-                        <Label htmlFor="1hr" className="cursor-pointer">1 hour</Label>
-                      </div>
-                      <span>${venue.price}</span>
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="bookingDate">Date</Label>
+                    <Input
+                      id="bookingDate"
+                      type="date"
+                      value={bookingDate}
+                      onChange={(e) => setBookingDate(e.target.value)}
+                      className="w-full bg-background"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="startTime">Start Time</Label>
+                      <select
+                        id="startTime"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {Array.from({ length: 15 }, (_, i) => {
+                          const hour = i + 8; // 8 AM to 10 PM
+                          const str = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+                          return <option key={str} value={str}>{hour > 12 ? `${hour - 12} PM` : `${hour} AM`}</option>;
+                        })}
+                      </select>
                     </div>
-                    <div className="flex items-center justify-between p-3 rounded-lg border">
-                      <div className="flex items-center gap-2">
-                        <RadioGroupItem value="2" id="2hr" />
-                        <Label htmlFor="2hr" className="cursor-pointer">2 hours</Label>
-                      </div>
-                      <span>${venue.price * 2}</span>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="endTime">End Time</Label>
+                      <select
+                        id="endTime"
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {Array.from({ length: 15 }, (_, i) => {
+                          const hour = i + 9; // 9 AM to 11 PM
+                          const str = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+                          return <option key={str} value={str}>{hour > 12 ? `${hour - 12} PM` : `${hour} AM`}</option>;
+                        })}
+                      </select>
                     </div>
-                    <div className="flex items-center justify-between p-3 rounded-lg border">
-                      <div className="flex items-center gap-2">
-                        <RadioGroupItem value="3" id="3hr" />
-                        <Label htmlFor="3hr" className="cursor-pointer">3 hours</Label>
-                      </div>
-                      <span>${venue.price * 3}</span>
-                    </div>
-                  </RadioGroup>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="seatsReserved">Seats Reserved</Label>
+                    <select
+                      id="seatsReserved"
+                      value={seatsReserved}
+                      onChange={(e) => setSeatsReserved(parseInt(e.target.value))}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 8, 10].map((num) => (
+                        <option key={num} value={num}>{num} {num === 1 ? "seat" : "seats"}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
               <Separator />
 
               <div className="flex justify-between items-center">
-                <span>Total</span>
-                <span className="text-2xl" style={{ color: '#2f8a64' }}>${venue.price * parseInt(selectedDuration)}</span>
+                <span>Total ({duration}h • {seatsReserved} {seatsReserved === 1 ? "seat" : "seats"})</span>
+                <span className="text-2xl" style={{ color: '#2f8a64' }}>
+                  ${totalPrice.toFixed(2)}
+                </span>
               </div>
 
-              <Button className="w-full" size="lg" onClick={handleBooking} style={{ backgroundColor: '#253c50' }}>
-                Continue to Checkout
+              <Button
+                className="w-full cursor-pointer"
+                size="lg"
+                onClick={handleBooking}
+                style={{ backgroundColor: '#253c50' }}
+                disabled={duration <= 0}
+              >
+                {duration <= 0 ? "Invalid Time Range" : "Continue to Checkout"}
               </Button>
 
               <p className="text-sm text-muted-foreground text-center">
-                Free cancellation up to 1 hour before booking
+                Free cancellation up to 24 hours before booking
               </p>
             </CardContent>
           </Card>
