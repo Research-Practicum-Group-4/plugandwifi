@@ -88,4 +88,5 @@
     "react-dom": {
       "optional": true
     }
-  },
+  }
+}
