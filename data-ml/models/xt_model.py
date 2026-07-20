@@ -13,7 +13,8 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.append("data-ml/src")
+
 from busyness_predictor import BusynessPredictor
 
 # EXTRA TREES REGRESSOR MY BEST PERFORMER
@@ -52,8 +53,8 @@ df["station_complex_id"] = df["station_complex_id"].astype("category")
 ### 2nd iteration
 df["log_avg_ridership"] = np.log(df["avg_ridership"])
 
-y = df["log_avg_ridership"]
-x = df[["latitude","longitude","hour","day_type"]]
+# y = df["log_avg_ridership"]
+# x = df[["latitude","longitude","hour","day_type"]]
 
 ###NEED TO HOLD OUT ON ENTIRE STATIONS IN THE TRAIN TEST SPLIT OTHERWISE COMPARING SAME STATIONS AT SLIGHTLY DIFFERENT HOURS AND GIVING INFLATED OOB R VALUE
 # x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=1)
@@ -94,7 +95,7 @@ final_model = ExtraTreesRegressor(
 final_model.fit(df[feat], df["log_avg_ridership"])
 
 score_low = df["avg_ridership"].quantile(0.10)
-score_high = df["avg_ridership"].quantile(0.95)
+score_high = df["avg_ridership"].quantile(0.90)
 
 busyness_predictor = BusynessPredictor(
     model=final_model,

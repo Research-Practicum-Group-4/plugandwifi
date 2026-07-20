@@ -1,4 +1,6 @@
 pandas
+geopandas
+pyarrow
 requests
 numpy
 scipy
