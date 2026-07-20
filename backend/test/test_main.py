@@ -877,7 +877,7 @@ def test_create_venue_rejects_standard_user():
     assert response.status_code == 403
 
 
-def test_provider_can_create_active_venue_listing_and_search_it():
+def test_provider_created_pending_venue_stays_hidden_until_admin_activation():
     provider_payload = {
         "full_name": "Venue Creator",
         "email": "venue-creator@ucd.ie",
@@ -925,7 +925,7 @@ def test_provider_can_create_active_venue_listing_and_search_it():
     data = response.json()
     assert data["venue_id"].startswith("provider-")
     assert data["name"] == "Provider Study Room"
-    assert data["state"] == "Active"
+    assert data["state"] == "Pending Approval"
     assert data["seat_capacity"] == 12
     assert data["amenity_tags"] == ["wifi", "plugs", "quiet"]
 
@@ -934,9 +934,31 @@ def test_provider_can_create_active_venue_listing_and_search_it():
         created_venue = db.query(Venue).filter(
             Venue.venue_id == data["venue_id"]
         ).one()
-        assert created_venue.state == "Active"
+        assert created_venue.state == "Pending Approval"
         assert created_venue.partner == login_response.json()["user"]["user_id"]
         assert created_venue.amenity_tags == "wifi,plugs,quiet"
+
+        db.add(
+            AvailabilitySlot(
+                id=90,
+                venue_id=data["venue_id"],
+                date=date(2026, 6, 15),
+                start_time=time(9, 0, 0),
+                end_time=time(12, 0, 0),
+                available=True,
+                available_seats=12
+            )
+        )
+        db.add(
+            User(
+                id=93,
+                full_name="Venue Approval Admin",
+                email="venue-approval-admin@example.com",
+                password_hash=hash_password("00000000"),
+                role="admin"
+            )
+        )
+        db.commit()
     finally:
         db.close()
 
@@ -946,7 +968,68 @@ def test_provider_can_create_active_venue_listing_and_search_it():
         item["venue_id"]
         for item in venues_response.json()["items"]
     ]
-    assert data["venue_id"] in venue_ids
+    assert data["venue_id"] not in venue_ids
+
+    radius_response = client.get(
+        "/api/venues?borough=Dublin South&lat=53.31&lon=-6.22&radius=1"
+    )
+    assert radius_response.status_code == 200
+    radius_venue_ids = [
+        item["venue_id"]
+        for item in radius_response.json()["items"]
+    ]
+    assert data["venue_id"] not in radius_venue_ids
+
+    availability_response = client.get(
+        "/api/venues?borough=Dublin South&date=2026-06-15&start_time=09:00:00&duration_hours=3&seats_required=1"
+    )
+    assert availability_response.status_code == 200
+    availability_venue_ids = [
+        item["venue_id"]
+        for item in availability_response.json()["items"]
+    ]
+    assert data["venue_id"] not in availability_venue_ids
+
+    suggestions_response = client.get("/api/venues/suggestions?q=provider")
+    assert suggestions_response.status_code == 200
+    suggestion_venue_ids = [
+        item["venue_id"]
+        for item in suggestions_response.json()["items"]
+    ]
+    assert data["venue_id"] not in suggestion_venue_ids
+
+    admin_login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": "venue-approval-admin@example.com",
+            "password": "00000000"
+        }
+    )
+    admin_headers = {
+        "Authorization": f"Bearer {admin_login_response.json()['access_token']}"
+    }
+
+    activation_response = client.patch(
+        f"/api/admin/venues/{data['venue_id']}/suspension",
+        headers=admin_headers,
+        json={"state": "Active"}
+    )
+    assert activation_response.status_code == 200
+    assert activation_response.json() == {
+        "venue_id": data["venue_id"],
+        "state": "Active",
+        "cancelled_bookings": 0,
+        "released_seats": 0,
+        "message": "Venue activated successfully"
+    }
+
+    activated_response = client.get("/api/venues?borough=Dublin South")
+    assert activated_response.status_code == 200
+    activated_venue_ids = [
+        item["venue_id"]
+        for item in activated_response.json()["items"]
+    ]
+    assert data["venue_id"] in activated_venue_ids
 
 
 def test_create_venue_rejects_invalid_payload():
