@@ -11,6 +11,9 @@ import {
   BookingCancellationResponse,
   ProviderDashboardKPIsResponse,
   ProviderArrivalsResponse,
+  VenueSuggestionsResponse,
+  ChatbotRecommendResponse,
+  FavoriteResponse,
 } from "../types/api";
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
@@ -801,6 +804,68 @@ export const api = {
       };
     } else {
       const response = await axiosInstance.get<ProviderArrivalsResponse>("/provider/dashboard/arrivals");
+      return response.data;
+    }
+  },
+
+  // 10. Get Venue Suggestions (Autocomplete)
+  getSuggestions: async (q: string, limit: number = 8): Promise<VenueSuggestionsResponse> => {
+    if (USE_MOCK) {
+      await delay(100);
+      const filtered = mockVenues
+        .filter(v => v.name.toLowerCase().includes(q.toLowerCase()))
+        .slice(0, limit)
+        .map(v => ({
+          venue_id: v.venue_id,
+          name: v.name,
+          lat: v.lat,
+          lon: v.lon,
+          borough: v.borough || "",
+          type: "venue" as const
+        }));
+      return { items: filtered };
+    } else {
+      const response = await axiosInstance.get<VenueSuggestionsResponse>("/venues/suggestions", {
+        params: { q, limit }
+      });
+      return response.data;
+    }
+  },
+
+  // 11. Call Gemini Chatbot
+  getChatbotReply: async (message: string): Promise<ChatbotRecommendResponse> => {
+    if (USE_MOCK) {
+      await delay(800);
+      return {
+        response: `Hello! I am your Manhattan AI assistant. Based on your prompt "${message}", I recommend booking Flatiron Workspace or Grand Central Office Hub.`,
+        model: "gemini-1.5-flash"
+      };
+    } else {
+      const response = await axiosInstance.post<ChatbotRecommendResponse>("/chatbot/recommend", { message });
+      return response.data;
+    }
+  },
+
+  // 12. Add Venue to Favorites
+  addFavorite: async (venueId: string): Promise<FavoriteResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(200);
+      return { user_id: 1, venue_id: venueId, message: "Favorite created successfully" };
+    } else {
+      const response = await axiosInstance.post<FavoriteResponse>(`/favorites/${venueId}`);
+      return response.data;
+    }
+  },
+
+  // 13. Remove Venue from Favorites
+  removeFavorite: async (venueId: string): Promise<{ message: string }> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(200);
+      return { message: "Favorite removed successfully" };
+    } else {
+      const response = await axiosInstance.delete<{ message: string }>(`/favorites/${venueId}`);
       return response.data;
     }
   }

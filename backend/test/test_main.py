@@ -107,17 +107,24 @@ def test_postgresql_engine_options(monkeypatch):
     }
 
 
-def test_chatbot_recommend_returns_gemini_response(monkeypatch):
-    captured = {}
-
-    def fake_call_gemini_chatbot(message):
-        captured["message"] = message
-        return "Try UCD Library Shared Space for quiet study with Wi-Fi."
+def test_chatbot_recommend_returns_real_venue_suggestions(monkeypatch):
+    def fake_get_busyness_predictions(venue_ids, hour=None, day_type=None):
+        return {
+            "osm_296568074": {
+                "busyness_score": 32,
+                "busyness_label": "Low"
+            }
+        }
 
     monkeypatch.setattr(
         main_module,
-        "call_gemini_chatbot",
-        fake_call_gemini_chatbot
+        "call_gemini_search_parameter_extraction",
+        lambda message: None
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        fake_get_busyness_predictions
     )
     monkeypatch.setenv(
         "GEMINI_MODEL",
@@ -127,16 +134,112 @@ def test_chatbot_recommend_returns_gemini_response(monkeypatch):
     response = client.post(
         "/api/chatbot/recommend",
         json={
-            "message": "Find me a quiet place to study near UCD."
+            "message": "Find me a library with Wi-Fi near UCD that is not too busy now."
         }
     )
 
     assert response.status_code == 200
-    assert captured["message"] == "Find me a quiet place to study near UCD."
-    assert response.json() == {
-        "response": "Try UCD Library Shared Space for quiet study with Wi-Fi.",
-        "model": "gemini-test-model"
+    data = response.json()
+    assert data["model"] == "gemini-test-model"
+    assert data["search_parameters"] == {
+        "location": "UCD",
+        "radius_km": None,
+        "venue_type": "library",
+        "wifi": True,
+        "busyness": "low",
+        "time": "now"
     }
+    assert data["venues"][0]["venue_id"] == "osm_296568074"
+    assert data["venues"][0]["busyness_label"] == "Low"
+    assert data["follow_up_question"] is None
+
+
+def test_chatbot_recommend_uses_extracted_radius_and_location(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message: {
+            "location": "UCD Library",
+            "radius_km": 0.1,
+            "venue_type": None,
+            "wifi": True,
+            "busyness": None,
+            "time": "now"
+        }
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, hour=None, day_type=None: {}
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Find a Wi-Fi workspace within 0.1km of UCD Library now."
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["search_parameters"]["location"] == "UCD Library"
+    assert data["search_parameters"]["radius_km"] == 0.1
+    assert [
+        venue["venue_id"]
+        for venue in data["venues"]
+    ] == ["osm_296568074"]
+
+
+def test_chatbot_recommend_asks_follow_up_for_unclear_request(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message: None
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Can you help me?"
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["venues"] == []
+    assert data["follow_up_question"] == (
+        "Could you share the area, venue type, or workspace features you need?"
+    )
+
+
+def test_chatbot_recommend_returns_useful_no_result(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message: {
+            "location": None,
+            "radius_km": None,
+            "venue_type": "restaurant",
+            "wifi": False,
+            "busyness": None,
+            "time": None
+        }
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Find a restaurant without Wi-Fi."
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["venues"] == []
+    assert data["follow_up_question"] is None
+    assert data["response"] == (
+        "I could not find matching venues. Try increasing the radius or relaxing one of the filters."
+    )
 
 
 def test_chatbot_recommend_requires_message():
@@ -215,7 +318,12 @@ def setup_and_seed_database():
             lon=-6.2230,
             noise_score=0.12,
             rating=4.8,
-            plug_access=1
+            plug_access=1,
+            wifi_norm=1.0,
+            plug_norm=1.0,
+            rating_norm=0.96,
+            bus_norm=0.8,
+            train_norm=0.7
         )
         db.add(test_venue)
 
@@ -231,7 +339,12 @@ def setup_and_seed_database():
             lon=-6.2218,
             noise_score=0.35,
             rating=4.4,
-            plug_access=1
+            plug_access=1,
+            wifi_norm=0.8,
+            plug_norm=0.5,
+            rating_norm=0.88,
+            bus_norm=0.2,
+            train_norm=0.3
         )
         db.add(second_venue)
 
@@ -313,6 +426,137 @@ def test_get_venues_with_data():
     assert data["items"][0]["plugs_available"] == 1
     assert data["items"][0]["hourly_fee"] == 3.5
     assert data["items"][0]["opening_hours_summary"] == "Mo-Fr 09:00-17:00"
+
+
+def test_get_venues_includes_busyness_fields(monkeypatch):
+    def fake_get_busyness_predictions(venue_ids, hour=None, day_type=None):
+        return {
+            "osm_296568074": {
+                "busyness_score": 32,
+                "busyness_label": "Low"
+            },
+            "osm_296568075": {
+                "busyness_score": 85,
+                "busyness_label": "High"
+            }
+        }
+
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        fake_get_busyness_predictions
+    )
+
+    response = client.get("/api/venues?borough=Dublin South")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["items"][0]["busyness_score"] == 32
+    assert data["items"][0]["busyness_label"] == "Low"
+    assert data["items"][1]["busyness_score"] == 85
+    assert data["items"][1]["busyness_label"] == "High"
+
+
+def test_get_venues_includes_suitability_score():
+    response = client.get("/api/venues?borough=Dublin South")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["items"][0]["suitability_score"] == 91.23
+    assert data["items"][1]["suitability_score"] == 58.5
+
+
+def test_get_venues_can_sort_by_suitability():
+    db = TestingSessionLocal()
+    try:
+        venue = db.query(Venue).filter(
+            Venue.venue_id == "osm_296568075"
+        ).one()
+        venue.wifi_norm = 1.0
+        venue.plug_norm = 1.0
+        venue.rating_norm = 1.0
+        venue.bus_norm = 1.0
+        venue.train_norm = 1.0
+        venue.noise_score = 0.0
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/venues?borough=Dublin South&sort=suitability")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [
+        item["venue_id"]
+        for item in data["items"]
+    ] == [
+        "osm_296568075",
+        "osm_296568074"
+    ]
+    assert data["total_items"] == 2
+    assert data["total_pages"] == 1
+
+
+def test_get_venues_radius_search_can_sort_by_suitability():
+    db = TestingSessionLocal()
+    try:
+        venue = db.query(Venue).filter(
+            Venue.venue_id == "osm_296568075"
+        ).one()
+        venue.wifi_norm = 1.0
+        venue.plug_norm = 1.0
+        venue.rating_norm = 1.0
+        venue.bus_norm = 1.0
+        venue.train_norm = 1.0
+        venue.noise_score = 0.0
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(
+        "/api/venues?borough=Dublin South&lat=53.3078&lon=-6.2230&radius=1&sort=recommended"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [
+        item["venue_id"]
+        for item in data["items"]
+    ] == [
+        "osm_296568075",
+        "osm_296568074"
+    ]
+    assert data["items"][0]["distance_km"] is not None
+
+
+def test_get_venues_suitability_score_handles_null_fields():
+    db = TestingSessionLocal()
+    try:
+        venue = db.query(Venue).filter(
+            Venue.venue_id == "osm_296568074"
+        ).one()
+        venue.wifi_norm = None
+        venue.plug_norm = None
+        venue.rating_norm = None
+        venue.bus_norm = None
+        venue.train_norm = None
+        venue.noise_score = None
+        venue.noise_level = None
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/venues?borough=Dublin South&sort=suitability")
+
+    assert response.status_code == 200
+    data = response.json()
+    null_field_venue = next(
+        item
+        for item in data["items"]
+        if item["venue_id"] == "osm_296568074"
+    )
+    assert null_field_venue["suitability_score"] == 0.0
+
 
 def test_get_venues_pagination_metadata():
     first_page = client.get("/api/venues?borough=Dublin South&limit=1&page=1")
@@ -1607,6 +1851,28 @@ def test_get_venue_by_id():
     # Non-existent venue ID lookup
     res_404 = client.get("/api/venues/ghost_venue_id")
     assert res_404.status_code == 404
+
+
+def test_get_venue_by_id_includes_busyness_fields(monkeypatch):
+    def fake_get_busyness_predictions(venue_ids, hour=None, day_type=None):
+        return {
+            "osm_296568074": {
+                "busyness_score": 32,
+                "busyness_label": "Low"
+            }
+        }
+
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        fake_get_busyness_predictions
+    )
+
+    response = client.get("/api/venues/osm_296568074")
+
+    assert response.status_code == 200
+    assert response.json()["busyness_score"] == 32
+    assert response.json()["busyness_label"] == "Low"
 
 
 def test_get_venue_availability_returns_real_slots():

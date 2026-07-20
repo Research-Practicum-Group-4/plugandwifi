@@ -12,16 +12,56 @@ export function SavedPlacesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getVenues()
-      .then((data) => {
-        // Mock saved places as the first two venues
-        setVenues(data.items.slice(0, 2));
-        setLoading(false);
-      })
-      .catch((err) => {
+    const fetchSavedVenues = async () => {
+      try {
+        setLoading(true);
+        const favsStr = localStorage.getItem("plugandwifi_favorites");
+        const favs: string[] = favsStr ? JSON.parse(favsStr) : [];
+        
+        if (favs.length === 0) {
+          setVenues([]);
+          setLoading(false);
+          return;
+        }
+
+        // Fetch detail for each favorited venue ID from the backend database
+        const details = await Promise.all(
+          favs.map(id => api.getVenueDetail(id).catch(err => {
+            console.warn(`Failed to fetch details for saved venue ${id}:`, err);
+            return null;
+          }))
+        );
+
+        // Filter out any failed requests (nulls) and convert to Venue objects for the list view
+        const validVenues = details
+          .filter((d): d is NonNullable<typeof d> => d !== null)
+          .map(d => ({
+            venue_id: d.venue_id,
+            name: d.name,
+            cuisine_type: d.cuisine_type || "Workspace",
+            distance_km: d.distance_km || 0,
+            has_wifi: d.has_wifi || false,
+            wifi_free: d.wifi_free || false,
+            opening_now: true,
+            noise_score: d.noise_score || 4.0,
+            noise_level: d.noise_level || "quiet",
+            seats_avail: d.seats_avail || 10,
+            total_seats: d.total_seats || 20,
+            hourly_price: d.hourly_price || 0,
+            rating: d.rating || 4.5,
+            lat: d.lat,
+            lon: d.lon
+          }));
+
+        setVenues(validVenues);
+      } catch (err) {
         console.error("Failed to load saved places:", err);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    fetchSavedVenues();
   }, []);
 
   const getVenueImage = (venueId: string) => {
@@ -95,10 +135,19 @@ export function SavedPlacesPage() {
                         variant="secondary"
                         size="icon"
                         className="absolute top-2 right-2"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          // Handle removal mock
+                          try {
+                            await api.removeFavorite(venue.venue_id);
+                            const favsStr = localStorage.getItem("plugandwifi_favorites");
+                            let favs: string[] = favsStr ? JSON.parse(favsStr) : [];
+                            favs = favs.filter(fid => fid !== venue.venue_id);
+                            localStorage.setItem("plugandwifi_favorites", JSON.stringify(favs));
+                            setVenues(prev => prev.filter(v => v.venue_id !== venue.venue_id));
+                          } catch (err) {
+                            console.error("Failed to remove favorite:", err);
+                          }
                         }}
                       >
                         <Heart className="size-4 fill-red-500 stroke-red-500" />
