@@ -14,9 +14,7 @@ def perhour_perzone_count(trips, time_column, zone_column, count_column, month):
     events[zone_column] = pd.to_numeric(events[zone_column], errors="coerce")
     events = events.dropna()
 
-    events = events[
-    (events[time_column] >= month.start_time)
-    & (events[time_column] < (month + 1).start_time)]
+    events = events[(events[time_column] >= month.start_time) & (events[time_column] < (month + 1).start_time)]
 
     events["timestamp"] = events[time_column].dt.floor("h")
     events["zone_id"] = events[zone_column].astype(int)
@@ -67,7 +65,7 @@ def fetch_month(taxi_type, month):
             pickup_time,
             dropoff_time,
             "PULocationID",
-            "DOLocationID",
+            "DOLocationID"
         ]
     )
 
@@ -87,16 +85,14 @@ def fetch_taxi_data():
             monthly_activity.append(fetch_month(taxi_type, month))
 
     activity = pd.concat(monthly_activity)
-    activity = activity.groupby(
-        ["timestamp", "zone_id"], as_index=False
-    )[["taxi_pickups", "taxi_dropoffs"]].sum()
+    activity = activity.groupby(["timestamp", "zone_id"], as_index=False)[["taxi_pickups", "taxi_dropoffs"]].sum()
 
     zones = pd.read_csv(ZONE_URL)
     zones = zones.rename(
         columns={
             "LocationID": "zone_id",
             "Borough": "borough",
-            "Zone": "taxi_zone",
+            "Zone": "taxi_zone"
         }
     )
 
@@ -105,17 +101,12 @@ def fetch_taxi_data():
         "Brooklyn",
         "Manhattan",
         "Queens",
-        "Staten Island",
+        "Staten Island"
     ]
     zones = zones[zones["borough"].isin(nyc_boroughs)]
 
-    activity = activity.merge(
-        zones[["zone_id", "borough", "taxi_zone"]],
-        on="zone_id",
-    )
-    activity["taxi_activity"] = (
-        activity["taxi_pickups"] + activity["taxi_dropoffs"]
-    )
+    activity = activity.merge(zones[["zone_id", "borough", "taxi_zone"]], on="zone_id")
+    activity["taxi_activity"] = (activity["taxi_pickups"] + activity["taxi_dropoffs"])
 
     activity["date"] = activity["timestamp"].dt.date
     activity["hour"] = activity["timestamp"].dt.hour

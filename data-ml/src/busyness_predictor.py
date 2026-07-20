@@ -4,7 +4,7 @@ import joblib
 
 
 class BusynessPredictor:
-    def __init__(self, model, feature_names, day_type_mapping, score_low, score_high, low_max=33, medium_max=66,):
+    def __init__(self, model, feature_names, day_type_mapping, score_low, score_high, low_max = 33, medium_max =66):
 
         self.model = model
         self.feature_names = feature_names
@@ -31,11 +31,7 @@ class BusynessPredictor:
         return venues
 
     def _scale_to_score(self, predicted_ridership):
-        score = (
-            (predicted_ridership - self.score_low)
-            / (self.score_high - self.score_low)
-            * 100
-        )
+        score = ((predicted_ridership - self.score_low) / (self.score_high - self.score_low) * 100)
         return np.clip(score, 0, 100).round().astype(int)
 
     def _label(self, score):
