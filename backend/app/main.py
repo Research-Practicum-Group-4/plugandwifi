@@ -587,6 +587,13 @@ def is_suitability_sort(sort: str | None):
     }
 
 
+def public_discovery_state_filter():
+    return func.coalesce(
+        Venue.state,
+        "Active"
+    ) == "Active"
+
+
 def resolve_chatbot_location(
     location: str | None,
     db: Session
@@ -602,10 +609,7 @@ def resolve_chatbot_location(
     return (
         db.query(Venue)
         .filter(
-            func.coalesce(
-                Venue.state,
-                "Active"
-            ) != "Suspended"
+            public_discovery_state_filter()
         )
         .filter(
             (
@@ -627,10 +631,7 @@ def search_venues_for_chatbot(
     limit: int = 5
 ):
     query = db.query(Venue).filter(
-        func.coalesce(
-            Venue.state,
-            "Active"
-        ) != "Suspended"
+        public_discovery_state_filter()
     )
 
     if search_parameters.wifi is not None:
@@ -1833,7 +1834,7 @@ def create_venue(
     venue = Venue(
         venue_id=f"provider-{uuid.uuid4().hex[:12]}",
         name=payload.name,
-        state="Active",
+        state="Pending Approval",
         lat=payload.lat,
         lon=payload.lon,
         borough=payload.borough,
@@ -1934,10 +1935,7 @@ def get_venues(
         )
 
     query = db.query(Venue).filter(
-        func.coalesce(
-            Venue.state,
-            "Active"
-        ) != "Suspended"
+        public_discovery_state_filter()
     )
 
     if duration_hours is None and date and start_time and end_time:
@@ -2177,10 +2175,7 @@ def get_venue_suggestions(
     venues = (
         db.query(Venue)
         .filter(
-            func.coalesce(
-                Venue.state,
-                "Active"
-            ) == "Active"
+            public_discovery_state_filter()
         )
         .filter(
             func.lower(Venue.name).like(f"%{search_term}%")
@@ -2790,24 +2785,26 @@ def suspend_venue(
             detail="Venue not found"
         )
 
-    active_bookings = (
-        db.query(Booking)
-        .filter(Booking.venue_id == venue_id)
-        .with_for_update()
-        .all()
-    )
-    active_bookings = [
-        booking
-        for booking in active_bookings
-        if is_active_booking_status(booking.status)
-    ]
-
+    active_bookings = []
     released_seats = 0
 
-    for booking in active_bookings:
-        released_seats += booking.seats_reserved
-        booking.status = "cancelled"
-        booking.payment_status = "refund_pending"
+    if payload.state == "Suspended":
+        active_bookings = (
+            db.query(Booking)
+            .filter(Booking.venue_id == venue_id)
+            .with_for_update()
+            .all()
+        )
+        active_bookings = [
+            booking
+            for booking in active_bookings
+            if is_active_booking_status(booking.status)
+        ]
+
+        for booking in active_bookings:
+            released_seats += booking.seats_reserved
+            booking.status = "cancelled"
+            booking.payment_status = "refund_pending"
 
     venue.state = payload.state
 
@@ -2819,7 +2816,11 @@ def suspend_venue(
         "state": venue.state,
         "cancelled_bookings": len(active_bookings),
         "released_seats": released_seats,
-        "message": "Venue suspended successfully"
+        "message": (
+            "Venue suspended successfully"
+            if payload.state == "Suspended"
+            else "Venue activated successfully"
+        )
     }
 
 

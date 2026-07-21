@@ -557,7 +557,7 @@ class AdminDashboardOverviewResponse(BaseModel):
 
 class VenueSuspensionRequest(BaseModel):
 
-    state: Literal["Suspended"] = "Suspended"
+    state: Literal["Active", "Suspended"] = "Suspended"
 
 
 class VenueSuspensionResponse(BaseModel):
