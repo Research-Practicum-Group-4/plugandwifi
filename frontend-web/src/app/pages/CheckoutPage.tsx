@@ -1,21 +1,99 @@
 import { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate, Link } from "react-router";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Separator } from "../components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
-import { CreditCard, Building2, CheckCircle, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { CheckCircle, Loader2, MapPin, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
-
 import { api } from "../../services/api";
+
+// ** HARDCODED ** - default venue gallery images for checkout
+const DEFAULT_VENUE_GALLERY = [
+  "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&h=400&fit=crop&auto=format",
+  "https://images.unsplash.com/photo-1519167758481-83f29da8c851?w=600&h=400&fit=crop&auto=format",
+  "https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=600&h=400&fit=crop&auto=format",
+  "https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&h=400&fit=crop&auto=format",
+];
+
+function SignInModal({
+  open,
+  onClose,
+  onSignedIn,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSignedIn: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <div
+              className="size-8 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: "#2f8a64" }}
+            >
+              <MapPin className="size-4 text-white" />
+            </div>
+            Sign in to continue
+          </DialogTitle>
+        </DialogHeader>
+        <div className="absolute top-4 right-4">
+          <Link
+            to="/provider/offer-space"
+            className="text-xs inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-primary/60 text-primary hover:bg-primary/10 transition-colors whitespace-nowrap"
+          >
+            <Building2 className="size-3" />
+            Register/Login as a Space Provider
+          </Link>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Sign in to complete your booking. Your checkout details are saved.
+        </p>
+        <form
+          className="space-y-4 mt-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            toast.success("Signed in successfully");
+            onSignedIn();
+          }}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="modal-email">Email</Label>
+            <Input id="modal-email" type="email" placeholder="you@example.com" required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="modal-password">Password</Label>
+            <Input id="modal-password" type="password" required />
+          </div>
+          <Button type="submit" className="w-full" style={{ backgroundColor: "#253c50" }}>
+            Sign In & Continue
+          </Button>
+        </form>
+        <div className="grid grid-cols-2 gap-3 mt-2">
+          <Button variant="outline">Google</Button>
+          <Button variant="outline">Apple</Button>
+        </div>
+        <p className="text-center text-sm text-muted-foreground">
+          No account?{" "}
+          <Link to="/signup" className="text-primary hover:underline" onClick={onClose}>
+            Sign up
+          </Link>
+        </p>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function CheckoutPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  
+
   const { isAuthenticated, user, loading: authLoading } = useAuth();
 
   // Recover booking state if returning from login redirect, otherwise use location state
@@ -26,11 +104,16 @@ export function CheckoutPage() {
     startTime: "09:00:00",
     endTime: "12:00:00",
     duration: "3",
-    price: 10.5
+    price: 10.5,
   };
 
-  const [paymentMethod, setPaymentMethod] = useState("card");
+  // ** HARDCODED ** - venue images from VenueDetailPage state or default gallery
+  const venueImages: string[] = bookingData.venueImages || DEFAULT_VENUE_GALLERY;
+
+  const [paymentMethod, setPaymentMethod] = useState("googlepay");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showSignIn, setShowSignIn] = useState(false);
+  const [activeImage, setActiveImage] = useState(0);
 
   // Form states for contact info
   const [firstName, setFirstName] = useState("");
@@ -38,18 +121,12 @@ export function CheckoutPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
 
-  // Redirect if not logged in
+  // Redirect if not logged in (but also allow sign-in modal)
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      toast.error("Please sign in to complete your booking.");
-      navigate("/login", {
-        state: {
-          from: "/checkout",
-          bookingData: location.state
-        }
-      });
+      // Don't redirect immediately — user can sign in via modal
     }
-  }, [isAuthenticated, authLoading, navigate, location.state]);
+  }, [isAuthenticated, authLoading]);
 
   // Pre-populate details from user state
   useEffect(() => {
@@ -61,13 +138,7 @@ export function CheckoutPage() {
     }
   }, [user]);
 
-  const handlePayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isAuthenticated || !user) {
-      toast.error("You must be signed in to book.");
-      return;
-    }
-
+  const processPayment = async () => {
     setIsProcessing(true);
 
     try {
@@ -78,7 +149,7 @@ export function CheckoutPage() {
         end_time: bookingData.endTime || "12:00:00",
         seats_reserved: bookingData.seatsReserved || 1,
       });
-      
+
       setIsProcessing(false);
       toast.success("Booking confirmed!");
       navigate("/booking-confirmation", {
@@ -97,10 +168,18 @@ export function CheckoutPage() {
       console.error("Booking failed:", err);
       setIsProcessing(false);
       const errorMsg = err.response?.data?.detail || "Booking placement failed.";
-      toast.error("Booking failed", {
-        description: errorMsg,
-      });
+      toast.error("Booking failed", { description: errorMsg });
     }
+  };
+
+  const handlePayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAuthenticated) {
+      // Show sign-in modal instead of redirect
+      setShowSignIn(true);
+      return;
+    }
+    processPayment();
   };
 
   if (authLoading) {
@@ -112,21 +191,53 @@ export function CheckoutPage() {
     );
   }
 
-  if (!isAuthenticated) {
-    return (
-      <div className="container mx-auto px-4 py-12 text-center text-muted-foreground min-h-[400px]">
-        Redirecting to login...
-      </div>
-    );
-  }
-
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <SignInModal
+        open={showSignIn}
+        onClose={() => setShowSignIn(false)}
+        onSignedIn={() => {
+          setShowSignIn(false);
+          processPayment();
+        }}
+      />
+
       <h1 className="mb-8">Checkout</h1>
 
       <div className="grid lg:grid-cols-[1fr_400px] gap-8">
-        {/* Payment Form */}
+        {/* Left column */}
         <div className="space-y-6">
+          {/* Venue Photo Gallery */}
+          <Card className="overflow-hidden">
+            <div className="aspect-video overflow-hidden bg-muted">
+              <img
+                src={venueImages[activeImage]}
+                alt={`${bookingData.venueName} - photo ${activeImage + 1}`}
+                className="w-full h-full object-cover transition-all duration-300"
+              />
+            </div>
+            <CardContent className="pt-3 pb-3">
+              <div className="flex gap-2 overflow-x-auto">
+                {venueImages.map((img, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setActiveImage(idx)}
+                    className={`flex-shrink-0 w-16 h-16 rounded-md overflow-hidden border-2 transition-colors ${
+                      activeImage === idx ? "border-primary" : "border-transparent"
+                    }`}
+                  >
+                    <img
+                      src={img}
+                      alt={`Thumbnail ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Contact Information */}
           <Card>
             <CardHeader>
               <CardTitle>Contact Information</CardTitle>
@@ -179,6 +290,7 @@ export function CheckoutPage() {
             </CardContent>
           </Card>
 
+          {/* Payment Method */}
           <Card>
             <CardHeader>
               <CardTitle>Payment Method</CardTitle>
@@ -186,31 +298,48 @@ export function CheckoutPage() {
             <CardContent>
               <form onSubmit={handlePayment} className="space-y-4">
                 <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
+                  {/* Google Pay */}
                   <div className="flex items-center space-x-2 p-4 rounded-lg border">
-                    <RadioGroupItem value="card" id="card" />
-                    <Label htmlFor="card" className="flex items-center gap-2 cursor-pointer flex-1">
-                      <CreditCard className="size-5" />
-                      Credit or Debit Card
+                    <RadioGroupItem value="googlepay" id="googlepay" />
+                    <Label
+                      htmlFor="googlepay"
+                      className="flex items-center gap-3 cursor-pointer flex-1"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span className="text-blue-500 font-semibold text-sm">G</span>
+                        <span className="text-red-500 font-semibold text-sm">o</span>
+                        <span className="text-yellow-500 font-semibold text-sm">o</span>
+                        <span className="text-blue-500 font-semibold text-sm">g</span>
+                        <span className="text-green-500 font-semibold text-sm">l</span>
+                        <span className="text-red-500 font-semibold text-sm">e</span>
+                      </div>
+                      <span className="font-medium">Google Pay</span>
                     </Label>
                   </div>
+                  {/* Stripe */}
                   <div className="flex items-center space-x-2 p-4 rounded-lg border">
-                    <RadioGroupItem value="bank" id="bank" />
-                    <Label htmlFor="bank" className="flex items-center gap-2 cursor-pointer flex-1">
-                      <Building2 className="size-5" />
-                      Bank Transfer
+                    <RadioGroupItem value="stripe" id="stripe" />
+                    <Label
+                      htmlFor="stripe"
+                      className="flex items-center gap-3 cursor-pointer flex-1"
+                    >
+                      <div
+                        className="size-6 rounded flex items-center justify-center"
+                        style={{ backgroundColor: "#635bff" }}
+                      >
+                        <span className="text-white text-xs font-bold">S</span>
+                      </div>
+                      <span className="font-medium">Stripe</span>
+                      <span className="text-xs text-muted-foreground">(Credit / Debit Card)</span>
                     </Label>
                   </div>
                 </RadioGroup>
 
-                {paymentMethod === "card" && (
-                  <div className="space-y-4 pt-4">
+                {paymentMethod === "stripe" && (
+                  <div className="space-y-4 pt-4 border-t">
                     <div className="space-y-2">
                       <Label htmlFor="cardNumber">Card Number</Label>
-                      <Input
-                        id="cardNumber"
-                        placeholder="1234 5678 9012 3456"
-                        required
-                      />
+                      <Input id="cardNumber" placeholder="1234 5678 9012 3456" required />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -234,7 +363,7 @@ export function CheckoutPage() {
                   className="w-full"
                   size="lg"
                   disabled={isProcessing}
-                  style={{ backgroundColor: '#253c50' }}
+                  style={{ backgroundColor: "#253c50" }}
                 >
                   {isProcessing ? "Processing..." : "Complete Booking"}
                 </Button>
@@ -253,10 +382,12 @@ export function CheckoutPage() {
               <div>
                 <h4 className="mb-2">{bookingData.venueName}</h4>
                 <p className="text-muted-foreground">
-                  Duration: {bookingData.duration} hour{bookingData.duration !== "1" ? "s" : ""}
+                  Duration: {bookingData.duration} hour
+                  {bookingData.duration !== "1" ? "s" : ""}
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Seats: {bookingData.seatsReserved || 1} { (bookingData.seatsReserved || 1) === 1 ? "seat" : "seats" }
+                  Seats: {bookingData.seatsReserved || 1}{" "}
+                  {(bookingData.seatsReserved || 1) === 1 ? "seat" : "seats"}
                 </p>
               </div>
 
@@ -277,7 +408,9 @@ export function CheckoutPage() {
 
               <div className="flex justify-between items-center">
                 <span>Total</span>
-                <span className="text-2xl" style={{ color: '#2f8a64' }}>${(bookingData.price * 1.1).toFixed(2)}</span>
+                <span className="text-2xl" style={{ color: "#2f8a64" }}>
+                  ${(bookingData.price * 1.1).toFixed(2)}
+                </span>
               </div>
 
               <div className="bg-muted p-4 rounded-lg space-y-2">

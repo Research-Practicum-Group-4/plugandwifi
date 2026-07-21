@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation } from "react-router";
 import { Button } from "../ui/button";
-import { User, Building2, Shield } from "lucide-react";
+import { User, Building2, Shield, Calendar } from "lucide-react";
 import logo from "../../../imports/logo.jpg";
 import { ChatBot } from "../ChatBot";
 import { useAuth } from "../../contexts/AuthContext";
@@ -40,9 +40,17 @@ export function MainLayout() {
                   <Button variant="ghost">Find Space</Button>
                 </Link>
                 {isAuthenticated && (
-                  <Link to="/saved">
-                    <Button variant="ghost">Saved</Button>
-                  </Link>
+                  <>
+                    <Link to="/saved">
+                      <Button variant="ghost">Saved</Button>
+                    </Link>
+                    <Link to="/bookings">
+                      <Button variant="ghost" className="flex items-center gap-1.5">
+                        <Calendar className="size-4" />
+                        My Bookings
+                      </Button>
+                    </Link>
+                  </>
                 )}
               </>
             )}
@@ -128,4 +136,3 @@ export function MainLayout() {
     </div>
   );
 }
-

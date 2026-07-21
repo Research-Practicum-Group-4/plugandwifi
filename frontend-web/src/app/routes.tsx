@@ -6,7 +6,7 @@ import { VenueDetailPage } from "./pages/VenueDetailPage";
 import { CheckoutPage } from "./pages/CheckoutPage";
 import { BookingConfirmationPage } from "./pages/BookingConfirmationPage";
 import { SavedPlacesPage } from "./pages/SavedPlacesPage";
-import { MyBookingsPage } from "./pages/MyBookingsPage";
+import { BookingsPage } from "./pages/BookingsPage";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { SignupPage } from "./pages/auth/SignupPage";
 import { ProviderRegisterPage } from "./pages/provider/ProviderRegisterPage";
@@ -40,7 +40,7 @@ export const router = createBrowserRouter([
           { path: "checkout", Component: CheckoutPage },
           { path: "booking-confirmation", Component: BookingConfirmationPage },
           { path: "saved", Component: SavedPlacesPage },
-          { path: "bookings", Component: MyBookingsPage },
+          { path: "bookings", Component: BookingsPage },
         ],
       },
 

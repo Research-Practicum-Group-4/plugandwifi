@@ -2,7 +2,7 @@ import { useLocation, useNavigate, Link } from "react-router";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
-import { CheckCircle2, Calendar, Clock, Users, MapPin, Download, Share2 } from "lucide-react";
+import { CheckCircle2, Calendar, Clock, Users, MapPin, Download, Share2, Info } from "lucide-react";
 
 export function BookingConfirmationPage() {
   const location = useLocation();
@@ -35,6 +35,14 @@ export function BookingConfirmationPage() {
       return d;
     }
   };
+
+  // ** HARDCODED ** - Important information bullets (no API endpoint for these)
+  const importantInfo = [
+    "Please arrive 5 minutes before your booking start time.",
+    "Bring a valid ID — the host may ask for verification.",
+    "Complimentary beverages are available at no extra cost.",
+    "Free cancellation is available up to 24 hours before your booking.",
+  ];
 
   return (
     <div className="container mx-auto px-4 py-16 max-w-2xl">
@@ -114,6 +122,24 @@ export function BookingConfirmationPage() {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* ** HARDCODED ** - Important Information card */}
+      <Card className="mb-6 border-blue-300 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800">
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Info className="size-5 text-blue-600 dark:text-blue-400" />
+            <h3 className="font-semibold text-blue-800 dark:text-blue-300">Important Information</h3>
+          </div>
+          <ul className="space-y-2">
+            {importantInfo.map((info, idx) => (
+              <li key={idx} className="flex items-start gap-2 text-sm text-blue-700 dark:text-blue-300">
+                <span className="mt-1 text-blue-500">•</span>
+                <span>{info}</span>
+              </li>
+            ))}
+          </ul>
         </CardContent>
       </Card>
 

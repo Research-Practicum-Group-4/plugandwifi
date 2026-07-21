@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Separator } from "../../components/ui/separator";
-import { MapPin, Loader2 } from "lucide-react";
+import { MapPin, Loader2, Building2 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -53,7 +53,17 @@ export function LoginPage() {
   return (
     <div className="container mx-auto px-4 py-12 flex items-center justify-center min-h-[calc(100vh-200px)]">
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
+        <CardHeader className="text-center relative">
+          {/* Register/Login as a Space Provider button */}
+          <div className="absolute top-4 right-4">
+            <Link
+              to="/provider/register"
+              className="text-xs inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-primary/60 text-primary hover:bg-primary/10 transition-colors whitespace-nowrap"
+            >
+              <Building2 className="size-3" />
+              Register/Login as a Space Provider
+            </Link>
+          </div>
           <div className="flex justify-center mb-4">
             <div className="size-12 rounded-full flex items-center justify-center" style={{ backgroundColor: '#2f8a64' }}>
               <MapPin className="size-6 text-white" />
@@ -125,9 +135,15 @@ export function LoginPage() {
               Sign up
             </Link>
           </p>
+
+          {/* Continue browsing without login */}
+          <p className="text-center text-sm">
+            <Link to="/" className="text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">
+              Continue browsing without login
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </div>
   );
 }
-
