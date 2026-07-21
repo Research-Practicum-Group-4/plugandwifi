@@ -172,9 +172,15 @@ export function SignupPage() {
               Sign in
             </Link>
           </p>
+
+          {/* Continue browsing without registration */}
+          <p className="text-center text-sm">
+            <Link to="/" className="text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">
+              Continue browsing without registration
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </div>
   );
 }
-
