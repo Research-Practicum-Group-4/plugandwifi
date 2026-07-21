@@ -5,12 +5,21 @@ import { Card, CardContent } from "../components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import { Calendar } from "../components/ui/calendar";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Search, Volume2, Phone, Star, LayoutGrid, Map } from "lucide-react";
+import { Search, LayoutGrid, Map } from "lucide-react";
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { api } from "../../services/api";
 import { Venue } from "../../types/api";
 import { MapView } from "../components/MapView";
+
+const OWNERSHIP_CHIPS = ["WBE", "MBE", "LGBT+", "B-Corp", "VBE"];
+
+function getSuitabilityColor(score: number): string {
+  if (score >= 80) return "#2f8a64";
+  if (score >= 55) return "#f59e0b";
+  if (score >= 30) return "#ef4444";
+  return "#6b7280";
+}
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -23,6 +32,7 @@ export function HomePage() {
   const [limit] = useState(6);
   const [hasMore, setHasMore] = useState(false);
   const [totalPages, setTotalPages] = useState(1);
+  const [activeOwnershipChips, setActiveOwnershipChips] = useState<string[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -38,6 +48,12 @@ export function HomePage() {
         setLoading(false);
       });
   }, [currentPage, limit]);
+
+  const toggleChip = (chip: string) => {
+    setActiveOwnershipChips((prev) =>
+      prev.includes(chip) ? prev.filter((c) => c !== chip) : [...prev, chip]
+    );
+  };
 
   const getVenueImage = (venueId: string) => {
     const images: Record<string, string> = {
@@ -95,19 +111,31 @@ export function HomePage() {
           </Button>
         </div>
 
-        <div className="flex flex-wrap gap-2 justify-center">
-          <Button variant="outline" size="sm">
-            <Volume2 className="size-4 mr-2" />
-            No Loud Music
-          </Button>
-          <Button variant="outline" size="sm">
-            <Phone className="size-4 mr-2" />
-            Calls Allowed
-          </Button>
-          <Button variant="outline" size="sm">
-            <Star className="size-4 mr-2" />
-            4+ Stars
-          </Button>
+        {/* Ownership filter chips */}
+        <div className="mb-2">
+          <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wide">
+            You'll love these certified spaces
+          </p>
+          <div className="flex flex-wrap gap-2 justify-center">
+            {OWNERSHIP_CHIPS.map((chip) => (
+              <button
+                key={chip}
+                onClick={() => toggleChip(chip)}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors cursor-pointer ${
+                  activeOwnershipChips.includes(chip)
+                    ? "text-white border-transparent"
+                    : "bg-background border-border text-foreground hover:bg-muted"
+                }`}
+                style={
+                  activeOwnershipChips.includes(chip)
+                    ? { backgroundColor: "#253c50", borderColor: "#253c50" }
+                    : {}
+                }
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -143,14 +171,18 @@ export function HomePage() {
                     alt={venue.name}
                     className="w-full h-full object-cover"
                   />
+                  {/* Suitability score badge */}
+                  <div
+                    className="absolute top-2 right-2 size-10 rounded-full flex items-center justify-center text-white text-xs font-bold shadow"
+                    style={{ backgroundColor: getSuitabilityColor(venue.rating * 20) }}
+                  >
+                    {Math.round(venue.rating * 20)}
+                  </div>
                 </div>
                 <CardContent className="pt-4 space-y-3">
                   <div className="flex items-start justify-between">
                     <h4>{venue.name}</h4>
-                    <div className="flex items-center gap-1">
-                      <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
-                      <span>{venue.rating}</span>
-                    </div>
+                    <span className="text-sm text-muted-foreground">⭐ {venue.rating}</span>
                   </div>
                   <p className="text-muted-foreground">
                     {venue.distance_km} km away • {venue.cuisine_type}

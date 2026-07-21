@@ -80,10 +80,19 @@ export function CheckoutPage() {
       });
       
       setIsProcessing(false);
-      toast.success("Booking confirmed!", {
-        description: `Booking ID: ${response.booking_id}. Check confirmation shortly.`,
+      toast.success("Booking confirmed!");
+      navigate("/booking-confirmation", {
+        state: {
+          bookingId: response.booking_id,
+          venueName: bookingData.venueName,
+          bookingDate: bookingData.bookingDate,
+          startTime: bookingData.startTime,
+          endTime: bookingData.endTime,
+          duration: bookingData.duration,
+          seatsReserved: bookingData.seatsReserved || 1,
+          price: bookingData.price,
+        },
       });
-      navigate("/bookings");
     } catch (err: any) {
       console.error("Booking failed:", err);
       setIsProcessing(false);

@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation } from "react-router";
 import { Button } from "../ui/button";
-import { User, Building2 } from "lucide-react";
-import logo from "../../../imports/temp_logo.jpg";
+import { User, Building2, Shield } from "lucide-react";
+import logo from "../../../imports/logo.jpg";
 import { ChatBot } from "../ChatBot";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -17,6 +17,7 @@ import { Avatar, AvatarFallback } from "../ui/avatar";
 export function MainLayout() {
   const location = useLocation();
   const isProviderRoute = location.pathname.startsWith("/provider");
+  const isAdminRoute = location.pathname.startsWith("/admin");
   const { isAuthenticated, user, logout } = useAuth();
 
   return (
@@ -33,7 +34,7 @@ export function MainLayout() {
           </Link>
 
           <nav className="flex items-center gap-4">
-            {!isProviderRoute && (
+            {!isProviderRoute && !isAdminRoute && (
               <>
                 <Link to="/search">
                   <Button variant="ghost">Find Space</Button>
@@ -44,6 +45,15 @@ export function MainLayout() {
                   </Link>
                 )}
               </>
+            )}
+
+            {isAuthenticated && user?.role === "admin" && (
+              <Link to="/admin/dashboard">
+                <Button variant="ghost" className="text-amber-600 hover:text-amber-700 hover:bg-amber-50/50 font-medium flex items-center gap-1.5">
+                  <Shield className="size-4" />
+                  Admin
+                </Button>
+              </Link>
             )}
 
             {/* Provider Navigation conditional CTA */}
