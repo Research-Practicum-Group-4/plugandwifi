@@ -1,0 +1,153 @@
+Finding Calm in the Chaos of Manhattan
+Presented by Team 4 Wenfei Song, Tzu Yu Chang, Sunmin Lee, Youssef Bouarada, Adam Treanor
+
+Remote Work Realities
+
+The Pricing Gap:
+Users feel WeWork day passes are too expensive (~$39+) and not cost-effective for short-term temporary stays. We need a pay-as-you-go alternative.
+
+The User's Reality:
+- Call Disruption:No quiet space for urgent, short business calls.
+- Wasted Time: Wasting 25 minutes wandering around searching for a seat.
+- Overpriced Day Passes: Forcing a $40+ co-working fee for a 1.5-hour stay.
+- Amenity Roulette: Zero guarantee of finding a seat or a working outlet.
+
+Persona Spotlight: Daniel
+
+Profile: 42-year-old international business traveller
+Pain Points:
+ Frustrated by awkward schedule gaps between client meetings.
+ Stressed by loud cafes without guaranteed power outlets.
+ Deterred by expensive coworking day-passes for short stays.
+"I just need a guaranteed quiet corner with Wi-Fi and a plug for 90 minutes between my meetings, without paying for a full-day pass."
+
+Problem Statement (Define Phase)
+
+The Core Problem:
+Daniel needs a reliable way to instantly locate and secure short-term, professional workspaces for 1 to 2-hour schedule gaps.
+
+The Reason:
+Because public cafes are too unpredictable (noisy, no guaranteed plugs), and traditional coworking day-passes are too expensive for brief stays, leaving him stressed and unproductive between meetings.
+
+Existing Solution Gaps
+
+
+Google Maps:
+Shows where a place is, but not if it's noisy or has available plugs now.
+
+
+Coworking Spaces:
+Too expensive for short-term use; requires complex memberships.
+
+
+Underused Real Estate:
+Restaurants and cafes remain empty during off-peak hours (2 PM ­ 5 PM) while seekers struggle to find space.
+
+Our Solution: The Hourly Airbnb for Work
+
+The Concept
+A peer-to-peer workspace sharing platform.
+
+User Side
+Discover and rent quiet tables by the hour/minute with guaranteed facilities.
+
+Provider Side
+Local businesses (cafes/restaurants) monetize their idle space during break hours.
+
+How It Works
+User Journey
+1 Search nearby 2 Apply filters 3 View suitable spaces 4 Book the place and get the QR code
+
+Provider Journey
+1 Register space 2 Set available hours 3 Publish offer 4 Receive users
+
+Competitor Analysis
+
+Key App Features
+1. Sensory & Tech Filtering
+Filters for Noise Levels, real-time crowd density, guaranteed Plug Access, and verified Wi-Fi speeds.
+
+2. Interactive Map Discovery
+"Vibe-Map" interface to instantly locate nearby workspaces with real-time density and pricing pins.
+
+3. Visual 2D Seating
+Interactive 2D Floor Plan to select your exact seat (e.g., quiet corner, window side, or near power outlets).
+
+4. Dynamic Micro-Booking
+Intuitive Time-Slider for flexible stays (1 hour to 4 hours) with instant end-time and cost calculation.
+
+Key App Features
+
+5. Gen-AI Personal Assistant
+Intelligent virtual support for users, providing contextual help and automation within the app interface.
+
+6. Dual-Mode Interface
+Seamless Role-Switching between "Guest Mode" and "Host Mode" to accommodate different user needs.
+
+7. Real-Time Host Analytics
+Provider Dashboard with revenue tracking, occupancy stats, and AI-suggested dynamic pricing for hosts.
+
+8. Offline Pass & Extension
+Encrypted QR codes for no-signal access, with a one-tap "Extend Time" function for long meetings.
+
+Prototype Showcase
+1. Main Page (Listing)
+Discover nearby workspaces with real-time density.
+2. Main Page (Map View)
+"Vibe-Map" interface to locate pins instantly.
+3. Chat Bot
+Intelligent virtual support for users.
+
+Prototype Showcase
+4. Reservation Page
+Intuitive Time-Slider for flexible stays, Interactive 2D Floor Plan to select your exact seat.
+
+Prototype Showcase
+5. Access QR code page
+Seamless Check-in & Time Management
+
+Prototype Showcase
+6. User profile page
+Seamless Role-Switching: One-Tap User/Provider Profile
+7. Provider Dashboard
+A comprehensive war room for hosts to effortlessly track real-time revenue
+
+Prototype Showcase
+
+Prototype Showcase
+
+Prototype Showcase
+
+Prototype Showcase
+
+Prototype Showcase
+
+Prototype Showcase
+
+The Value Proposition
+
+For Users
+Affordable Access50­85% cheaper than traditional coworking
+spaces.
+Reliable DiscoveryVerified Wi-Fi, charging plugs, and
+quietness.
+Flexible CommitmentSuitable for spontaneous short stays.
+
+For Providers
+Monetise SpaceTurn off-peak hours into additional revenue.
+Minimal BurdenLeverage existing seating and infrastructure.
+New SegmentsReach remote workers, students, and
+freelancers.
+
+Conclusion & Future Potential
+
+Flexible Space Finder redefines short-term urban productivity.
+Urban Marketplace: Connecting users with underutilised spaces like restaurants and cafes.
+Solving Pain Points: Addressing the high costs of coworking and the unreliability of public cafes.
+Mutual Value: Affordable access for users and passive revenue for space providers.
+Scalable Model: Utilizing existing infrastructure for a smarter city approach.
+
+"Instead of creating more coworking spaces, we unlock the hidden
+potential of existing ones."
+
+

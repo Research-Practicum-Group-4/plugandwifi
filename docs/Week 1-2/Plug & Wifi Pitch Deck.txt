@@ -1,0 +1,26 @@
+Finding Calm in the Chaos of Manhattan
+Our platform acts as an hourly marketplace for professional desk space. We bridge the gap between space users and space providers, addressing the friction of finding reliable, short-term workspaces for 1 to 3-hour gaps. Effectively functioning as an "Hourly Airbnb for Work" from the user's perspective, and an "Hourly Too Good To Go for tables" from the business perspective.
+Presented by Team 4 Wenfei Song, Tzu Yu Chang, Sunmin Lee, Youssef Bouarada, Adam Treanor
+
+Our Target Users
+ Remote Professionals & Freelancers: Individuals lacking dedicated offices who need verified environments to take urgent calls or complete tasks.
+ International Business Travellers: Corporate workers navigating schedule gaps between client meetings in unfamiliar cities.
+ Students: Learners looking for affordable, guaranteed study spaces with charging capabilities.
+ Space Providers: Local cafes, restaurants, and hotels seeking incremental revenue margins from empty seats during off-peak windows.
+
+Claims About Novelty
+Unlike traditional coworking spaces that demand full-day passes, our platform transforms underutilized real estate into guaranteed productivity hubs using advanced filtering and Machine Learning algorithms.
+
+ML Suitability Scoring
+Generates a dynamic 0-100 score for each workspace by calculating weighted factors across verified Wi-Fi access, plug availability, noise levels, and transport proximity.
+
+Sensory & Tech Filtering
+Allows users to pinpoint their ideal environment by filtering available seating based on critical productivity indicators rather than just food or ambiance.
+
+Dynamic Micro-Booking
+Replaces expensive full-day passes with an intuitive time-slot engine, allowing users to secure verified desks for precise durations matching their schedule gaps.
+
+Hybrid Venue Ranking
+Intelligently orders search results using our Machine Learning suitability models, backed by algorithmic rule-sets (heuristics) to instantly surface the optimal environments.
+
+

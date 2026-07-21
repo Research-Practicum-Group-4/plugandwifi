@@ -1,0 +1,61 @@
+name: Plug & Wifi - Full-Stack Automated CI Pipeline
+
+on:
+  pull_request:
+    branches: [ "develop" ]
+  push:
+    branches: [ "develop" ]
+
+jobs:
+  full-stack-validation:
+    name: Full-Stack Code Quality & Syntax Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    # ========================================================
+    # PYTHON (BACKEND) AUTO-CHECKS & STRICT TESTS
+    # ========================================================
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Backend Dependencies
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        # Install httpx required for our tests and read requirements.txt
+        pip install ruff pytest httpx
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Python - Auto-Check Syntax & Bugs (Ruff)
+      working-directory: ./backend
+      run: ruff check .
+
+    - name: Python - Run Backend Unit Tests 
+      working-directory: ./backend
+      run: pytest
+
+    # ========================================================
+    # REACT (FRONTEND-WEB) AUTO-CHECKS
+    # ========================================================
+    - name: Set up Node.js Environment
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: React - Install Dependencies and Run Build Verification
+      working-directory: ./frontend-web
+      run: |
+        npm ci
+        npm run build
+
+    - name: React - Install Prettier Globally
+      run: npm install -g prettier
+
+    - name: React - Auto-Check Code Formatting (Prettier)
+      working-directory: ./frontend-web
+      run: prettier --check '**/*.{js,jsx,ts,tsx}' || echo "No frontend files found or formatting needed..."

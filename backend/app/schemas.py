@@ -1,0 +1,573 @@
+from pydantic import (
+    BaseModel,
+    EmailStr,
+    Field
+)
+
+from datetime import (
+    date,
+    time
+)
+from typing import Literal
+
+
+class UserRegister(
+    BaseModel
+):
+
+    full_name: str
+
+    email: EmailStr
+
+    password: str = Field(
+        min_length=8
+    )
+
+    role: Literal["user", "provider"] = "user"
+
+
+class UserLogin(
+    BaseModel
+):
+
+    email: EmailStr
+
+    password: str
+
+    remember_me: bool = False
+
+
+class RefreshTokenRequest(BaseModel):
+
+    refresh_token: str = Field(min_length=32)
+
+
+class LogoutRequest(BaseModel):
+
+    refresh_token: str = Field(min_length=32)
+
+
+class ChatbotRecommendRequest(BaseModel):
+
+    message: str = Field(min_length=1)
+
+
+class ChatbotSearchParameters(BaseModel):
+
+    location: str | None = None
+
+    radius_km: float | None = None
+
+    venue_type: str | None = None
+
+    wifi: bool | None = None
+
+    busyness: str | None = None
+
+    time: str | None = None
+
+
+class ChatbotRecommendResponse(BaseModel):
+
+    response: str
+
+    model: str
+
+    search_parameters: ChatbotSearchParameters | None = None
+
+    venues: list["VenueResponse"] = Field(default_factory=list)
+
+    follow_up_question: str | None = None
+
+
+class VenueResponse(BaseModel):
+
+    venue_id: str
+    name: str
+    state: str | None = None
+    lat: float
+    lon: float
+    borough: str
+
+
+    cuisine_type: str | None = None
+    has_wifi: bool | None = None
+    
+
+    noise_level: str | None = None
+    noise_score: float | None = None
+    
+
+    rating: float | None = None
+    
+
+    plug_access: int | None = None
+    
+
+    hourly_price: float | None = None
+
+    plugs_available: int | None = None
+
+    hourly_fee: float | None = None
+
+    availability_window: str | None = None
+
+    opening_hours_summary: str | bool | None = None
+
+    distance_km: float | None = None
+
+    busyness_score: int | None = None
+
+    busyness_label: str | None = None
+
+    suitability_score: float | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class VenueListResponse(BaseModel):
+
+    items: list[VenueResponse]
+
+    page: int
+
+    limit: int
+
+    total_items: int
+
+    total_pages: int
+
+    has_more: bool
+
+
+class VenueSuggestion(BaseModel):
+
+    venue_id: str
+
+    name: str
+
+    lat: float
+
+    lon: float
+
+    borough: str
+
+    type: Literal["venue"] = "venue"
+
+
+class VenueSuggestionsResponse(BaseModel):
+
+    items: list[VenueSuggestion]
+
+
+class VenueCreate(BaseModel):
+
+    name: str = Field(min_length=1)
+
+    lat: float = Field(
+        ge=-90,
+        le=90
+    )
+
+    lon: float = Field(
+        ge=-180,
+        le=180
+    )
+
+    borough: str = Field(min_length=1)
+
+    opening_hours: str | None = None
+
+    seat_capacity: int = Field(ge=1)
+
+    amenity_tags: list[str] = []
+
+    rules_text: str | None = None
+
+    has_wifi: bool | None = None
+
+    plug_access: int | None = Field(
+        None,
+        ge=0
+    )
+
+    hourly_price: float | None = Field(
+        None,
+        ge=0
+    )
+
+
+class VenueCreateResponse(BaseModel):
+
+    venue_id: str
+
+    name: str
+
+    state: str
+
+    lat: float
+
+    lon: float
+
+    borough: str
+
+    opening_hours: str | None = None
+
+    seat_capacity: int
+
+    amenity_tags: list[str]
+
+    rules_text: str | None = None
+
+    has_wifi: bool | None = None
+
+    plug_access: int | None = None
+
+    hourly_price: float | None = None
+
+
+class VenueDetailResponse(BaseModel):
+    venue_id: str
+
+    name: str
+
+    state: str | None = None
+
+    osm_type: str | None = None
+
+    cuisine_type: str | None = None
+
+    cuisine_detail: str | None = None
+
+    phone: str | None = None
+
+    website: str | None = None
+
+    building_number: str | None = None
+
+    street: str | None = None
+
+    zipcode: str | None = None
+
+    lat: float
+
+    lon: float
+
+    opening_hours: str | None = None
+
+    has_wifi: bool | None = None
+
+    noise_level: str | None = None
+
+    noise_score: float | None = None
+
+    best_hours_for_work: str | None = None
+
+    hourly_profile: str | None = None
+
+    partner: int | None = None
+
+    borough: str | None = None
+
+    inferred_wifi: bool | None = None
+
+    wifi_user_reported: bool | None = None
+
+    nearest_subway: str | None = None
+
+    nearest_subway_m: int | None = None
+
+    nearest_bus: str | None = None
+
+    nearest_bus_m: int | None = None
+
+    plug_access: int | None = None
+
+    plug_user_reported: bool | None = None
+
+    rating: float | None = None
+
+    rating_user_reported: float | None = None
+
+    hourly_price: float | None = None
+    
+    actual_hourly_price: float | None = None
+
+    busyness_score: int | None = None
+
+    busyness_label: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class AvailabilitySlotResponse(BaseModel):
+
+    slot_id: int
+
+    date: date
+
+    start_time: str
+
+    end_time: str
+
+    available: bool
+
+    available_seats: int
+
+
+class VenueAvailabilityResponse(BaseModel):
+
+    venue_id: str
+
+    available_slots: list[AvailabilitySlotResponse]
+
+
+class BookingCreate(BaseModel):
+
+    venue_id: str
+
+    booking_date: date
+
+    start_time: time
+
+    end_time: time
+
+    seats_reserved: int = Field(ge=1)
+
+
+class BookingResponse(BaseModel):
+
+    id: int
+
+    user_id: int
+
+    venue_id: str
+
+    booking_date: date
+
+    start_time: time
+
+    end_time: time
+
+    seats_reserved: int
+
+    status: str
+
+    order_id: str
+
+    payment_status: str
+
+    class Config:
+
+        from_attributes = True
+
+
+class ReviewCreate(BaseModel):
+
+    booking_id: int
+
+    wifi_score: float = Field(
+        ge=1,
+        le=5
+    )
+
+    plug_score: float = Field(
+        ge=1,
+        le=5
+    )
+
+    quietness_score: float = Field(
+        ge=1,
+        le=5
+    )
+
+
+class ReviewResponse(BaseModel):
+
+    id: int
+
+    booking_id: int
+
+    user_id: int
+
+    venue_id: str
+
+    wifi_score: float | None = None
+
+    plug_score: float | None = None
+
+    quietness_score: float | None = None
+
+    verified: bool
+
+    venue_rating: float | None = None
+
+
+class UserBookingItem(BaseModel):
+
+    booking_id: int
+
+    venue_id: str
+
+    venue_name: str | None = None
+
+    booking_date: date
+
+    start_time: time
+
+    end_time: time
+
+    seats_reserved: int
+
+    status: str
+
+    order_id: str
+
+    payment_status: str
+
+    lat: float | None = None
+
+    lon: float | None = None
+
+
+class UserBookingsResponse(BaseModel):
+
+    upcoming: list[UserBookingItem]
+
+    completed: list[UserBookingItem]
+
+    cancelled: list[UserBookingItem]
+
+
+class BookingCancellationResponse(BaseModel):
+
+    booking_id: int
+
+    status: str
+
+    payment_status: str
+
+    released_seats: int
+
+    message: str
+
+
+class FavoriteResponse(BaseModel):
+
+    user_id: int
+
+    venue_id: str
+
+    message: str
+
+
+class SlotDeactivationResponse(BaseModel):
+
+    slot_id: int
+
+    venue_id: str
+
+    available: bool
+
+    available_seats: int
+
+    message: str
+
+
+class KPIMetric(BaseModel):
+
+    value: int | float
+
+    delta_percent: float | None = None
+
+
+class ProviderDashboardKPIsResponse(BaseModel):
+
+    window_days: int
+
+    total_reservations: KPIMetric
+
+    monthly_revenue: KPIMetric
+
+    active_properties_count: KPIMetric
+
+    average_user_rating: KPIMetric
+
+
+class ProviderArrivalItem(BaseModel):
+
+    booking_id: int
+
+    client_full_name: str
+
+    venue_id: str
+
+    venue_name: str | None = None
+
+    confirmation_status: str
+
+    booking_date: date
+
+    start_time: time
+
+    end_time: time
+
+    seats_reserved: int
+
+    space_label: str | None = None
+
+    fee_estimate: float
+
+
+class ProviderArrivalsResponse(BaseModel):
+
+    items: list[ProviderArrivalItem]
+
+
+class VenueSurveyMetricsResponse(BaseModel):
+
+    venue_id: str
+
+    wifi_score: float | str
+
+    plug_score: float | str
+
+    quietness_score: float | str
+
+
+class AdminIncidentCounts(BaseModel):
+
+    cancelled_bookings: int
+
+    refund_pending_bookings: int
+
+    unavailable_slots: int
+
+
+class AdminDashboardOverviewResponse(BaseModel):
+
+    global_active_properties: int
+
+    total_completed_checkout_revenues: float
+
+    system_incident_counts: AdminIncidentCounts
+
+
+class VenueSuspensionRequest(BaseModel):
+
+    state: Literal["Suspended"] = "Suspended"
+
+
+class VenueSuspensionResponse(BaseModel):
+
+    venue_id: str
+
+    state: str
+
+    cancelled_bookings: int
+
+    released_seats: int
+
+    message: str

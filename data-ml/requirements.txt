@@ -1,2 +1,11 @@
 pandas
+geopandas
+pyarrow
 requests
+numpy
+scipy
+sodapy
+xgboost
+matplotlib
+scikit-learn
+joblib

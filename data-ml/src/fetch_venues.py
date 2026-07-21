@@ -2,20 +2,13 @@ import sqlite3
 import requests
 import pandas as pd
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+Overpass_url = "https://overpass-api.de/api/interpreter"
 NYC_BBOX     = "40.477,-74.259,40.917,-73.700" 
 
-OUTPUT_DB  = "data/processed/venues.db"
-OUTPUT_CSV = "data/processed/nyc_venues.csv"
+DB  = "data/processed/venues.db"
+CSV_out = "data/processed/nyc_venues.csv"
 
-OSM_TYPE_MAP = {
-    "cafe":       "Coffee/Tea",
-    "hotel":      "Hotel Lobby",
-    "bakery":     "Bakery Products/Desserts",
-    "restaurant": "Restaurant",
-}
-
-def fetch_from_osm() -> list[dict]:
+def fetch_from_osm():
     query = f"""
     [out:json][timeout:60];
     (
@@ -30,22 +23,18 @@ def fetch_from_osm() -> list[dict]:
     );
     out center tags;
     """
-    headers = {"User-Agent": "WorkshareApp/1.0 (workspace booking research)"}
-    print("Querying OpenStreetMap (Overpass API)...")
-    resp = requests.post(OVERPASS_URL, data={"data": query}, headers=headers, timeout=120)
+    
+    resp = requests.get(Overpass_url, data={"data": query}, headers={"User-Agent": "Adam"}, timeout=120)
     resp.raise_for_status()
     elements = resp.json().get("elements", [])
-    print(f"  Raw elements: {len(elements):,}")
     return elements
 
 
-
-def parse_elements(elements: list[dict]) -> pd.DataFrame:
+def parse_elements(elements):
     rows = []
     for el in elements:
         tags = el.get("tags", {})
 
-        # In case of node and way.
         lat = el.get("lat") or el.get("center", {}).get("lat")
         lon = el.get("lon") or el.get("center", {}).get("lon")
         if not lat or not lon:
@@ -62,7 +51,6 @@ def parse_elements(elements: list[dict]) -> pd.DataFrame:
         else:
             continue
 
-        # OSM gives internet_access=wlan for wifi
         wifi_tag = tags.get("internet_access", "").lower()
         if wifi_tag in ("wlan", "yes"):
             has_wifi = True
@@ -71,17 +59,11 @@ def parse_elements(elements: list[dict]) -> pd.DataFrame:
         else:
             has_wifi = None
 
-        wifi_free = None
-        if tags.get("internet_access:fee", "").lower() == "no":
-            wifi_free = True
-        elif tags.get("internet_access:fee", "").lower() == "yes":
-            wifi_free = False
-
         rows.append({
             "venue_id": f"osm_{el['id']}",
             "name": tags.get("name", "Unnamed"),
             "osm_type": osm_type,
-            "cuisine_type": OSM_TYPE_MAP[osm_type],
+            "cuisine_type": osm_type,
             "cuisine_detail": tags.get("cuisine", ""),
             "phone": tags.get("phone", tags.get("contact:phone", "")),
             "website": tags.get("website", tags.get("contact:website", "")),
@@ -92,24 +74,17 @@ def parse_elements(elements: list[dict]) -> pd.DataFrame:
             "lon": float(lon),
             "opening_hours": tags.get("opening_hours", None),
             "has_wifi": has_wifi,
-            "wifi_free": wifi_free,
-            "outdoor_seating": tags.get("outdoor_seating", None),
-            "hotel_stars": tags.get("stars", None),   
-            "outlet_density":  None,   
-            "noise_level": None,   
-            "noise_score": None,
             "best_hours_for_work": None,
             "hourly_profile": None,
             "partner": False,
-            "data_source": "openstreetmap",
         })
 
-    df = pd.DataFrame(rows).drop_duplicates(subset="venue_id").reset_index(drop=True)
+    df = pd.DataFrame(rows)
     print(df)
     return df
 
 
-def assign_borough(df: pd.DataFrame) -> pd.DataFrame:
+def assign_borough(df):
     def borough(row):
         lat, lon = row["lat"], row["lon"]
         if lon < -74.15:
@@ -124,44 +99,42 @@ def assign_borough(df: pd.DataFrame) -> pd.DataFrame:
     df["borough"] = df.apply(borough, axis=1)
     return df
 
-def save(df: pd.DataFrame) -> None:
-    con = sqlite3.connect(OUTPUT_DB)
+def save(df):
+    con = sqlite3.connect(DB)
     df.to_sql("venues", con, if_exists="replace", index=False)
-    df.to_csv(OUTPUT_CSV, index=False)
+    df.to_csv(CSV_out, index=False)
     con.close()
-    print(f"  Saved {len(df):,} venues → {OUTPUT_DB}")
-
-
-
 
 
 if __name__ == "__main__":
     elements = fetch_from_osm()
-    df       = parse_elements(elements)
-    df       = assign_borough(df)
-
-    print(f"\nVenue breakdown:")
-    print(df["cuisine_type"].value_counts().to_string())
-
-    print(f"\nWiFi data available for {df['has_wifi'].notna().sum()} venues")
-    print(f"Opening hours available for {df['opening_hours'].notna().sum()} venues")
+    df = parse_elements(elements)
+    df = assign_borough(df)
 
     save(df)
 
-    # Runnig noise_model.py
-    print("\nApplying noise model...")
-    import sys
-    sys.path.insert(0, "src")
-    from noise_model import apply_to_venues
-    apply_to_venues(OUTPUT_DB)
+    from noise_model import apply_to_venues as apply_noise
+    apply_noise(DB)
 
-    print("\nSample:")
-    con = sqlite3.connect(OUTPUT_DB)
-    sample = pd.read_sql("""
-        SELECT name, cuisine_type, borough, noise_level, has_wifi, opening_hours
-        FROM venues
-        ORDER BY RANDOM()
-        LIMIT 12
-    """, con)
-    con.close()
-    print(sample.to_string(index=False))
+    from wifi_model import apply_to_venues as apply_wifi
+    apply_wifi(DB)
+
+    from transit_model import apply_to_venues as apply_transit
+    apply_transit(DB)
+
+    from plug_model import apply_to_venues as apply_plug
+    apply_plug(DB)
+
+    from rating_model import apply_to_venues as apply_ratings
+    apply_ratings(DB)
+
+    from pricing_model import apply_to_venues as apply_prices
+    apply_prices(DB)
+
+    from normalise import apply_to_venues as apply_normalisation
+    apply_normalisation(DB)
+
+    from nearest_mta_linecount import apply_to_venues as apply_mta_linecount
+    apply_mta_linecount(DB)
+
+    print(df.dtypes)
