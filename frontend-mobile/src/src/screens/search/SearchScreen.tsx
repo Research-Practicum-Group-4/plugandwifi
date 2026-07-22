@@ -27,7 +27,7 @@ export function SearchScreen({ navigation }: MainTabScreenProps<'Search'>) {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [viewMode, setViewMode] = useState<SearchViewMode>('list');
-  const [filters, setFilters] = useState({ noLoudMusic: false, fourPlusStars: false });
+  const [filters, setFilters] = useState({ wifi: false, fourPlusStars: false });
   const [priceRange, setPriceRange] = useState<[number, number]>([1, 10]);
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
   const [mapInit, setMapInit] = useState(false);
@@ -38,12 +38,13 @@ export function SearchScreen({ navigation }: MainTabScreenProps<'Search'>) {
       try {
         const params: any = { lat: 40.7831, lon: -73.9712, limit: 50 };
         if (priceRange[1] < 10) params.max_price = priceRange[1];
+        if (filters.wifi) params.wifi = true;
         const r = await fetchVenues(params);
         setVenues(r.items.map(mapVenue));
       } catch {}
       setLoading(false);
     })();
-  }, [filters.noLoudMusic, priceRange[1]]);
+  }, [filters.wifi, priceRange[1]]);
 
   const results = useMemo(() => {
     return venues.filter(venue => {
@@ -81,7 +82,7 @@ export function SearchScreen({ navigation }: MainTabScreenProps<'Search'>) {
             returnKeyType="search"
           />
           <View style={styles.filtersRow}>
-            <FilterChip label="No Loud Music" selected={filters.noLoudMusic} onPress={() => setFilters(f => ({ ...f, noLoudMusic: !f.noLoudMusic }))} />
+            <FilterChip label="WiFi" selected={filters.wifi} onPress={() => setFilters(f => ({ ...f, wifi: !f.wifi }))} />
             <FilterChip label="4+ Stars" selected={filters.fourPlusStars} onPress={() => setFilters(f => ({ ...f, fourPlusStars: !f.fourPlusStars }))} />
           </View>
           <View style={styles.priceRow}>

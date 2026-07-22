@@ -122,7 +122,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
           </Pressable>
         </View>
         <View style={styles.filtersRow}>
-          {['No Loud Music', 'Calls Allowed', '4+ Stars'].map(label => (
+          {['WiFi', 'Plug Access', 'Calls Allowed'].map(label => (
             <View key={label} style={styles.filterPill}>
               <Text style={styles.filterText}>{label}</Text>
             </View>

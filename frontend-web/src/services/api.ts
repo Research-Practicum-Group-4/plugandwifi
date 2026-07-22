@@ -470,9 +470,19 @@ export const api = {
   // 2. Get Venues List (with filtering)
   getVenues: async (filters?: {
     cuisine_type?: string;
+    venue_type?: string | string[];
     borough?: string;
     has_wifi?: boolean;
     wifi_free?: boolean;
+    wifi?: boolean;
+    plug_access?: number;
+    accessibility_friendly?: boolean;
+    calls_allowed?: boolean;
+    wbe_certified?: boolean;
+    mbe_certified?: boolean;
+    vbe_certified?: boolean;
+    bcorp_certified?: boolean;
+    lgbt_friendly?: boolean;
     opening_now?: boolean;
     max_price?: number;
     page?: number;
@@ -484,6 +494,7 @@ export const api = {
     date?: string;
     start_time?: string;
     end_time?: string;
+    duration_hours?: number;
     seats_required?: number;
   }): Promise<VenueListResponse> => {
     if (USE_MOCK) {
@@ -508,6 +519,34 @@ export const api = {
         }
         if (filters.max_price !== undefined) {
           filtered = filtered.filter(v => v.hourly_price <= filters.max_price!);
+        }
+        if (filters.plug_access !== undefined) {
+          filtered = filtered.filter(v => v.plug_access === filters.plug_access);
+        }
+        if (filters.accessibility_friendly !== undefined) {
+          filtered = filtered.filter(v => v.accessibility_friendly === filters.accessibility_friendly);
+        }
+        if (filters.calls_allowed !== undefined) {
+          filtered = filtered.filter(v => v.calls_allowed === filters.calls_allowed);
+        }
+        if (filters.wbe_certified !== undefined) {
+          filtered = filtered.filter(v => v.wbe_certified === filters.wbe_certified);
+        }
+        if (filters.mbe_certified !== undefined) {
+          filtered = filtered.filter(v => v.mbe_certified === filters.mbe_certified);
+        }
+        if (filters.vbe_certified !== undefined) {
+          filtered = filtered.filter(v => v.vbe_certified === filters.vbe_certified);
+        }
+        if (filters.bcorp_certified !== undefined) {
+          filtered = filtered.filter(v => v.bcorp_certified === filters.bcorp_certified);
+        }
+        if (filters.lgbt_friendly !== undefined) {
+          filtered = filtered.filter(v => v.lgbt_friendly === filters.lgbt_friendly);
+        }
+        if (filters.venue_type !== undefined) {
+          const types = Array.isArray(filters.venue_type) ? filters.venue_type : [filters.venue_type];
+          filtered = filtered.filter(v => types.some(type => v.cuisine_type.toLowerCase() === type.toLowerCase()));
         }
         if (filters.name) {
           filtered = filtered.filter(v => v.name.toLowerCase().includes(filters.name!.toLowerCase()));
@@ -573,22 +612,41 @@ export const api = {
       };
     } else {
       // Map filters to backend query parameters
-      const params: any = {};
+      const params = new URLSearchParams();
+      const setParam = (key: string, value: unknown) => {
+        if (value === undefined || value === null) return;
+        if (Array.isArray(value)) {
+          value.forEach((item) => params.append(key, String(item)));
+        } else {
+          params.set(key, String(value));
+        }
+      };
       if (filters) {
-        if (filters.has_wifi !== undefined) params.wifi = filters.has_wifi;
-        else if (filters.wifi_free !== undefined) params.wifi = filters.wifi_free;
-        if (filters.borough) params.borough = filters.borough;
-        if (filters.max_price !== undefined) params.max_price = filters.max_price;
-        if (filters.page !== undefined) params.page = filters.page;
-        if (filters.limit !== undefined) params.limit = filters.limit;
-        if (filters.name !== undefined) params.name = filters.name;
-        if (filters.lat !== undefined) params.lat = filters.lat;
-        if (filters.lon !== undefined) params.lon = filters.lon;
-        if (filters.radius !== undefined) params.radius = filters.radius;
-        if (filters.date !== undefined) params.date = filters.date;
-        if (filters.start_time !== undefined) params.start_time = filters.start_time;
-        if (filters.end_time !== undefined) params.end_time = filters.end_time;
-        if (filters.seats_required !== undefined) params.seats_required = filters.seats_required;
+        if (filters.has_wifi !== undefined) setParam("wifi", filters.has_wifi);
+        else if (filters.wifi !== undefined) setParam("wifi", filters.wifi);
+        else if (filters.wifi_free !== undefined) setParam("wifi", filters.wifi_free);
+        setParam("plug_access", filters.plug_access);
+        setParam("venue_type", filters.venue_type);
+        setParam("accessibility_friendly", filters.accessibility_friendly);
+        setParam("calls_allowed", filters.calls_allowed);
+        setParam("wbe_certified", filters.wbe_certified);
+        setParam("mbe_certified", filters.mbe_certified);
+        setParam("vbe_certified", filters.vbe_certified);
+        setParam("bcorp_certified", filters.bcorp_certified);
+        setParam("lgbt_friendly", filters.lgbt_friendly);
+        setParam("borough", filters.borough);
+        setParam("max_price", filters.max_price);
+        setParam("page", filters.page);
+        setParam("limit", filters.limit);
+        setParam("name", filters.name);
+        setParam("lat", filters.lat);
+        setParam("lon", filters.lon);
+        setParam("radius", filters.radius);
+        setParam("date", filters.date);
+        setParam("start_time", filters.start_time);
+        setParam("end_time", filters.end_time);
+        setParam("duration_hours", filters.duration_hours);
+        setParam("seats_required", filters.seats_required);
       }
       const response = await axiosInstance.get<VenueListResponse>("/venues", { params });
       return response.data;
