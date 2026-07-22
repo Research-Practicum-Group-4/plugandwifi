@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Logo } from '../../components/Logo';
-import { PrimaryButton } from '../../components/PrimaryButton';
 import { VenueCard } from '../../components/VenueCard';
 import { fetchVenues } from '../../services/venues';
-import { mockVenues } from '../../data/mockVenues';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import type { MainTabScreenProps } from '../../types/navigation';
@@ -20,47 +18,107 @@ const MANHATTAN = {
 };
 
 type ViewMode = 'list' | 'map';
+type BooleanFilterKey =
+  | 'wifi'
+  | 'plugs'
+  | 'callsAllowed'
+  | 'accessibilityFriendly'
+  | 'wbeCertified'
+  | 'mbeCertified'
+  | 'vbeCertified'
+  | 'bcorpCertified'
+  | 'lgbtFriendly';
+
+const VENUE_TYPES = ['cafe', 'library', 'restaurant', 'workspace', 'office', 'hotel'];
 
 export function SearchScreen({ navigation }: MainTabScreenProps<'Search'>) {
   const [query, setQuery] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [venues, setVenues] = useState<VenueItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<Record<BooleanFilterKey, boolean>>({
+    wifi: false,
+    plugs: false,
+    callsAllowed: false,
+    accessibilityFriendly: false,
+    wbeCertified: false,
+    mbeCertified: false,
+    vbeCertified: false,
+    bcorpCertified: false,
+    lgbtFriendly: false,
+  });
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [searchDate, setSearchDate] = useState('');
+  const [startTime, setStartTime] = useState('');
 
   useEffect(() => {
     loadVenues();
-  }, []);
+  }, [query, filters, selectedTypes, searchDate, startTime]);
 
   async function loadVenues() {
     setLoading(true);
+    setError(null);
     try {
       const response = await fetchVenues({
         lat: 40.7831,
         lon: -73.9712,
         radius: 10,
-        limit: 20,
+        limit: 50,
+        name: query.trim() || undefined,
+        wifi: filters.wifi ? true : undefined,
+        plug_access: filters.plugs ? 1 : undefined,
+        venue_type: selectedTypes.length > 0 ? selectedTypes : undefined,
+        calls_allowed: filters.callsAllowed ? true : undefined,
+        accessibility_friendly: filters.accessibilityFriendly ? true : undefined,
+        wbe_certified: filters.wbeCertified ? true : undefined,
+        mbe_certified: filters.mbeCertified ? true : undefined,
+        vbe_certified: filters.vbeCertified ? true : undefined,
+        bcorp_certified: filters.bcorpCertified ? true : undefined,
+        lgbt_friendly: filters.lgbtFriendly ? true : undefined,
+        date: searchDate || undefined,
+        start_time: startTime ? `${startTime}:00` : undefined,
       });
-      if (response.items.length > 0) {
-        setVenues(response.items);
-      } else {
-        setVenues(mockVenues);
-      }
+      setVenues(response.items);
     } catch {
-      setVenues(mockVenues);
+      setVenues([]);
+      setError('Could not load venues. Please try again.');
     } finally {
       setLoading(false);
     }
   }
 
-  const filtered = useMemo(() => {
-    if (query.trim().length === 0) return venues;
-    const q = query.toLowerCase();
-    return venues.filter(v =>
-      v.name.toLowerCase().includes(q) ||
-      (v.cuisine_type ?? '').toLowerCase().includes(q) ||
-      (v.borough ?? '').toLowerCase().includes(q)
+  const filtered = useMemo(() => venues, [venues]);
+
+  function toggleFilter(key: BooleanFilterKey) {
+    setFilters(current => ({ ...current, [key]: !current[key] }));
+  }
+
+  function toggleVenueType(type: string) {
+    setSelectedTypes(current =>
+      current.includes(type)
+        ? current.filter(item => item !== type)
+        : [...current, type],
     );
-  }, [venues, query]);
+  }
+
+  function clearAll() {
+    setFilters({
+      wifi: false,
+      plugs: false,
+      callsAllowed: false,
+      accessibilityFriendly: false,
+      wbeCertified: false,
+      mbeCertified: false,
+      vbeCertified: false,
+      bcorpCertified: false,
+      lgbtFriendly: false,
+    });
+    setSelectedTypes([]);
+    setSearchDate('');
+    setStartTime('');
+    setQuery('');
+  }
 
   return (
     <View style={styles.container}>
@@ -76,12 +134,58 @@ export function SearchScreen({ navigation }: MainTabScreenProps<'Search'>) {
         onChangeText={setQuery}
       />
 
-      <View style={styles.filtersRow}>
-        {['No Loud Music', 'Calls Allowed', '4+ Stars'].map(label => (
-          <Pressable key={label} style={styles.filterPill}>
-            <Text style={styles.filterText}>{label}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll} contentContainerStyle={styles.filtersRow}>
+        {[
+          ['wifi', 'WiFi'],
+          ['plugs', 'Plugs'],
+          ['callsAllowed', 'Calls'],
+          ['accessibilityFriendly', 'Accessible'],
+          ['wbeCertified', 'WBE'],
+          ['mbeCertified', 'MBE'],
+          ['vbeCertified', 'VBE'],
+          ['bcorpCertified', 'B-Corp'],
+          ['lgbtFriendly', 'LGBT+'],
+        ].map(([key, label]) => (
+          <Pressable
+            key={key}
+            style={[styles.filterPill, filters[key as BooleanFilterKey] && styles.filterPillActive]}
+            onPress={() => toggleFilter(key as BooleanFilterKey)}
+          >
+            <Text style={[styles.filterText, filters[key as BooleanFilterKey] && styles.filterTextActive]}>{label}</Text>
           </Pressable>
         ))}
+      </ScrollView>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll} contentContainerStyle={styles.filtersRow}>
+        {VENUE_TYPES.map(type => (
+          <Pressable
+            key={type}
+            style={[styles.filterPill, selectedTypes.includes(type) && styles.filterPillActive]}
+            onPress={() => toggleVenueType(type)}
+          >
+            <Text style={[styles.filterText, selectedTypes.includes(type) && styles.filterTextActive]}>{type}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      <View style={styles.availabilityRow}>
+        <TextInput
+          style={styles.smallInput}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={colors.textMuted}
+          value={searchDate}
+          onChangeText={setSearchDate}
+        />
+        <TextInput
+          style={styles.smallInput}
+          placeholder="HH:MM"
+          placeholderTextColor={colors.textMuted}
+          value={startTime}
+          onChangeText={setStartTime}
+        />
+        <Pressable style={styles.clearBtn} onPress={clearAll}>
+          <Text style={styles.clearText}>Clear</Text>
+        </Pressable>
       </View>
 
       <View style={styles.toggleRow}>
@@ -100,6 +204,8 @@ export function SearchScreen({ navigation }: MainTabScreenProps<'Search'>) {
       </View>
 
       <Text style={styles.resultCount}>{filtered.length} spaces available</Text>
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {loading ? <ActivityIndicator color={colors.primary} style={styles.loading} /> : null}
 
       {viewMode === 'map' ? (
         <View style={styles.mapWrapper}>
@@ -167,11 +273,13 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
     marginTop: spacing.md,
   },
+  filtersScroll: {
+    marginTop: spacing.sm,
+  },
   filtersRow: {
     flexDirection: 'row',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    marginTop: spacing.sm,
   },
   filterPill: {
     borderWidth: 1,
@@ -180,8 +288,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
+  filterPillActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
   filterText: {
     color: colors.textMuted,
+    fontSize: 13,
+  },
+  filterTextActive: {
+    color: colors.white,
+    fontWeight: '600',
+  },
+  availabilityRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
+  },
+  smallInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    color: colors.text,
+    backgroundColor: colors.white,
+    fontSize: 13,
+  },
+  clearBtn: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    justifyContent: 'center',
+  },
+  clearText: {
+    color: colors.primary,
+    fontWeight: '600',
     fontSize: 13,
   },
   toggleRow: {
@@ -218,6 +363,15 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 13,
     paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  errorText: {
+    color: colors.danger,
+    fontSize: 13,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  loading: {
     marginBottom: spacing.sm,
   },
   mapWrapper: {

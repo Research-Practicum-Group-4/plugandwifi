@@ -30,8 +30,8 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [initialized, setInitialized] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ noLoudMusic: false, threeStars: false, fourStars: false });
-  const allActive = !filters.noLoudMusic && !filters.threeStars && !filters.fourStars;
+  const [filters, setFilters] = useState({ wifi: false, threeStars: false, fourStars: false });
+  const allActive = !filters.wifi && !filters.threeStars && !filters.fourStars;
   const [locName, setLocName] = useState(DEFAULT_LOC_NAME);
   const [userLoc, setUserLoc] = useState({ lat: DEFAULT_REGION.latitude, lng: DEFAULT_REGION.longitude });
   const [locModal, setLocModal] = useState(false);
@@ -42,13 +42,13 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
   const mapRef = useRef<MapView>(null);
   const [selectedMarker, setSelectedMarker] = useState<{ latitude: number; longitude: number } | null>(null);
 
-  useEffect(() => { loadVenues(); }, [filters.noLoudMusic, filters.fourStars, userLoc]);
+  useEffect(() => { loadVenues(); }, [filters.wifi, filters.fourStars, userLoc]);
 
   async function loadVenues() {
     setLoading(true);
     try {
       const params: any = { lat: userLoc.lat, lon: userLoc.lng, radius: 5 };
-      if (filters.noLoudMusic) params.noise_level = 'quiet';
+      if (filters.wifi) params.wifi = true;
       const r = await fetchVenues(params);
       setVenues(r.items.map(mapVenue));
       if (!initialized) setInitialized(true);
@@ -127,18 +127,18 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterContent}>
           <Pressable
             style={[styles.filterPill, allActive && styles.filterPillActive]}
-            onPress={() => setFilters({ noLoudMusic: false, threeStars: false, fourStars: false })}
+            onPress={() => setFilters({ wifi: false, threeStars: false, fourStars: false })}
           >
             <Text style={[styles.filterText, allActive && styles.filterTextActive]}>All</Text>
           </Pressable>
-          {(['threeStars', 'fourStars', 'noLoudMusic'] as const).map(key => (
+          {(['threeStars', 'fourStars', 'wifi'] as const).map(key => (
             <Pressable
               key={key}
               style={[styles.filterPill, filters[key] && styles.filterPillActive]}
               onPress={() => toggleFilter(key)}
             >
               <Text style={[styles.filterText, filters[key] && styles.filterTextActive]}>
-                {key === 'threeStars' ? '3+ Stars' : key === 'fourStars' ? '4+ Stars' : t('home.noLoudMusic')}
+                {key === 'threeStars' ? '3+ Stars' : key === 'fourStars' ? '4+ Stars' : 'WiFi'}
               </Text>
             </Pressable>
           ))}

@@ -16,7 +16,7 @@ export function VenueCard({ venue, compact = false, onPress, onBook }: VenueCard
     ? `${venue.distance_km.toFixed(1)} km`
     : null;
 
-  const price = venue.hourly_price ?? venue.hourly_fee;
+  const price = venue.hourly_price;
 
   return (
     <Pressable
@@ -50,9 +50,9 @@ export function VenueCard({ venue, compact = false, onPress, onBook }: VenueCard
               <Text style={styles.tagText}>Plugs ✓</Text>
             </View>
           ) : null}
-          {venue.noise_level ? (
+          {venue.calls_allowed ? (
             <View style={styles.tag}>
-              <Text style={styles.tagText}>{venue.noise_level}</Text>
+              <Text style={styles.tagText}>Calls Allowed</Text>
             </View>
           ) : null}
         </View>

@@ -7,9 +7,22 @@ type VenueFilters = {
   radius?: number;
   wifi?: boolean;
   plug_access?: number;
-  noise_level?: string;
+  venue_type?: string | string[];
+  name?: string;
+  accessibility_friendly?: boolean;
+  calls_allowed?: boolean;
+  wbe_certified?: boolean;
+  mbe_certified?: boolean;
+  vbe_certified?: boolean;
+  bcorp_certified?: boolean;
+  lgbt_friendly?: boolean;
   max_price?: number;
   borough?: string;
+  date?: string;
+  start_time?: string;
+  end_time?: string;
+  duration_hours?: number;
+  seats_required?: number;
   page?: number;
   limit?: number;
 };
@@ -18,7 +31,11 @@ export async function fetchVenues(filters: VenueFilters = {}): Promise<VenueList
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
-      params.append(key, String(value));
+      if (Array.isArray(value)) {
+        value.forEach(item => params.append(key, String(item)));
+      } else {
+        params.append(key, String(value));
+      }
     }
   });
   const query = params.toString();

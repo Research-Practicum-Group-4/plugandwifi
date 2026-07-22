@@ -145,6 +145,55 @@ class Venue(Base):
 
     has_wifi = Column(Boolean)
 
+    accessibility_friendly = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0"
+    )
+
+    calls_allowed = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0"
+    )
+
+    wbe_certified = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0"
+    )
+
+    mbe_certified = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0"
+    )
+
+    vbe_certified = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0"
+    )
+
+    bcorp_certified = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0"
+    )
+
+    lgbt_friendly = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0"
+    )
+
     noise_level = Column(String)
 
     noise_score = Column(Float)

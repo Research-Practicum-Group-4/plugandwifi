@@ -8,7 +8,7 @@ import { Label } from "../components/ui/label";
 import { Slider } from "../components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Search, Star, Volume2, Filter, Clock, MapPin, Sparkles, Phone, Accessibility, Loader2, Zap } from "lucide-react";
+import { Search, Star, Filter, Clock, MapPin, Sparkles, Phone, Accessibility, Plug, Wifi } from "lucide-react";
 import { api } from "../../services/api";
 import { enrichVenue, EnrichedVenue, venueImage, busynessDisplay } from "../utils/venueEnrichment";
 import { MapView } from "../components/MapView";
@@ -61,6 +61,15 @@ const EDI_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
 
 type GeoState = "idle" | "requesting" | "granted" | "denied";
 
+const SUPPORTED_VENUE_TYPES = [
+  "cafe",
+  "library",
+  "restaurant",
+  "workspace",
+  "office",
+  "hotel",
+];
+
 export function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get("query") || "");
@@ -71,7 +80,7 @@ export function SearchPage() {
 
   const [filters, setFilters] = useState({
     freeWifi: false,
-    noLoudMusic: false,
+    plugAccess: false,
     fourPlusStars: false,
     callsAllowed: false,
     accessibilityFriendly: false,
@@ -82,7 +91,8 @@ export function SearchPage() {
     bCorpCertified: false,
     vbeOwned: false,
   });
-  const [priceRange, setPriceRange] = useState([3, 10]);
+  const [selectedVenueTypes, setSelectedVenueTypes] = useState<string[]>([]);
+  const [priceRange, setPriceRange] = useState([1, 10]);
   const [duration, setDuration] = useState("any");
 
   const [paginatedVenues, setPaginatedVenues] = useState<EnrichedVenue[]>([]);
@@ -227,13 +237,26 @@ export function SearchPage() {
       };
 
       try {
+        const durationHours =
+          duration !== "any" && searchDate && startTime
+            ? Number(duration.replace("+", ""))
+            : undefined;
         const queryParams = {
-          noise_level: filters.noLoudMusic ? "quiet" : undefined,
-          wifi_free: filters.freeWifi ? true : undefined,
-          // max_price intentionally omitted — price is filtered client-side against enrichedPrice
+          wifi: filters.freeWifi ? true : undefined,
+          plug_access: filters.plugAccess ? 1 : undefined,
+          venue_type: selectedVenueTypes.length > 0 ? selectedVenueTypes : undefined,
+          accessibility_friendly: filters.accessibilityFriendly ? true : undefined,
+          calls_allowed: filters.callsAllowed ? true : undefined,
+          wbe_certified: filters.wbeOwned ? true : undefined,
+          mbe_certified: filters.mbeOwned ? true : undefined,
+          vbe_certified: filters.vbeOwned ? true : undefined,
+          bcorp_certified: filters.bCorpCertified ? true : undefined,
+          lgbt_friendly: filters.lgbtFriendly ? true : undefined,
+          max_price: priceRange[1],
           date: searchDate || undefined,
           start_time: startTime ? `${startTime}:00` : undefined,
           end_time: endTime ? `${endTime}:00` : undefined,
+          duration_hours: durationHours,
           seats_required: seatsRequired,
         };
 
@@ -328,14 +351,7 @@ export function SearchPage() {
     };
 
     executeQuery();
-  }, [
-    filters.freeWifi, filters.noLoudMusic, filters.fourPlusStars,
-    filters.accessibilityFriendly, filters.plugAccess,
-    filters.wbeOwned, filters.mbeOwned, filters.lgbtFriendly, filters.bCorpCertified, filters.vbeOwned,
-    debouncedSearchQuery, priceRange, currentPage, limit,
-    searchDate, startTime, endTime, seatsRequired,
-    geoState, geoCoords,
-  ]);
+  }, [filters, selectedVenueTypes, debouncedSearchQuery, priceRange, currentPage, limit, searchDate, startTime, endTime, seatsRequired, duration]);
 
   // When API fails, use manhattanVenues as fallback
   const displayVenues = apiFailed ? manhattanVenues : paginatedVenues;
@@ -344,7 +360,7 @@ export function SearchPage() {
   const clearAllFilters = () => {
     setFilters({
       freeWifi: false,
-      noLoudMusic: false,
+      plugAccess: false,
       fourPlusStars: false,
       callsAllowed: false,
       accessibilityFriendly: false,
@@ -355,7 +371,8 @@ export function SearchPage() {
       bCorpCertified: false,
       vbeOwned: false,
     });
-    setPriceRange([3, 10]);
+    setSelectedVenueTypes([]);
+    setPriceRange([1, 10]);
     setDuration("any");
     setSearchQuery("");
     setSearchDate("");
@@ -396,17 +413,57 @@ export function SearchPage() {
 
               <div className="flex items-center space-x-2">
                 <Checkbox
-                  id="noLoudMusic"
-                  checked={filters.noLoudMusic}
+                  id="freeWifi"
+                  checked={filters.freeWifi}
                   onCheckedChange={(checked) => {
-                    setFilters({ ...filters, noLoudMusic: checked as boolean });
+                    setFilters({ ...filters, freeWifi: checked as boolean });
                     setCurrentPage(1);
                   }}
                 />
-                <Label htmlFor="noLoudMusic" className="flex items-center gap-2 cursor-pointer">
-                  <Volume2 className="size-4" />
-                  No Loud Music
+                <Label htmlFor="freeWifi" className="flex items-center gap-2 cursor-pointer">
+                  <Wifi className="size-4" />
+                  WiFi Available
                 </Label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="plugAccess"
+                  checked={filters.plugAccess}
+                  onCheckedChange={(checked) => {
+                    setFilters({ ...filters, plugAccess: checked as boolean });
+                    setCurrentPage(1);
+                  }}
+                />
+                <Label htmlFor="plugAccess" className="flex items-center gap-2 cursor-pointer">
+                  <Plug className="size-4" />
+                  Plug Access
+                </Label>
+              </div>
+
+              <div>
+                <Label className="mb-2 block">Venue Type</Label>
+                <div className="space-y-2">
+                  {SUPPORTED_VENUE_TYPES.map((type) => (
+                    <div key={type} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`venueType-${type}`}
+                        checked={selectedVenueTypes.includes(type)}
+                        onCheckedChange={(checked) => {
+                          setSelectedVenueTypes((current) =>
+                            checked
+                              ? [...current, type]
+                              : current.filter((item) => item !== type)
+                          );
+                          setCurrentPage(1);
+                        }}
+                      />
+                      <Label htmlFor={`venueType-${type}`} className="cursor-pointer capitalize">
+                        {type}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="flex items-center space-x-2">
@@ -573,6 +630,7 @@ export function SearchPage() {
                 <input
                   id="searchDate"
                   type="date"
+                  min={new Date().toISOString().split("T")[0]}
                   value={searchDate}
                   onChange={(e) => {
                     setSearchDate(e.target.value);
@@ -814,8 +872,8 @@ export function SearchPage() {
                     const amenities: string[] = [];
                     if (venue.has_wifi) amenities.push("WiFi");
                     if (venue.wifi_free) amenities.push("Free WiFi");
-                    if (venue.noise_level === "quiet") amenities.push("Quiet Space");
-                    if ((venue.seats_avail ?? 0) > 0) amenities.push(`${venue.seats_avail} seats left`);
+                    if (venue.calls_allowed) amenities.push("Calls Allowed");
+                    if (venue.seats_avail > 0) amenities.push(`${venue.seats_avail} seats left`);
 
                     return (
                       <Card
