@@ -5,8 +5,8 @@ from pydantic import (
 )
 
 from datetime import (
-    date,
-    time
+    date as date_type,
+    time as time_type
 )
 from typing import Literal
 
@@ -60,7 +60,27 @@ class ChatbotSearchParameters(BaseModel):
 
     venue_type: str | None = None
 
+    date: date_type | None = None
+
+    start_time: time_type | None = None
+
     wifi: bool | None = None
+
+    plug_access: int | None = None
+
+    accessibility_friendly: bool | None = None
+
+    calls_allowed: bool | None = None
+
+    wbe_certified: bool | None = None
+
+    mbe_certified: bool | None = None
+
+    vbe_certified: bool | None = None
+
+    bcorp_certified: bool | None = None
+
+    lgbt_friendly: bool | None = None
 
     busyness: str | None = None
 
@@ -321,7 +341,7 @@ class AvailabilitySlotResponse(BaseModel):
 
     slot_id: int
 
-    date: date
+    date: date_type
 
     start_time: str
 
@@ -343,11 +363,11 @@ class BookingCreate(BaseModel):
 
     venue_id: str
 
-    booking_date: date
+    booking_date: date_type
 
-    start_time: time
+    start_time: time_type
 
-    end_time: time
+    end_time: time_type
 
     seats_reserved: int = Field(ge=1)
 
@@ -360,11 +380,11 @@ class BookingResponse(BaseModel):
 
     venue_id: str
 
-    booking_date: date
+    booking_date: date_type
 
-    start_time: time
+    start_time: time_type
 
-    end_time: time
+    end_time: time_type
 
     seats_reserved: int
 
@@ -428,11 +448,11 @@ class UserBookingItem(BaseModel):
 
     venue_name: str | None = None
 
-    booking_date: date
+    booking_date: date_type
 
-    start_time: time
+    start_time: time_type
 
-    end_time: time
+    end_time: time_type
 
     seats_reserved: int
 
@@ -523,11 +543,11 @@ class ProviderArrivalItem(BaseModel):
 
     confirmation_status: str
 
-    booking_date: date
+    booking_date: date_type
 
-    start_time: time
+    start_time: time_type
 
-    end_time: time
+    end_time: time_type
 
     seats_reserved: int
 
