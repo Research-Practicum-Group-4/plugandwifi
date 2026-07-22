@@ -34,6 +34,8 @@ from .schemas import (
     VenueAvailabilityResponse,
     BookingCreate,
     BookingResponse,
+    MockPaymentConfirmRequest,
+    MockPaymentResponse,
     ReviewCreate,
     ReviewResponse,
     UserBookingsResponse,
@@ -60,17 +62,26 @@ from .refresh_tokens import (
     issue_refresh_session
 )
 from datetime import date, datetime, time, timedelta
+from contextlib import asynccontextmanager
 from math import asin, cos, radians, sin, sqrt
+from zoneinfo import ZoneInfo
 
 from fastapi.middleware.cors import CORSMiddleware
 
 import httpx
 import json
+import logging
 import os
 import re
 import sys
 import uuid
+from functools import lru_cache
 from pathlib import Path
+
+
+logger = logging.getLogger(__name__)
+BUSYNESS_PREDICTION_CACHE = {}
+NYC_TIMEZONE = ZoneInfo("America/New_York")
 
 
 def get_free_cancellation_hours():
@@ -95,7 +106,15 @@ FREE_CANCELLATION_HOURS = get_free_cancellation_hours()
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    get_zone_busyness_predictor()
+    get_busyness_venues_dataframe()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 GEMINI_SYSTEM_INSTRUCTION = (
@@ -111,39 +130,292 @@ GEMINI_SYSTEM_INSTRUCTION = (
 def get_gemini_model():
     return os.getenv(
         "GEMINI_MODEL",
-        "gemini-2.0-flash"
+        "gemini-3.1-flash-lite"
     )
 
 
 def get_busyness_model_path():
     return os.getenv(
         "BUSYNESS_MODEL_PATH",
-        "data-ml/models/busyness_predictor.joblib"
+        "data-ml/models/zone_busyness_model.joblib"
     )
 
 
 def get_busyness_venues_csv_path():
     return os.getenv(
         "BUSYNESS_VENUES_CSV",
-        "data/processed/nyc_venues.csv"
+        "data-ml/models/nyc_venues.csv"
     )
 
 
-def get_default_day_type():
-    if date.today().weekday() >= 5:
-        return "weekend"
+def get_day_type(prediction_date: date):
+    return "weekend" if prediction_date.weekday() >= 5 else "weekday"
 
-    return "weekday"
+
+def get_default_day_type():
+    return get_day_type(
+        datetime.now(NYC_TIMEZONE).date()
+    )
+
+
+def get_busyness_prediction_datetime(
+    selected_date: date | str | None = None,
+    selected_time: time | None = None,
+    hour: int | None = None
+):
+    if isinstance(selected_date, str):
+        try:
+            selected_date = date.fromisoformat(selected_date)
+        except ValueError:
+            selected_date = None
+
+    now = datetime.now(NYC_TIMEZONE)
+
+    if hour is not None:
+        selected_hour = max(
+            0,
+            min(
+                23,
+                int(hour)
+            )
+        )
+    elif selected_time is not None:
+        selected_hour = selected_time.hour
+    else:
+        selected_hour = now.hour
+
+    prediction_date = selected_date or now.date()
+
+    return datetime.combine(
+        prediction_date,
+        time(selected_hour, 0, 0)
+    )
+
+
+def get_busyness_prediction_key(
+    zone_id,
+    prediction_datetime: datetime
+):
+    try:
+        normalized_zone_id = int(zone_id)
+    except (TypeError, ValueError):
+        return None
+
+    return (
+        normalized_zone_id,
+        prediction_datetime.date().isoformat(),
+        prediction_datetime.hour
+    )
+
+
+def get_busyness_zone_id_for_venue(venue_id: str):
+    venues = get_busyness_venues_dataframe()
+
+    if venues is None:
+        return None
+
+    selected_venue = venues[
+        venues["venue_id"] == venue_id
+    ]
+
+    if selected_venue.empty:
+        return None
+
+    zone_id = selected_venue.iloc[0].get("zone_id")
+
+    if zone_id is None:
+        return None
+
+    try:
+        if hasattr(zone_id, "item"):
+            zone_id = zone_id.item()
+    except ValueError:
+        pass
+
+    return zone_id
+
+
+@lru_cache(maxsize=1)
+def get_zone_busyness_predictor():
+    model_path = Path(get_busyness_model_path())
+    data_ml_src_path = Path("data-ml/src")
+
+    if not model_path.exists() or not data_ml_src_path.exists():
+        return None
+
+    if str(data_ml_src_path) not in sys.path:
+        sys.path.append(str(data_ml_src_path))
+
+    try:
+        from zone_busyness_predictor import load_zone_busyness_predictor
+
+        return load_zone_busyness_predictor(
+            str(model_path)
+        )
+    except Exception:
+        logger.exception("Failed to load zone busyness model")
+        return None
+
+
+@lru_cache(maxsize=1)
+def get_busyness_venues_dataframe():
+    venues_csv_path = Path(get_busyness_venues_csv_path())
+
+    if not venues_csv_path.exists():
+        return None
+
+    try:
+        import pandas as pd
+
+        venues = pd.read_csv(
+            venues_csv_path
+        )
+    except Exception:
+        logger.exception("Failed to load busyness venue CSV")
+        return None
+
+    required_columns = {
+        "venue_id",
+        "zone_id"
+    }
+
+    if not required_columns.issubset(venues.columns):
+        logger.error(
+            "Busyness venue CSV is missing required columns: %s",
+            sorted(required_columns - set(venues.columns))
+        )
+        return None
+
+    return venues
+
+
+def get_busyness_diagnostics(sample_venue_id: str | None = None):
+    model_path = Path(get_busyness_model_path())
+    venues_csv_path = Path(get_busyness_venues_csv_path())
+    required_columns = {
+        "venue_id",
+        "zone_id"
+    }
+    predictor = get_zone_busyness_predictor()
+    venues = get_busyness_venues_dataframe()
+    csv_columns = []
+    missing_columns = sorted(required_columns)
+
+    if venues is not None:
+        csv_columns = list(venues.columns)
+        missing_columns = sorted(
+            required_columns - set(csv_columns)
+        )
+
+    diagnostic = {
+        "status": "ready",
+        "timezone": str(NYC_TIMEZONE),
+        "model_path": str(model_path),
+        "model_exists": model_path.exists(),
+        "venues_csv_path": str(venues_csv_path),
+        "venues_csv_exists": venues_csv_path.exists(),
+        "predictor_loaded": predictor is not None,
+        "venues_csv_loaded": venues is not None,
+        "required_columns": sorted(required_columns),
+        "missing_columns": missing_columns,
+        "venue_mapping_count": (
+            int(len(venues))
+            if venues is not None
+            else 0
+        ),
+        "cache_entries": len(BUSYNESS_PREDICTION_CACHE),
+        "sample": None
+    }
+
+    if (
+        not diagnostic["model_exists"]
+        or not diagnostic["venues_csv_exists"]
+        or not diagnostic["predictor_loaded"]
+        or not diagnostic["venues_csv_loaded"]
+        or missing_columns
+    ):
+        diagnostic["status"] = "not_ready"
+
+    if sample_venue_id:
+        prediction = get_busyness_predictions(
+            [
+                sample_venue_id
+            ]
+        ).get(sample_venue_id)
+        zone_id = get_busyness_zone_id_for_venue(
+            sample_venue_id
+        )
+
+        diagnostic["sample"] = {
+            "venue_id": sample_venue_id,
+            "zone_id": zone_id,
+            "prediction": prediction,
+            "prediction_ready": bool(
+                prediction
+                and prediction.get("busyness_score") is not None
+                and prediction.get("busyness_label") is not None
+            )
+        }
+
+        if not diagnostic["sample"]["prediction_ready"]:
+            diagnostic["status"] = "not_ready"
+
+    return diagnostic
+
+
+def log_busyness_prediction(
+    venue: Venue,
+    prediction,
+    selected_date: date | None = None,
+    selected_time: time | None = None
+):
+    prediction_datetime = get_busyness_prediction_datetime(
+        selected_date=selected_date,
+        selected_time=selected_time
+    )
+    zone_id = get_busyness_zone_id_for_venue(
+        venue.venue_id
+    )
+    prediction_key = get_busyness_prediction_key(
+        zone_id,
+        prediction_datetime
+    )
+    prediction = prediction or {}
+    log_payload = {
+        "event": "busyness_prediction",
+        "venue_id": venue.venue_id,
+        "venue_name": venue.name,
+        "zone_id": zone_id,
+        "prediction_datetime": prediction_datetime.isoformat(),
+        "timezone": str(NYC_TIMEZONE),
+        "weekday": prediction_datetime.weekday(),
+        "day_type": get_day_type(
+            prediction_datetime.date()
+        ),
+        "hour": prediction_datetime.hour,
+        "cache_key": prediction_key,
+        "final_score": prediction.get("busyness_score"),
+        "final_label": prediction.get("busyness_label")
+    }
+
+    logger.info(
+        json.dumps(
+            log_payload,
+            default=str
+        )
+    )
 
 
 SUITABILITY_WEIGHTS = {
     "wifi": 0.35,
     "plug": 0.30,
-    "noise": 0.25,
+    "hourly_profile": 0.25,
     "rating": 0.10,
     "bus": 0.10,
     "train": 0.20
 }
+
+SUITABILITY_BUSYNESS_WEIGHT = 0.25
 
 
 def clamp_normalized_score(value):
@@ -164,7 +436,7 @@ def clamp_normalized_score(value):
     )
 
 
-def get_noise_suitability_score(
+def get_hourly_profile_suitability_score(
     venue: Venue,
     hour: int | None = None
 ):
@@ -190,34 +462,39 @@ def get_noise_suitability_score(
         except (TypeError, ValueError, json.JSONDecodeError):
             pass
 
-    if venue.noise_score is not None:
-        return 1 - clamp_normalized_score(
-            venue.noise_score
-        )
-
-    if venue.noise_level:
-        noise_level = venue.noise_level.lower()
-
-        if noise_level in {"quiet", "low"}:
-            return 1.0
-
-        if noise_level in {"moderate", "medium"}:
-            return 0.5
-
-        if noise_level in {"loud", "high"}:
-            return 0.0
-
     return 0.0
+
+
+def get_busyness_suitability_score(busyness=None):
+    if not busyness:
+        return None
+
+    busyness_score = busyness.get(
+        "busyness_score"
+    )
+
+    if busyness_score is None:
+        return None
+
+    try:
+        normalized_busyness = float(busyness_score) / 100
+    except (TypeError, ValueError):
+        return None
+
+    return 1 - clamp_normalized_score(
+        normalized_busyness
+    )
 
 
 def calculate_suitability_score(
     venue: Venue,
-    hour: int | None = None
+    hour: int | None = None,
+    busyness=None
 ):
     components = {
         "wifi": clamp_normalized_score(venue.wifi_norm),
         "plug": clamp_normalized_score(venue.plug_norm),
-        "noise": get_noise_suitability_score(
+        "hourly_profile": get_hourly_profile_suitability_score(
             venue,
             hour
         ),
@@ -225,8 +502,19 @@ def calculate_suitability_score(
         "bus": clamp_normalized_score(venue.bus_norm),
         "train": clamp_normalized_score(venue.train_norm)
     }
+    weights = dict(
+        SUITABILITY_WEIGHTS
+    )
+    busyness_suitability = get_busyness_suitability_score(
+        busyness
+    )
+
+    if busyness_suitability is not None:
+        components["area_busyness"] = busyness_suitability
+        weights["area_busyness"] = SUITABILITY_BUSYNESS_WEIGHT
+
     total_weight = sum(
-        SUITABILITY_WEIGHTS.values()
+        weights.values()
     )
 
     if total_weight == 0:
@@ -234,7 +522,7 @@ def calculate_suitability_score(
 
     score = sum(
         components[name] * weight / total_weight
-        for name, weight in SUITABILITY_WEIGHTS.items()
+        for name, weight in weights.items()
     )
 
     return round(
@@ -246,57 +534,123 @@ def calculate_suitability_score(
 def get_busyness_predictions(
     venue_ids: list[str],
     hour: int | None = None,
-    day_type: str | None = None
+    day_type: str | None = None,
+    prediction_date: date | str | None = None,
+    selected_date: date | str | None = None,
+    selected_time: time | None = None
 ):
     if not venue_ids:
         return {}
 
-    model_path = Path(get_busyness_model_path())
-    venues_csv_path = Path(get_busyness_venues_csv_path())
-    data_ml_src_path = Path("data-ml/src")
+    prediction_datetime = get_busyness_prediction_datetime(
+        selected_date or prediction_date,
+        selected_time,
+        hour
+    )
+    predicted_for = prediction_datetime.isoformat()
+    predictor = get_zone_busyness_predictor()
+    venues = get_busyness_venues_dataframe()
 
-    if (
-        not model_path.exists()
-        or not venues_csv_path.exists()
-        or not data_ml_src_path.exists()
-    ):
-        return {}
+    empty_prediction = {
+        venue_id: {
+            "busyness_score": None,
+            "busyness_label": None,
+            "busyness_predicted_for": predicted_for
+        }
+        for venue_id in venue_ids
+    }
 
-    if str(data_ml_src_path) not in sys.path:
-        sys.path.append(str(data_ml_src_path))
+    if predictor is None or venues is None:
+        return empty_prediction
 
     try:
-        import pandas as pd
-        from busyness_predictor import load_busyness_predictor
-
-        predictor = load_busyness_predictor(
-            str(model_path)
-        )
-        venues = pd.read_csv(
-            venues_csv_path
-        )
         selected_venues = venues[
             venues["venue_id"].isin(venue_ids)
+        ].copy()
+
+        if selected_venues.empty:
+            return empty_prediction
+
+        selected_venues = selected_venues[
+            selected_venues["zone_id"].notna()
         ]
 
         if selected_venues.empty:
-            return {}
+            return empty_prediction
 
-        prediction_results = predictor.predict_many(
-            selected_venues,
-            hour=hour if hour is not None else datetime.now().hour,
-            day_type=day_type or get_default_day_type()
+        zone_rows = (
+            selected_venues
+            .drop_duplicates(
+                subset=["zone_id"]
+            )
+            .copy()
         )
-    except Exception:
-        return {}
+        missing_zone_rows = []
 
-    return {
-        result["venue_id"]: {
-            "busyness_score": result.get("busyness_score"),
-            "busyness_label": result.get("busyness_label")
-        }
-        for result in prediction_results
-    }
+        for _, zone_row in zone_rows.iterrows():
+            prediction_key = get_busyness_prediction_key(
+                zone_row["zone_id"],
+                prediction_datetime
+            )
+
+            if prediction_key is None:
+                continue
+
+            if prediction_key not in BUSYNESS_PREDICTION_CACHE:
+                missing_zone_rows.append(zone_row)
+
+        if missing_zone_rows:
+            import pandas as pd
+
+            zone_prediction_rows = pd.DataFrame(
+                missing_zone_rows
+            )
+            prediction_results = predictor.predict_many(
+                zone_prediction_rows,
+                date=prediction_datetime.date().isoformat(),
+                hour=prediction_datetime.hour
+            )
+
+            for result, (_, zone_row) in zip(
+                prediction_results,
+                zone_prediction_rows.iterrows()
+            ):
+                prediction_key = get_busyness_prediction_key(
+                    zone_row["zone_id"],
+                    prediction_datetime
+                )
+
+                if prediction_key is None:
+                    continue
+
+                BUSYNESS_PREDICTION_CACHE[prediction_key] = {
+                    "busyness_score": result.get("busyness_score"),
+                    "busyness_label": result.get("busyness_label"),
+                    "busyness_predicted_for": predicted_for
+                }
+    except Exception:
+        logger.exception("Failed to predict zone busyness")
+        return empty_prediction
+
+    predictions = empty_prediction.copy()
+
+    for _, venue in selected_venues.iterrows():
+        prediction_key = get_busyness_prediction_key(
+            venue["zone_id"],
+            prediction_datetime
+        )
+
+        if prediction_key is None:
+            continue
+
+        zone_prediction = BUSYNESS_PREDICTION_CACHE.get(
+            prediction_key
+        )
+
+        if zone_prediction is not None:
+            predictions[venue["venue_id"]] = zone_prediction
+
+    return predictions
 
 
 def build_venue_response(
@@ -316,18 +670,24 @@ def build_venue_response(
         "borough": venue.borough,
         "cuisine_type": venue.cuisine_type,
         "has_wifi": venue.has_wifi,
-        "noise_level": venue.noise_level,
-        "noise_score": venue.noise_score,
+        "accessibility_friendly": bool(venue.accessibility_friendly),
+        "calls_allowed": bool(venue.calls_allowed),
+        "wbe_certified": bool(venue.wbe_certified),
+        "mbe_certified": bool(venue.mbe_certified),
+        "vbe_certified": bool(venue.vbe_certified),
+        "bcorp_certified": bool(venue.bcorp_certified),
+        "lgbt_friendly": bool(venue.lgbt_friendly),
         "rating": venue.rating,
         "plug_access": venue.plug_access,
         "hourly_price": venue.hourly_price,
-        "plugs_available": venue.plug_access,
-        "hourly_fee": venue.hourly_price,
         "availability_window": None,
         "opening_hours_summary": venue.opening_hours,
         "distance_km": distance_km,
         "busyness_score": busyness.get("busyness_score"),
         "busyness_label": busyness.get("busyness_label"),
+        "busyness_predicted_for": busyness.get(
+            "busyness_predicted_for"
+        ),
         "suitability_score": (
             suitability_score
             if suitability_score is not None
@@ -338,7 +698,8 @@ def build_venue_response(
 
 def build_venue_detail_response(
     venue: Venue,
-    busyness=None
+    busyness=None,
+    suitability_score=None
 ):
     busyness = busyness or {}
 
@@ -358,8 +719,13 @@ def build_venue_detail_response(
         "lon": venue.lon,
         "opening_hours": venue.opening_hours,
         "has_wifi": venue.has_wifi,
-        "noise_level": venue.noise_level,
-        "noise_score": venue.noise_score,
+        "accessibility_friendly": bool(venue.accessibility_friendly),
+        "calls_allowed": bool(venue.calls_allowed),
+        "wbe_certified": bool(venue.wbe_certified),
+        "mbe_certified": bool(venue.mbe_certified),
+        "vbe_certified": bool(venue.vbe_certified),
+        "bcorp_certified": bool(venue.bcorp_certified),
+        "lgbt_friendly": bool(venue.lgbt_friendly),
         "best_hours_for_work": venue.best_hours_for_work,
         "hourly_profile": venue.hourly_profile,
         "partner": venue.partner,
@@ -377,7 +743,23 @@ def build_venue_detail_response(
         "hourly_price": venue.hourly_price,
         "actual_hourly_price": venue.actual_hourly_price,
         "busyness_score": busyness.get("busyness_score"),
-        "busyness_label": busyness.get("busyness_label")
+        "busyness_label": busyness.get("busyness_label"),
+        "busyness_predicted_for": busyness.get(
+            "busyness_predicted_for"
+        ),
+        "suitability_score": (
+            suitability_score
+            if suitability_score is not None
+            else calculate_suitability_score(
+                venue,
+                busyness=busyness
+            )
+        ),
+        "seat_capacity": venue.seat_capacity or 1,
+        "amenity_tags": deserialize_amenity_tags(
+            venue.amenity_tags
+        ),
+        "rules_text": venue.rules_text or ""
     }
 
 
@@ -420,8 +802,14 @@ def call_gemini_search_parameter_extraction(
     prompt = (
         "Extract venue search parameters from the user message. "
         "Return only JSON with these keys: location, radius_km, "
-        "venue_type, wifi, busyness, time. Use null when unknown. "
+        "venue_type, date, start_time, wifi, plug_access, "
+        "accessibility_friendly, calls_allowed, wbe_certified, "
+        "mbe_certified, vbe_certified, bcorp_certified, "
+        "lgbt_friendly, busyness, time. Use null when unknown. "
+        "date must use YYYY-MM-DD. start_time must use HH:MM or HH:MM:SS. "
+        "plug_access should be 1 when plugs are required. "
         "busyness must be one of low, moderate, high, or null. "
+        "Ignore unsupported fields and do not return SQL. "
         f"User message: {message}"
     )
 
@@ -492,6 +880,125 @@ def normalize_busyness_preference(
     return None
 
 
+def parse_chatbot_date(value):
+    if value is None:
+        return None
+
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+
+    lowered_value = str(value).strip().lower()
+
+    if not lowered_value:
+        return None
+
+    if lowered_value in {"today", "now", "current"}:
+        return datetime.now().date()
+
+    if lowered_value == "tomorrow":
+        return datetime.now().date() + timedelta(days=1)
+
+    try:
+        return date.fromisoformat(
+            lowered_value
+        )
+    except ValueError:
+        return None
+
+
+def parse_chatbot_time(value):
+    if value is None:
+        return None
+
+    if isinstance(value, time):
+        return value
+
+    lowered_value = str(value).strip().lower()
+
+    if not lowered_value:
+        return None
+
+    if lowered_value in {"now", "current", "currently"}:
+        now = datetime.now()
+        return time(
+            now.hour,
+            now.minute,
+            0
+        )
+
+    time_match = re.search(
+        r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?",
+        lowered_value
+    )
+
+    if not time_match:
+        return None
+
+    hour = int(
+        time_match.group(1)
+    )
+    minute = int(
+        time_match.group(2) or 0
+    )
+    meridiem = time_match.group(3)
+
+    if meridiem == "pm" and hour < 12:
+        hour += 12
+    elif meridiem == "am" and hour == 12:
+        hour = 0
+
+    if hour > 23 or minute > 59:
+        return None
+
+    return time(
+        hour,
+        minute,
+        0
+    )
+
+
+def parse_chatbot_bool(value):
+    if value is None:
+        return None
+
+    if isinstance(value, bool):
+        return value
+
+    lowered_value = str(value).strip().lower()
+
+    if lowered_value in {"true", "yes", "y", "1", "required", "needed"}:
+        return True
+
+    if lowered_value in {"false", "no", "n", "0", "not required"}:
+        return False
+
+    return None
+
+
+def parse_chatbot_plug_access(value):
+    parsed_bool = parse_chatbot_bool(
+        value
+    )
+
+    if parsed_bool is True:
+        return 1
+
+    if parsed_bool is False:
+        return 0
+
+    try:
+        parsed_int = int(
+            value
+        )
+    except (TypeError, ValueError):
+        return None
+
+    if parsed_int in {0, 1}:
+        return parsed_int
+
+    return None
+
+
 def infer_chatbot_search_parameters(
     message: str
 ):
@@ -542,6 +1049,78 @@ def infer_chatbot_search_parameters(
     if requested_time is None and any(term in message_lower for term in ("now", "current", "currently")):
         requested_time = "now"
 
+    requested_date = parse_chatbot_date(
+        extracted.get("date")
+    )
+
+    if requested_date is None:
+        if "tomorrow" in message_lower:
+            requested_date = parse_chatbot_date("tomorrow")
+        elif any(term in message_lower for term in ("today", "now", "current", "currently")):
+            requested_date = parse_chatbot_date("today")
+
+    start_time = parse_chatbot_time(
+        extracted.get("start_time") or requested_time
+    )
+
+    plug_access = parse_chatbot_plug_access(
+        extracted.get("plug_access")
+    )
+
+    if plug_access is None:
+        if any(term in message_lower for term in ("plug", "power outlet", "charging", "socket")):
+            plug_access = 1
+        elif any(term in message_lower for term in ("without plugs", "no plugs")):
+            plug_access = 0
+
+    accessibility_friendly = parse_chatbot_bool(
+        extracted.get("accessibility_friendly")
+    )
+
+    if accessibility_friendly is None and any(term in message_lower for term in ("accessible", "accessibility", "wheelchair")):
+        accessibility_friendly = True
+
+    calls_allowed = parse_chatbot_bool(
+        extracted.get("calls_allowed")
+    )
+
+    if calls_allowed is None:
+        if any(term in message_lower for term in ("calls allowed", "take calls", "phone calls", "zoom calls", "meeting calls")):
+            calls_allowed = True
+        elif any(term in message_lower for term in ("no calls", "without calls", "quiet calls")):
+            calls_allowed = False
+
+    wbe_certified = parse_chatbot_bool(
+        extracted.get("wbe_certified")
+    )
+    mbe_certified = parse_chatbot_bool(
+        extracted.get("mbe_certified")
+    )
+    vbe_certified = parse_chatbot_bool(
+        extracted.get("vbe_certified")
+    )
+    bcorp_certified = parse_chatbot_bool(
+        extracted.get("bcorp_certified")
+    )
+    lgbt_friendly = parse_chatbot_bool(
+        extracted.get("lgbt_friendly")
+    )
+
+    if wbe_certified is None and any(term in message_lower for term in ("women owned", "wbe")):
+        wbe_certified = True
+
+    if mbe_certified is None and any(term in message_lower for term in ("minority owned", "mbe")):
+        mbe_certified = True
+
+    if vbe_certified is None and any(term in message_lower for term in ("veteran owned", "vbe")):
+        vbe_certified = True
+
+    if bcorp_certified is None and any(term in message_lower for term in ("b corp", "bcorp")):
+        bcorp_certified = True
+
+    if lgbt_friendly is None and any(term in message_lower for term in ("lgbt", "lgbtq")):
+        lgbt_friendly = True
+
     location = extracted.get("location")
 
     if not location:
@@ -558,7 +1137,17 @@ def infer_chatbot_search_parameters(
         location=location,
         radius_km=radius_km,
         venue_type=venue_type,
+        date=requested_date,
+        start_time=start_time,
         wifi=wifi,
+        plug_access=plug_access,
+        accessibility_friendly=accessibility_friendly,
+        calls_allowed=calls_allowed,
+        wbe_certified=wbe_certified,
+        mbe_certified=mbe_certified,
+        vbe_certified=vbe_certified,
+        bcorp_certified=bcorp_certified,
+        lgbt_friendly=lgbt_friendly,
         busyness=busyness,
         time=requested_time
     )
@@ -573,7 +1162,17 @@ def has_chatbot_search_signal(
             search_parameters.location,
             search_parameters.radius_km,
             search_parameters.venue_type,
+            search_parameters.date,
+            search_parameters.start_time,
             search_parameters.wifi,
+            search_parameters.plug_access,
+            search_parameters.accessibility_friendly,
+            search_parameters.calls_allowed,
+            search_parameters.wbe_certified,
+            search_parameters.mbe_certified,
+            search_parameters.vbe_certified,
+            search_parameters.bcorp_certified,
+            search_parameters.lgbt_friendly,
             search_parameters.busyness,
             search_parameters.time
         )
@@ -585,6 +1184,13 @@ def is_suitability_sort(sort: str | None):
         "recommended",
         "suitability"
     }
+
+
+def public_discovery_state_filter():
+    return func.coalesce(
+        Venue.state,
+        "Active"
+    ) == "Active"
 
 
 def resolve_chatbot_location(
@@ -602,10 +1208,7 @@ def resolve_chatbot_location(
     return (
         db.query(Venue)
         .filter(
-            func.coalesce(
-                Venue.state,
-                "Active"
-            ) != "Suspended"
+            public_discovery_state_filter()
         )
         .filter(
             (
@@ -624,18 +1227,55 @@ def resolve_chatbot_location(
 def search_venues_for_chatbot(
     search_parameters: ChatbotSearchParameters,
     db: Session,
-    limit: int = 5
+    limit: int = 3
 ):
     query = db.query(Venue).filter(
-        func.coalesce(
-            Venue.state,
-            "Active"
-        ) != "Suspended"
+        public_discovery_state_filter()
     )
 
     if search_parameters.wifi is not None:
         query = query.filter(
             Venue.has_wifi == search_parameters.wifi
+        )
+
+    if search_parameters.plug_access is not None:
+        query = query.filter(
+            Venue.plug_access == search_parameters.plug_access
+        )
+
+    if search_parameters.accessibility_friendly is not None:
+        query = query.filter(
+            Venue.accessibility_friendly == search_parameters.accessibility_friendly
+        )
+
+    if search_parameters.calls_allowed is not None:
+        query = query.filter(
+            Venue.calls_allowed == search_parameters.calls_allowed
+        )
+
+    if search_parameters.wbe_certified is not None:
+        query = query.filter(
+            Venue.wbe_certified == search_parameters.wbe_certified
+        )
+
+    if search_parameters.mbe_certified is not None:
+        query = query.filter(
+            Venue.mbe_certified == search_parameters.mbe_certified
+        )
+
+    if search_parameters.vbe_certified is not None:
+        query = query.filter(
+            Venue.vbe_certified == search_parameters.vbe_certified
+        )
+
+    if search_parameters.bcorp_certified is not None:
+        query = query.filter(
+            Venue.bcorp_certified == search_parameters.bcorp_certified
+        )
+
+    if search_parameters.lgbt_friendly is not None:
+        query = query.filter(
+            Venue.lgbt_friendly == search_parameters.lgbt_friendly
         )
 
     if search_parameters.venue_type:
@@ -709,7 +1349,9 @@ def search_venues_for_chatbot(
         [
             venue.venue_id
             for venue in candidate_venues
-        ]
+        ],
+        selected_date=search_parameters.date,
+        selected_time=search_parameters.start_time
     )
 
     if search_parameters.busyness:
@@ -728,13 +1370,46 @@ def search_venues_for_chatbot(
             )
         ]
 
+    venues_with_distance.sort(
+        key=lambda venue_with_distance: (
+            -calculate_suitability_score(
+                venue_with_distance[0],
+                hour=(
+                    search_parameters.start_time.hour
+                    if search_parameters.start_time
+                    else None
+                ),
+                busyness=busyness_predictions.get(
+                    venue_with_distance[0].venue_id
+                )
+            ),
+            (
+                venue_with_distance[1]
+                if venue_with_distance[1] is not None
+                else 999999
+            ),
+            venue_with_distance[0].venue_id
+        )
+    )
+
     selected_venues = venues_with_distance[:limit]
 
     return [
         build_venue_response(
             venue,
             distance_km,
-            busyness_predictions.get(venue.venue_id)
+            busyness_predictions.get(venue.venue_id),
+            calculate_suitability_score(
+                venue,
+                hour=(
+                    search_parameters.start_time.hour
+                    if search_parameters.start_time
+                    else None
+                ),
+                busyness=busyness_predictions.get(
+                    venue.venue_id
+                )
+            )
         )
         for venue, distance_km in selected_venues
     ], True
@@ -919,7 +1594,7 @@ def get_booking_category(
 ):
     status = (booking.status or "").lower()
 
-    if status in {"cancelled", "canceled"}:
+    if status in {"cancelled", "canceled", "payment_failed"}:
         return "cancelled"
 
     booking_end = datetime.combine(
@@ -1540,6 +2215,20 @@ def health_check(db: Session = Depends(get_db)):
         )
 
 
+@app.get("/api/diagnostics/busyness", status_code=200)
+def busyness_diagnostics(
+    sample_venue_id: str | None = None
+):
+    """
+    Checks whether the busyness model artifact and venue-zone mapping are
+    available. This is intentionally separate from /api/health because DB
+    health does not prove ML prediction readiness.
+    """
+    return get_busyness_diagnostics(
+        sample_venue_id
+    )
+
+
 @app.post(
     "/api/chatbot/recommend",
     response_model=ChatbotRecommendResponse
@@ -1833,7 +2522,7 @@ def create_venue(
     venue = Venue(
         venue_id=f"provider-{uuid.uuid4().hex[:12]}",
         name=payload.name,
-        state="Active",
+        state="Pending Approval",
         lat=payload.lat,
         lon=payload.lon,
         borough=payload.borough,
@@ -1866,7 +2555,25 @@ def get_venues(
 
     plug_access: int | None = None,
 
-    noise_level: str | None = None,
+    venue_type: list[str] | None = Query(
+        None
+    ),
+
+    name: str | None = None,
+
+    accessibility_friendly: bool | None = None,
+
+    calls_allowed: bool | None = None,
+
+    wbe_certified: bool | None = None,
+
+    mbe_certified: bool | None = None,
+
+    vbe_certified: bool | None = None,
+
+    bcorp_certified: bool | None = None,
+
+    lgbt_friendly: bool | None = None,
 
     max_price: float | None = None,
 
@@ -1934,10 +2641,7 @@ def get_venues(
         )
 
     query = db.query(Venue).filter(
-        func.coalesce(
-            Venue.state,
-            "Active"
-        ) != "Suspended"
+        public_discovery_state_filter()
     )
 
     if duration_hours is None and date and start_time and end_time:
@@ -1973,10 +2677,63 @@ def get_venues(
             Venue.plug_access == plug_access
         )
 
-    if noise_level:
+    if venue_type:
+        normalized_types = [
+            item.strip().lower()
+            for item in venue_type
+            if item and item.strip()
+        ]
 
+        if normalized_types:
+            query = query.filter(
+                func.lower(Venue.cuisine_type).in_(
+                    normalized_types
+                )
+            )
+
+    if name:
+        search_name = name.strip().lower()
+
+        if search_name:
+            query = query.filter(
+                func.lower(Venue.name).like(
+                    f"%{search_name}%"
+                )
+            )
+
+    if accessibility_friendly is not None:
         query = query.filter(
-            Venue.noise_level == noise_level
+            Venue.accessibility_friendly == accessibility_friendly
+        )
+
+    if calls_allowed is not None:
+        query = query.filter(
+            Venue.calls_allowed == calls_allowed
+        )
+
+    if wbe_certified is not None:
+        query = query.filter(
+            Venue.wbe_certified == wbe_certified
+        )
+
+    if mbe_certified is not None:
+        query = query.filter(
+            Venue.mbe_certified == mbe_certified
+        )
+
+    if vbe_certified is not None:
+        query = query.filter(
+            Venue.vbe_certified == vbe_certified
+        )
+
+    if bcorp_certified is not None:
+        query = query.filter(
+            Venue.bcorp_certified == bcorp_certified
+        )
+
+    if lgbt_friendly is not None:
+        query = query.filter(
+            Venue.lgbt_friendly == lgbt_friendly
         )
 
     if max_price is not None:
@@ -2028,6 +2785,7 @@ def get_venues(
     offset = (
         page - 1
     ) * limit
+    busyness_predictions = None
 
     if lat is not None and lon is not None:
         venues_with_distance = []
@@ -2054,10 +2812,22 @@ def get_venues(
             )
 
         if is_suitability_sort(sort):
+            busyness_predictions = get_busyness_predictions(
+                [
+                    venue.venue_id
+                    for venue, _ in venues_with_distance
+                ],
+                selected_date=date,
+                selected_time=start_time
+            )
             venues_with_distance.sort(
                 key=lambda venue_with_distance: (
                     -calculate_suitability_score(
-                        venue_with_distance[0]
+                        venue_with_distance[0],
+                        hour=start_time.hour if start_time else None,
+                        busyness=busyness_predictions.get(
+                            venue_with_distance[0].venue_id
+                        )
                     ),
                     venue_with_distance[1]
                 )
@@ -2083,9 +2853,23 @@ def get_venues(
     else:
         if is_suitability_sort(sort):
             venues = query.all()
+            busyness_predictions = get_busyness_predictions(
+                [
+                    venue.venue_id
+                    for venue in venues
+                ],
+                selected_date=date,
+                selected_time=start_time
+            )
             venues.sort(
                 key=lambda venue: (
-                    -calculate_suitability_score(venue),
+                    -calculate_suitability_score(
+                        venue,
+                        hour=start_time.hour if start_time else None,
+                        busyness=busyness_predictions.get(
+                            venue.venue_id
+                        )
+                    ),
                     venue.venue_id
                 )
             )
@@ -2126,19 +2910,28 @@ def get_venues(
             for venue in venues
         ]
 
-    busyness_predictions = get_busyness_predictions(
-        [
-            venue.venue_id
-            for venue, _ in selected_venues
-        ]
-    )
+    if busyness_predictions is None:
+        busyness_predictions = get_busyness_predictions(
+            [
+                venue.venue_id
+                for venue, _ in selected_venues
+            ],
+            selected_date=date,
+            selected_time=start_time
+        )
 
     items = [
         build_venue_response(
             venue,
             distance_km,
             busyness_predictions.get(venue.venue_id),
-            calculate_suitability_score(venue)
+            calculate_suitability_score(
+                venue,
+                hour=start_time.hour if start_time else None,
+                busyness=busyness_predictions.get(
+                    venue.venue_id
+                )
+            )
         )
         for venue, distance_km in selected_venues
     ]
@@ -2177,10 +2970,7 @@ def get_venue_suggestions(
     venues = (
         db.query(Venue)
         .filter(
-            func.coalesce(
-                Venue.state,
-                "Active"
-            ) == "Active"
+            public_discovery_state_filter()
         )
         .filter(
             func.lower(Venue.name).like(f"%{search_term}%")
@@ -2213,6 +3003,9 @@ def get_venue_suggestions(
 )
 def get_venue_by_id(
     venue_id: str,
+    date: date | None = None,
+    start_time: time | None = None,
+    end_time: time | None = None,
     db: Session = Depends(get_db)
 ):
     venue = (
@@ -2233,12 +3026,29 @@ def get_venue_by_id(
     busyness_predictions = get_busyness_predictions(
         [
             venue.venue_id
-        ]
+        ],
+        selected_date=date,
+        selected_time=start_time
+    )
+    busyness_prediction = busyness_predictions.get(
+        venue.venue_id
+    )
+
+    log_busyness_prediction(
+        venue,
+        busyness_prediction,
+        selected_date=date,
+        selected_time=start_time
     )
 
     return build_venue_detail_response(
         venue,
-        busyness_predictions.get(venue.venue_id)
+        busyness_prediction,
+        calculate_suitability_score(
+            venue,
+            hour=start_time.hour if start_time else None,
+            busyness=busyness_prediction
+        )
     )
 
 
@@ -2475,7 +3285,7 @@ def create_booking(
             func.coalesce(
                 func.lower(Booking.status),
                 "confirmed"
-            ).notin_({"cancelled", "canceled"})
+            ).notin_({"cancelled", "canceled", "payment_failed"})
         )
         .scalar()
     )
@@ -2488,7 +3298,8 @@ def create_booking(
     
     booking = Booking(
         order_id=f"ORD-{uuid.uuid4().hex[:8]}",
-        payment_status="paid",
+        payment_status="pending",
+        status="pending_payment",
 
         user_id=current_user.id,
         venue_id=payload.venue_id,
@@ -2505,6 +3316,61 @@ def create_booking(
     db.refresh(booking)
 
     return booking
+
+
+@app.post(
+    "/api/payments/mock-confirm",
+    response_model=MockPaymentResponse
+)
+def confirm_mock_payment(
+    payload: MockPaymentConfirmRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    booking = (
+        db.query(Booking)
+        .filter(Booking.id == payload.booking_id)
+        .filter(Booking.user_id == current_user.id)
+        .with_for_update()
+        .first()
+    )
+
+    if booking is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Booking not found"
+        )
+
+    normalized_card = re.sub(
+        r"\D",
+        "",
+        payload.card_number
+    )
+
+    if normalized_card == "4242424242424242":
+        booking.payment_status = "paid"
+        booking.status = "confirmed"
+        message = "Mock payment approved"
+    elif normalized_card == "4000000000000002":
+        booking.payment_status = "failed"
+        booking.status = "payment_failed"
+        message = "Mock payment declined"
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Use mock card 4242 4242 4242 4242 for success or 4000 0000 0000 0002 for failure"
+        )
+
+    db.commit()
+    db.refresh(booking)
+
+    return {
+        "booking_id": booking.id,
+        "order_id": booking.order_id,
+        "status": booking.status,
+        "payment_status": booking.payment_status,
+        "message": message
+    }
 
 
 @app.patch(
@@ -2790,24 +3656,26 @@ def suspend_venue(
             detail="Venue not found"
         )
 
-    active_bookings = (
-        db.query(Booking)
-        .filter(Booking.venue_id == venue_id)
-        .with_for_update()
-        .all()
-    )
-    active_bookings = [
-        booking
-        for booking in active_bookings
-        if is_active_booking_status(booking.status)
-    ]
-
+    active_bookings = []
     released_seats = 0
 
-    for booking in active_bookings:
-        released_seats += booking.seats_reserved
-        booking.status = "cancelled"
-        booking.payment_status = "refund_pending"
+    if payload.state == "Suspended":
+        active_bookings = (
+            db.query(Booking)
+            .filter(Booking.venue_id == venue_id)
+            .with_for_update()
+            .all()
+        )
+        active_bookings = [
+            booking
+            for booking in active_bookings
+            if is_active_booking_status(booking.status)
+        ]
+
+        for booking in active_bookings:
+            released_seats += booking.seats_reserved
+            booking.status = "cancelled"
+            booking.payment_status = "refund_pending"
 
     venue.state = payload.state
 
@@ -2819,7 +3687,11 @@ def suspend_venue(
         "state": venue.state,
         "cancelled_bookings": len(active_bookings),
         "released_seats": released_seats,
-        "message": "Venue suspended successfully"
+        "message": (
+            "Venue suspended successfully"
+            if payload.state == "Suspended"
+            else "Venue activated successfully"
+        )
     }
 
 

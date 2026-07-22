@@ -15,7 +15,10 @@ def get_venue_listing_column_status(connection):
             "WHERE table_schema = 'public' "
             "AND table_name = 'venues' "
             "AND column_name IN "
-            "('seat_capacity', 'amenity_tags', 'rules_text')"
+            "('seat_capacity', 'amenity_tags', 'rules_text', "
+            "'accessibility_friendly', 'calls_allowed', "
+            "'wbe_certified', 'mbe_certified', 'vbe_certified', "
+            "'bcorp_certified', 'lgbt_friendly')"
         )
     ).all()
     existing_columns = {
@@ -61,6 +64,22 @@ def migrate_venue_listing_fields(apply=False):
                 "ADD COLUMN IF NOT EXISTS rules_text TEXT"
             )
         )
+        for column in (
+            "accessibility_friendly",
+            "calls_allowed",
+            "wbe_certified",
+            "mbe_certified",
+            "vbe_certified",
+            "bcorp_certified",
+            "lgbt_friendly"
+        ):
+            connection.execute(
+                text(
+                    f"ALTER TABLE venues "
+                    f"ADD COLUMN IF NOT EXISTS {column} "
+                    f"BOOLEAN NOT NULL DEFAULT FALSE"
+                )
+            )
 
     print("Venue listing fields migration completed successfully.")
 

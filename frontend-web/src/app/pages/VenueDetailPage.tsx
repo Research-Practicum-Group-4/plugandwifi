@@ -172,7 +172,7 @@ export function VenueDetailPage() {
   };
 
   const getDescription = (v: VenueDetail) => {
-    return `A premium ${v.cuisine_type || "workspace"} located in ${v.borough}. Equipped with verified ${v.has_wifi ? "high-speed WiFi" : "basic WiFi"}, plug access, and a ${v.noise_level} noise level environment. Ideal for focus sessions, remote calls, and short-term study.`;
+    return `A premium ${v.cuisine_type || "workspace"} located in ${v.borough}. Equipped with verified ${v.has_wifi ? "high-speed WiFi" : "basic WiFi"}, plug access, and ${v.calls_allowed ? "call-friendly" : "workspace-focused"} amenities. Ideal for focus sessions, remote calls, and short-term study.`;
   };
 
   // ** HARDCODED ** - no API for complimentary drinks

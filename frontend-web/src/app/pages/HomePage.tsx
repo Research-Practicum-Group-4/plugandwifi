@@ -9,12 +9,11 @@ import {
   Search,
   LayoutGrid,
   Map,
-  Volume2,
+  Wifi,
   Phone,
   Star,
   Accessibility,
   ChevronDown,
-  Wifi,
   Zap,
   Navigation,
   Volume,
@@ -203,8 +202,8 @@ export function HomePage() {
         {/* Filter chips */}
         <div className="flex flex-wrap gap-2 justify-center">
           <Button variant="outline" size="sm">
-            <Volume2 className="size-4 mr-2" />
-            No Loud Music
+            <Wifi className="size-4 mr-2" />
+            WiFi Available
           </Button>
           <Button variant="outline" size="sm">
             <Phone className="size-4 mr-2" />
@@ -437,40 +436,60 @@ export function HomePage() {
                           >
                             {venue.suitabilityScore}/100
                           </span>
-                        </div>
-                      )}
-                      <p className="text-muted-foreground text-sm">
-                        {venue.type} • {venue.availability}
-                      </p>
-                      <div className="flex items-center gap-3 text-muted-foreground">
-                        <div className="flex items-center gap-1" title="WiFi Available">
-                          <Wifi className="size-4" />
-                        </div>
-                        <div className="flex items-center gap-1" title="Power Outlets">
-                          <Zap className="size-4" />
-                        </div>
-                        <div className="flex items-center gap-1" title="Quiet Environment">
-                          <Volume className="size-4" />
-                        </div>
-                        <div className="flex items-center gap-1 text-sm">
-                          <Navigation className="size-4" />
-                          {venue.distance}km
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <p style={{ color: "#2f8a64" }}>${venue.price}/hour</p>
-                        <Button
-                          size="sm"
-                          style={{ backgroundColor: "#253c50" }}
-                          onClick={() => navigate(`/venue/${venue.id}`)}
-                        >
-                          Book a Space
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                          <div className="flex items-start justify-between">
+                            <h4>{venue.name}</h4>
+                            <div className="flex items-center gap-1">
+                              <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
+                              <span>{venue.rating}</span>
+                            </div>
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">Suitability for you</span>
+                              <span
+                                className="font-semibold"
+                                style={{ color: getSuitabilityColor(suitability) }}
+                              >
+                                {suitability}/100
+                              </span>
+                            </div>
+                          </div>
+                          <p className="text-muted-foreground text-sm">
+                            {venue.cuisine_type} • {venue.distance_km}km away
+                          </p>
+                          <div className="flex items-center gap-3 text-muted-foreground">
+                            {venue.has_wifi && (
+                              <div className="flex items-center gap-1" title="WiFi Available">
+                                <Wifi className="size-4" />
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1" title="Power Outlets">
+                              <Zap className="size-4" />
+                            </div>
+                            {venue.calls_allowed && (
+                              <div className="flex items-center gap-1" title="Calls Allowed">
+                                <Volume className="size-4" />
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1 text-sm">
+                              <Navigation className="size-4" />
+                              {venue.distance_km}km
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <p style={{ color: "#2f8a64" }}>${venue.hourly_price}/hour</p>
+                            <Button
+                              size="sm"
+                              style={{ backgroundColor: "#253c50" }}
+                              onClick={() => navigate(`/venue/${venue.venue_id}`)}
+                            >
+                              Book a Space
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
             </div>
             {fallbackVisible < manhattanVenues.length && (
               <div className="flex justify-center mt-8">

@@ -3,6 +3,8 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { ScreenContainer } from '../../components/ScreenContainer';
 import { SectionHeader } from '../../components/SectionHeader';
+import { useAuth } from '../../context/AuthContext';
+import { confirmMockPayment, createBooking } from '../../services/bookings';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import type { RootStackScreenProps } from '../../types/navigation';
@@ -11,18 +13,56 @@ export function CheckoutScreen({
   navigation,
   route,
 }: RootStackScreenProps<'Checkout'>) {
-  const { venueName, duration, price } = route.params;
+  const { venueId, venueName, duration, price } = route.params;
+  const { token } = useAuth();
   const [processing, setProcessing] = useState(false);
+  const [cardNumber, setCardNumber] = useState('4242 4242 4242 4242');
+  const [expiry, setExpiry] = useState('12/30');
+  const [cvc, setCvc] = useState('123');
+  const [cardName, setCardName] = useState('');
+  const [message, setMessage] = useState<string | null>(null);
 
   const serviceFee = 2;
   const total = price + serviceFee;
 
-  const handleCompleteBooking = () => {
+  const handleCompleteBooking = async () => {
     setProcessing(true);
-    setTimeout(() => {
+    setMessage(null);
+
+    try {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const bookingDuration = Number(duration || 2);
+      const booking = await createBooking(
+        {
+          venue_id: venueId,
+          booking_date: tomorrow.toISOString().split('T')[0],
+          start_time: '09:00:00',
+          end_time: `${String(9 + bookingDuration).padStart(2, '0')}:00:00`,
+          seats_reserved: 1,
+        },
+        token ?? undefined,
+      );
+
+      const payment = await confirmMockPayment(
+        {
+          booking_id: booking.id,
+          card_number: cardNumber,
+        },
+        token ?? undefined,
+      );
+
+      if (payment.payment_status !== 'paid') {
+        throw new Error(payment.message || 'Payment failed.');
+      }
+
       setProcessing(false);
+      setMessage(`Order #${payment.order_id} confirmed.`);
       navigation.popToTop();
-    }, 800);
+    } catch (error) {
+      setProcessing(false);
+      setMessage(error instanceof Error ? error.message : 'Checkout failed.');
+    }
   };
 
   return (
@@ -49,12 +89,41 @@ export function CheckoutScreen({
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Payment Method</Text>
-        <TextInput style={styles.input} placeholder="Card Number" placeholderTextColor={colors.textMuted} />
+        <TextInput
+          style={styles.input}
+          placeholder="Card Number"
+          placeholderTextColor={colors.textMuted}
+          keyboardType="number-pad"
+          value={cardNumber}
+          onChangeText={setCardNumber}
+        />
         <View style={styles.row}>
-          <TextInput style={[styles.input, styles.halfInput]} placeholder="Expiry" placeholderTextColor={colors.textMuted} />
-          <TextInput style={[styles.input, styles.halfInput]} placeholder="CVV" placeholderTextColor={colors.textMuted} />
+          <TextInput
+            style={[styles.input, styles.halfInput]}
+            placeholder="Expiry"
+            placeholderTextColor={colors.textMuted}
+            value={expiry}
+            onChangeText={setExpiry}
+          />
+          <TextInput
+            style={[styles.input, styles.halfInput]}
+            placeholder="CVV"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="number-pad"
+            value={cvc}
+            onChangeText={setCvc}
+          />
         </View>
-        <TextInput style={styles.input} placeholder="Name on Card" placeholderTextColor={colors.textMuted} />
+        <TextInput
+          style={styles.input}
+          placeholder="Name on Card"
+          placeholderTextColor={colors.textMuted}
+          value={cardName}
+          onChangeText={setCardName}
+        />
+        <Text style={styles.demoText}>
+          Demo cards: 4242 4242 4242 4242 succeeds, 4000 0000 0000 0002 fails.
+        </Text>
       </View>
 
       <View style={styles.card}>
@@ -77,10 +146,11 @@ export function CheckoutScreen({
       </View>
 
       <PrimaryButton
-        label={processing ? 'Processing...' : 'Complete Booking'}
+        label={processing ? 'Processing payment...' : 'Pay & Confirm Booking'}
         disabled={processing}
         onPress={handleCompleteBooking}
       />
+      {message ? <Text style={styles.message}>{message}</Text> : null}
     </ScreenContainer>
   );
 }
@@ -137,5 +207,15 @@ const styles = StyleSheet.create({
   note: {
     color: colors.textMuted,
     fontSize: 13,
+  },
+  demoText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  message: {
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+    textAlign: 'center',
   },
 });

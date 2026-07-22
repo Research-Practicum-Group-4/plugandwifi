@@ -22,27 +22,35 @@ export interface HourlyProfile {
 
 // Core venue shape returned by GET /api/venues (list endpoint)
 export interface Venue {
+  [key: string]: unknown;
   venue_id: string;
   name: string;
   cuisine_type: string;
   distance_km: number;
-  has_wifi: boolean | null;
-  // wifi_free / opening_now / seats_avail are mock-only; real API does not emit them
-  wifi_free?: boolean;
-  opening_now?: boolean;
-  noise_score: number;
-  noise_level: string;
-  seats_avail?: number;
-  total_seats?: number;
+  has_wifi: boolean;
+  wifi_free: boolean;
+  opening_now: boolean;
+  seats_avail: number;
+  total_seats: number;
   hourly_price: number;
   rating: number;
   lat: number;
   lon: number;
   borough?: string;
+  state?: string;
   plug_access?: number | null;
-  suitability_score?: number | null;    // 0–100 from backend scoring model
-  busyness_score?: number | null;       // 0–100 from ML model; null when unavailable
-  busyness_label?: string | null;       // "Low" | "Medium" | "High" | "Unavailable"
+  availability_window?: string | null;
+  opening_hours_summary?: string | boolean | null;
+  busyness_score?: number | null;
+  busyness_label?: string | null;
+  suitability_score?: number | null;
+  accessibility_friendly: boolean;
+  calls_allowed: boolean;
+  wbe_certified: boolean;
+  mbe_certified: boolean;
+  vbe_certified: boolean;
+  bcorp_certified: boolean;
+  lgbt_friendly: boolean;
 }
 
 // Full venue shape returned by GET /api/venues/{id} (detail endpoint)
@@ -61,16 +69,9 @@ export interface VenueDetail extends Venue {
   hotel_stars: string | null;
   hourly_profile: HourlyProfile;
   best_hours_for_work: number[];
-  // Additional detail fields from backend
-  inferred_wifi?: boolean | null;
-  wifi_user_reported?: boolean | null;
-  nearest_subway?: string | null;
-  nearest_subway_m?: number | null;
-  nearest_bus?: string | null;
-  nearest_bus_m?: number | null;
-  plug_user_reported?: boolean | null;
-  rating_user_reported?: number | null;
-  actual_hourly_price?: number | null;
+  seat_capacity: number;
+  amenity_tags: string[];
+  rules_text: string | null;
 }
 
 export interface AvailabilitySlot {
@@ -96,6 +97,16 @@ export interface BookingRequest {
 export interface BookingResponse {
   booking_id: number;
   status: string;
+  message: string;
+  payment_status?: string;
+  order_id?: string;
+}
+
+export interface MockPaymentResponse {
+  booking_id: number;
+  order_id: string;
+  status: string;
+  payment_status: string;
   message: string;
 }
 

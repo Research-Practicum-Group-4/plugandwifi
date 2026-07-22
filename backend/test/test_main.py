@@ -107,8 +107,221 @@ def test_postgresql_engine_options(monkeypatch):
     }
 
 
+def test_get_busyness_predictions_uses_zone_model_contract(
+    monkeypatch
+):
+    main_module.BUSYNESS_PREDICTION_CACHE.clear()
+
+    call_count = {
+        "predict_many": 0
+    }
+
+    class FakeZonePredictor:
+        def predict_many(self, venues, date, hour):
+            call_count["predict_many"] += 1
+            assert list(venues["zone_id"]) == [101]
+            assert str(date) == "2026-07-22"
+            assert hour == 14
+
+            return [
+                {
+                    "venue_id": "osm_296568074",
+                    "busyness_score": 72,
+                    "busyness_label": "High"
+                }
+            ]
+
+    pd = __import__("pandas")
+    venue_rows = pd.DataFrame(
+        [
+            {
+                "venue_id": "osm_296568074",
+                "zone_id": 101,
+                "name": "UCD Library Shared Space"
+            },
+            {
+                "venue_id": "osm_296568075",
+                "zone_id": 101,
+                "name": "UCD Village Study Hub"
+            },
+            {
+                "venue_id": "osm_296568076",
+                "zone_id": 102,
+                "name": "UCD Business Lounge"
+            }
+        ]
+    )
+
+    monkeypatch.setattr(
+        main_module,
+        "get_zone_busyness_predictor",
+        lambda: FakeZonePredictor()
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_venues_dataframe",
+        lambda: venue_rows
+    )
+
+    predictions = main_module.get_busyness_predictions(
+        [
+            "osm_296568074",
+            "osm_296568075"
+        ],
+        hour=14,
+        prediction_date="2026-07-22"
+    )
+
+    assert predictions == {
+        "osm_296568074": {
+            "busyness_score": 72,
+            "busyness_label": "High",
+            "busyness_predicted_for": "2026-07-22T14:00:00"
+        },
+        "osm_296568075": {
+            "busyness_score": 72,
+            "busyness_label": "High",
+            "busyness_predicted_for": "2026-07-22T14:00:00"
+        }
+    }
+    assert call_count["predict_many"] == 1
+
+    cached_predictions = main_module.get_busyness_predictions(
+        [
+            "osm_296568074",
+            "osm_296568075"
+        ],
+        hour=14,
+        prediction_date="2026-07-22"
+    )
+
+    assert cached_predictions == predictions
+    assert call_count["predict_many"] == 1
+
+    main_module.BUSYNESS_PREDICTION_CACHE.clear()
+
+
+def test_busyness_diagnostics_reports_ready_with_sample_prediction(
+    monkeypatch,
+    tmp_path
+):
+    main_module.BUSYNESS_PREDICTION_CACHE.clear()
+
+    model_path = tmp_path / "zone_busyness_model.joblib"
+    venues_csv_path = tmp_path / "nyc_venues.csv"
+    model_path.write_text("placeholder")
+    venues_csv_path.write_text("placeholder")
+
+    class FakeZonePredictor:
+        def predict_many(self, venues, date, hour):
+            return [
+                {
+                    "venue_id": venue["venue_id"],
+                    "busyness_score": 64,
+                    "busyness_label": "Medium"
+                }
+                for _, venue in venues.iterrows()
+            ]
+
+    pd = __import__("pandas")
+    venue_rows = pd.DataFrame(
+        [
+            {
+                "venue_id": "osm_296568074",
+                "zone_id": 101
+            }
+        ]
+    )
+
+    monkeypatch.setenv(
+        "BUSYNESS_MODEL_PATH",
+        str(model_path)
+    )
+    monkeypatch.setenv(
+        "BUSYNESS_VENUES_CSV",
+        str(venues_csv_path)
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_zone_busyness_predictor",
+        lambda: FakeZonePredictor()
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_venues_dataframe",
+        lambda: venue_rows
+    )
+
+    response = client.get(
+        "/api/diagnostics/busyness?sample_venue_id=osm_296568074"
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ready"
+    assert data["model_exists"] is True
+    assert data["venues_csv_exists"] is True
+    assert data["predictor_loaded"] is True
+    assert data["venues_csv_loaded"] is True
+    assert data["missing_columns"] == []
+    assert data["sample"]["zone_id"] == 101
+    assert data["sample"]["prediction_ready"] is True
+    assert data["sample"]["prediction"]["busyness_score"] == 64
+    assert data["sample"]["prediction"]["busyness_label"] == "Medium"
+
+    main_module.BUSYNESS_PREDICTION_CACHE.clear()
+
+
+def test_busyness_diagnostics_reports_not_ready_when_artifacts_missing(
+    monkeypatch,
+    tmp_path
+):
+    missing_model_path = tmp_path / "missing_model.joblib"
+    missing_venues_csv_path = tmp_path / "missing_venues.csv"
+
+    monkeypatch.setenv(
+        "BUSYNESS_MODEL_PATH",
+        str(missing_model_path)
+    )
+    monkeypatch.setenv(
+        "BUSYNESS_VENUES_CSV",
+        str(missing_venues_csv_path)
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_zone_busyness_predictor",
+        lambda: None
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_venues_dataframe",
+        lambda: None
+    )
+
+    response = client.get("/api/diagnostics/busyness")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["status"] == "not_ready"
+    assert data["model_exists"] is False
+    assert data["venues_csv_exists"] is False
+    assert data["predictor_loaded"] is False
+    assert data["venues_csv_loaded"] is False
+    assert data["missing_columns"] == [
+        "venue_id",
+        "zone_id"
+    ]
+
+
 def test_chatbot_recommend_returns_real_venue_suggestions(monkeypatch):
-    def fake_get_busyness_predictions(venue_ids, hour=None, day_type=None):
+    def fake_get_busyness_predictions(
+        venue_ids,
+        hour=None,
+        day_type=None,
+        prediction_date=None,
+        selected_date=None,
+        selected_time=None
+    ):
         return {
             "osm_296568074": {
                 "busyness_score": 32,
@@ -141,14 +354,11 @@ def test_chatbot_recommend_returns_real_venue_suggestions(monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert data["model"] == "gemini-test-model"
-    assert data["search_parameters"] == {
-        "location": "UCD",
-        "radius_km": None,
-        "venue_type": "library",
-        "wifi": True,
-        "busyness": "low",
-        "time": "now"
-    }
+    assert data["search_parameters"]["location"] == "UCD"
+    assert data["search_parameters"]["venue_type"] == "library"
+    assert data["search_parameters"]["wifi"] is True
+    assert data["search_parameters"]["busyness"] == "low"
+    assert data["search_parameters"]["time"] == "now"
     assert data["venues"][0]["venue_id"] == "osm_296568074"
     assert data["venues"][0]["busyness_label"] == "Low"
     assert data["follow_up_question"] is None
@@ -162,7 +372,10 @@ def test_chatbot_recommend_uses_extracted_radius_and_location(monkeypatch):
             "location": "UCD Library",
             "radius_km": 0.1,
             "venue_type": None,
+            "date": None,
+            "start_time": None,
             "wifi": True,
+            "plug_access": None,
             "busyness": None,
             "time": "now"
         }
@@ -170,7 +383,7 @@ def test_chatbot_recommend_uses_extracted_radius_and_location(monkeypatch):
     monkeypatch.setattr(
         main_module,
         "get_busyness_predictions",
-        lambda venue_ids, hour=None, day_type=None: {}
+        lambda venue_ids, hour=None, day_type=None, prediction_date=None, selected_date=None, selected_time=None: {}
     )
 
     response = client.post(
@@ -188,6 +401,69 @@ def test_chatbot_recommend_uses_extracted_radius_and_location(monkeypatch):
         venue["venue_id"]
         for venue in data["venues"]
     ] == ["osm_296568074"]
+
+
+def test_chatbot_recommend_applies_advanced_filters(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message: {
+            "location": None,
+            "radius_km": None,
+            "venue_type": None,
+            "date": "2026-07-24",
+            "start_time": "14:30",
+            "wifi": True,
+            "plug_access": 1,
+            "accessibility_friendly": True,
+            "calls_allowed": True,
+            "bcorp_certified": True,
+            "busyness": None,
+            "time": None
+        }
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, hour=None, day_type=None, prediction_date=None, selected_date=None, selected_time=None: {
+            venue_id: {
+                "busyness_score": 20,
+                "busyness_label": "Low",
+                "busyness_predicted_for": "2026-07-24T14:00:00"
+            }
+            for venue_id in venue_ids
+        }
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Find an accessible B Corp venue with Wi-Fi, plugs and calls allowed on 24 July at 2:30pm."
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["venues"]) <= 3
+    assert [
+        venue["venue_id"]
+        for venue in data["venues"]
+    ] == ["osm_296568074"]
+    assert data["search_parameters"]["date"] == "2026-07-24"
+    assert data["search_parameters"]["start_time"] == "14:30:00"
+    assert data["search_parameters"]["plug_access"] == 1
+    assert data["search_parameters"]["accessibility_friendly"] is True
+    assert data["search_parameters"]["calls_allowed"] is True
+    assert data["search_parameters"]["bcorp_certified"] is True
+
+
+def test_default_gemini_model_uses_flash_lite(monkeypatch):
+    monkeypatch.delenv(
+        "GEMINI_MODEL",
+        raising=False
+    )
+
+    assert main_module.get_gemini_model() == "gemini-3.1-flash-lite"
 
 
 def test_chatbot_recommend_asks_follow_up_for_unclear_request(monkeypatch):
@@ -310,7 +586,15 @@ def setup_and_seed_database():
             venue_id="osm_296568074",
             name="UCD Library Shared Space",
             borough="Dublin South",
+            cuisine_type="library",
             has_wifi=True,
+            accessibility_friendly=True,
+            calls_allowed=True,
+            wbe_certified=False,
+            mbe_certified=False,
+            vbe_certified=False,
+            bcorp_certified=True,
+            lgbt_friendly=True,
             noise_level="quiet",
             hourly_price=3.5,
             opening_hours="Mo-Fr 09:00-17:00",
@@ -331,7 +615,15 @@ def setup_and_seed_database():
             venue_id="osm_296568075",
             name="UCD Village Study Hub",
             borough="Dublin South",
+            cuisine_type="cafe",
             has_wifi=True,
+            accessibility_friendly=False,
+            calls_allowed=False,
+            wbe_certified=True,
+            mbe_certified=False,
+            vbe_certified=False,
+            bcorp_certified=False,
+            lgbt_friendly=True,
             noise_level="moderate",
             hourly_price=4.0,
             opening_hours="Mo-Fr 10:00-18:00",
@@ -415,21 +707,48 @@ def test_get_venues_with_data():
     assert len(data["items"]) == 2
     assert data["items"][0]["name"] == "UCD Library Shared Space"
     required_fields = {
-        "plugs_available",
-        "noise_level",
-        "hourly_fee",
+        "plug_access",
+        "hourly_price",
         "availability_window",
         "opening_hours_summary",
         "distance_km",
+        "accessibility_friendly",
+        "calls_allowed",
+        "wbe_certified",
+        "mbe_certified",
+        "vbe_certified",
+        "bcorp_certified",
+        "lgbt_friendly",
     }
     assert required_fields.issubset(data["items"][0].keys())
-    assert data["items"][0]["plugs_available"] == 1
-    assert data["items"][0]["hourly_fee"] == 3.5
+    assert data["items"][0]["plug_access"] == 1
+    assert data["items"][0]["hourly_price"] == 3.5
     assert data["items"][0]["opening_hours_summary"] == "Mo-Fr 09:00-17:00"
+    assert "noise_level" not in data["items"][0]
+    assert "noise_score" not in data["items"][0]
+    assert "plugs_available" not in data["items"][0]
+    assert "hourly_fee" not in data["items"][0]
+    for field in (
+        "accessibility_friendly",
+        "calls_allowed",
+        "wbe_certified",
+        "mbe_certified",
+        "vbe_certified",
+        "bcorp_certified",
+        "lgbt_friendly"
+    ):
+        assert isinstance(data["items"][0][field], bool)
 
 
 def test_get_venues_includes_busyness_fields(monkeypatch):
-    def fake_get_busyness_predictions(venue_ids, hour=None, day_type=None):
+    def fake_get_busyness_predictions(
+        venue_ids,
+        hour=None,
+        day_type=None,
+        prediction_date=None,
+        selected_date=None,
+        selected_time=None
+    ):
         return {
             "osm_296568074": {
                 "busyness_score": 32,
@@ -457,13 +776,112 @@ def test_get_venues_includes_busyness_fields(monkeypatch):
     assert data["items"][1]["busyness_label"] == "High"
 
 
+def test_get_venues_busyness_uses_selected_date_time(monkeypatch):
+    def fake_get_busyness_predictions(
+        venue_ids,
+        hour=None,
+        day_type=None,
+        prediction_date=None,
+        selected_date=None,
+        selected_time=None
+    ):
+        assert selected_date == date(2026, 7, 24)
+        assert selected_time == time(14, 30)
+
+        return {
+            "osm_296568074": {
+                "busyness_score": 72,
+                "busyness_label": "High",
+                "busyness_predicted_for": "2026-07-24T14:00:00"
+            }
+        }
+
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        fake_get_busyness_predictions
+    )
+
+    response = client.get(
+        "/api/venues?borough=Dublin South&date=2026-07-24&start_time=14:30:00"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    venue = next(
+        item
+        for item in data["items"]
+        if item["venue_id"] == "osm_296568074"
+    )
+    assert venue["busyness_score"] == 72
+    assert venue["busyness_label"] == "High"
+    assert venue["busyness_predicted_for"] == "2026-07-24T14:00:00"
+
+
 def test_get_venues_includes_suitability_score():
     response = client.get("/api/venues?borough=Dublin South")
 
     assert response.status_code == 200
     data = response.json()
-    assert data["items"][0]["suitability_score"] == 91.23
-    assert data["items"][1]["suitability_score"] == 58.5
+    assert data["items"][0]["suitability_score"] == 74.31
+    assert data["items"][1]["suitability_score"] == 46.0
+
+
+def test_get_venues_filters_by_advanced_filter_fields():
+    response = client.get(
+        "/api/venues?borough=Dublin South"
+        "&wifi=true"
+        "&plug_access=1"
+        "&accessibility_friendly=true"
+        "&calls_allowed=true"
+        "&bcorp_certified=true"
+        "&lgbt_friendly=true"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [
+        item["venue_id"]
+        for item in data["items"]
+    ] == ["osm_296568074"]
+
+
+def test_get_venues_filters_by_multiple_venue_types_with_or_behaviour():
+    response = client.get(
+        "/api/venues?borough=Dublin South&venue_type=library&venue_type=cafe"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert {
+        item["venue_id"]
+        for item in data["items"]
+    } == {
+        "osm_296568074",
+        "osm_296568075"
+    }
+
+    library_response = client.get(
+        "/api/venues?borough=Dublin South&venue_type=library"
+    )
+
+    assert library_response.status_code == 200
+    assert [
+        item["venue_id"]
+        for item in library_response.json()["items"]
+    ] == ["osm_296568074"]
+
+
+def test_get_venues_filters_by_name_with_other_filters():
+    response = client.get(
+        "/api/venues?name=library&wifi=true&accessibility_friendly=true"
+    )
+
+    assert response.status_code == 200
+    assert [
+        item["venue_id"]
+        for item in response.json()["items"]
+    ] == ["osm_296568074"]
 
 
 def test_get_venues_can_sort_by_suitability():
@@ -477,7 +895,6 @@ def test_get_venues_can_sort_by_suitability():
         venue.rating_norm = 1.0
         venue.bus_norm = 1.0
         venue.train_norm = 1.0
-        venue.noise_score = 0.0
         db.commit()
     finally:
         db.close()
@@ -497,6 +914,72 @@ def test_get_venues_can_sort_by_suitability():
     assert data["total_pages"] == 1
 
 
+def test_get_venues_recommended_sort_uses_time_based_busyness(monkeypatch):
+    db = TestingSessionLocal()
+    try:
+        for venue in db.query(Venue).filter(
+            Venue.venue_id.in_(
+                [
+                    "osm_296568074",
+                    "osm_296568075"
+                ]
+            )
+        ).all():
+            venue.wifi_norm = 1.0
+            venue.plug_norm = 1.0
+            venue.rating_norm = 1.0
+            venue.bus_norm = 1.0
+            venue.train_norm = 1.0
+        db.commit()
+    finally:
+        db.close()
+
+    def fake_get_busyness_predictions(
+        venue_ids,
+        hour=None,
+        day_type=None,
+        prediction_date=None,
+        selected_date=None,
+        selected_time=None
+    ):
+        assert selected_date == date(2026, 7, 24)
+        assert selected_time == time(14, 30)
+
+        return {
+            "osm_296568074": {
+                "busyness_score": 95,
+                "busyness_label": "High",
+                "busyness_predicted_for": "2026-07-24T14:00:00"
+            },
+            "osm_296568075": {
+                "busyness_score": 5,
+                "busyness_label": "Low",
+                "busyness_predicted_for": "2026-07-24T14:00:00"
+            }
+        }
+
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        fake_get_busyness_predictions
+    )
+
+    response = client.get(
+        "/api/venues?borough=Dublin South&date=2026-07-24&start_time=14:30:00&sort=recommended"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [
+        item["venue_id"]
+        for item in data["items"]
+    ] == [
+        "osm_296568075",
+        "osm_296568074"
+    ]
+    assert data["items"][0]["suitability_score"] > data["items"][1]["suitability_score"]
+
+
 def test_get_venues_radius_search_can_sort_by_suitability():
     db = TestingSessionLocal()
     try:
@@ -508,7 +991,6 @@ def test_get_venues_radius_search_can_sort_by_suitability():
         venue.rating_norm = 1.0
         venue.bus_norm = 1.0
         venue.train_norm = 1.0
-        venue.noise_score = 0.0
         db.commit()
     finally:
         db.close()
@@ -540,8 +1022,6 @@ def test_get_venues_suitability_score_handles_null_fields():
         venue.rating_norm = None
         venue.bus_norm = None
         venue.train_norm = None
-        venue.noise_score = None
-        venue.noise_level = None
         db.commit()
     finally:
         db.close()
@@ -706,6 +1186,8 @@ def test_create_booking_success():
     )
     assert response.status_code == 200
     assert response.json()["user_id"] == 1
+    assert response.json()["status"] == "pending_payment"
+    assert response.json()["payment_status"] == "pending"
 
 
 def test_create_booking_ignores_client_user_id():
@@ -738,6 +1220,66 @@ def test_create_booking_ignores_client_user_id():
 
     assert response.status_code == 200
     assert response.json()["user_id"] == 1
+
+
+def test_mock_payment_confirm_success_marks_booking_paid():
+    booking_response = client.post(
+        "/api/bookings",
+        json={
+            "venue_id": "osm_296568074",
+            "booking_date": "2026-06-15",
+            "start_time": "09:00:00",
+            "end_time": "10:00:00",
+            "seats_reserved": 1
+        },
+        headers=get_test_user_headers()
+    )
+    booking_id = booking_response.json()["id"]
+
+    response = client.post(
+        "/api/payments/mock-confirm",
+        json={
+            "booking_id": booking_id,
+            "card_number": "4242 4242 4242 4242"
+        },
+        headers=get_test_user_headers()
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["booking_id"] == booking_id
+    assert data["status"] == "confirmed"
+    assert data["payment_status"] == "paid"
+
+
+def test_mock_payment_confirm_failure_marks_booking_failed():
+    booking_response = client.post(
+        "/api/bookings",
+        json={
+            "venue_id": "osm_296568074",
+            "booking_date": "2026-06-15",
+            "start_time": "09:00:00",
+            "end_time": "10:00:00",
+            "seats_reserved": 1
+        },
+        headers=get_test_user_headers()
+    )
+    booking_id = booking_response.json()["id"]
+
+    response = client.post(
+        "/api/payments/mock-confirm",
+        json={
+            "booking_id": booking_id,
+            "card_number": "4000 0000 0000 0002"
+        },
+        headers=get_test_user_headers()
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["booking_id"] == booking_id
+    assert data["status"] == "payment_failed"
+    assert data["payment_status"] == "failed"
 
 
 def test_register_flow():
@@ -877,7 +1419,7 @@ def test_create_venue_rejects_standard_user():
     assert response.status_code == 403
 
 
-def test_provider_can_create_active_venue_listing_and_search_it():
+def test_provider_created_pending_venue_stays_hidden_until_admin_activation():
     provider_payload = {
         "full_name": "Venue Creator",
         "email": "venue-creator@ucd.ie",
@@ -925,7 +1467,7 @@ def test_provider_can_create_active_venue_listing_and_search_it():
     data = response.json()
     assert data["venue_id"].startswith("provider-")
     assert data["name"] == "Provider Study Room"
-    assert data["state"] == "Active"
+    assert data["state"] == "Pending Approval"
     assert data["seat_capacity"] == 12
     assert data["amenity_tags"] == ["wifi", "plugs", "quiet"]
 
@@ -934,9 +1476,31 @@ def test_provider_can_create_active_venue_listing_and_search_it():
         created_venue = db.query(Venue).filter(
             Venue.venue_id == data["venue_id"]
         ).one()
-        assert created_venue.state == "Active"
+        assert created_venue.state == "Pending Approval"
         assert created_venue.partner == login_response.json()["user"]["user_id"]
         assert created_venue.amenity_tags == "wifi,plugs,quiet"
+
+        db.add(
+            AvailabilitySlot(
+                id=90,
+                venue_id=data["venue_id"],
+                date=date(2026, 6, 15),
+                start_time=time(9, 0, 0),
+                end_time=time(12, 0, 0),
+                available=True,
+                available_seats=12
+            )
+        )
+        db.add(
+            User(
+                id=93,
+                full_name="Venue Approval Admin",
+                email="venue-approval-admin@example.com",
+                password_hash=hash_password("00000000"),
+                role="admin"
+            )
+        )
+        db.commit()
     finally:
         db.close()
 
@@ -946,7 +1510,68 @@ def test_provider_can_create_active_venue_listing_and_search_it():
         item["venue_id"]
         for item in venues_response.json()["items"]
     ]
-    assert data["venue_id"] in venue_ids
+    assert data["venue_id"] not in venue_ids
+
+    radius_response = client.get(
+        "/api/venues?borough=Dublin South&lat=53.31&lon=-6.22&radius=1"
+    )
+    assert radius_response.status_code == 200
+    radius_venue_ids = [
+        item["venue_id"]
+        for item in radius_response.json()["items"]
+    ]
+    assert data["venue_id"] not in radius_venue_ids
+
+    availability_response = client.get(
+        "/api/venues?borough=Dublin South&date=2026-06-15&start_time=09:00:00&duration_hours=3&seats_required=1"
+    )
+    assert availability_response.status_code == 200
+    availability_venue_ids = [
+        item["venue_id"]
+        for item in availability_response.json()["items"]
+    ]
+    assert data["venue_id"] not in availability_venue_ids
+
+    suggestions_response = client.get("/api/venues/suggestions?q=provider")
+    assert suggestions_response.status_code == 200
+    suggestion_venue_ids = [
+        item["venue_id"]
+        for item in suggestions_response.json()["items"]
+    ]
+    assert data["venue_id"] not in suggestion_venue_ids
+
+    admin_login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": "venue-approval-admin@example.com",
+            "password": "00000000"
+        }
+    )
+    admin_headers = {
+        "Authorization": f"Bearer {admin_login_response.json()['access_token']}"
+    }
+
+    activation_response = client.patch(
+        f"/api/admin/venues/{data['venue_id']}/suspension",
+        headers=admin_headers,
+        json={"state": "Active"}
+    )
+    assert activation_response.status_code == 200
+    assert activation_response.json() == {
+        "venue_id": data["venue_id"],
+        "state": "Active",
+        "cancelled_bookings": 0,
+        "released_seats": 0,
+        "message": "Venue activated successfully"
+    }
+
+    activated_response = client.get("/api/venues?borough=Dublin South")
+    assert activated_response.status_code == 200
+    activated_venue_ids = [
+        item["venue_id"]
+        for item in activated_response.json()["items"]
+    ]
+    assert data["venue_id"] in activated_venue_ids
 
 
 def test_create_venue_rejects_invalid_payload():
@@ -1853,8 +2478,52 @@ def test_get_venue_by_id():
     assert res_404.status_code == 404
 
 
+def test_get_venue_by_id_uses_aligned_detail_contract():
+    list_response = client.get("/api/venues?borough=Dublin South")
+    assert list_response.status_code == 200
+    list_item = next(
+        item
+        for item in list_response.json()["items"]
+        if item["venue_id"] == "osm_296568074"
+    )
+
+    detail_response = client.get("/api/venues/osm_296568074")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+
+    assert detail["suitability_score"] == list_item["suitability_score"]
+    assert isinstance(detail["suitability_score"], float)
+    assert detail["seat_capacity"] == 1
+    assert isinstance(detail["seat_capacity"], int)
+    assert detail["amenity_tags"] == []
+    assert isinstance(detail["rules_text"], str)
+    assert "noise_level" not in detail
+    assert "noise_score" not in detail
+
+    for field in (
+        "accessibility_friendly",
+        "calls_allowed",
+        "wbe_certified",
+        "mbe_certified",
+        "vbe_certified",
+        "bcorp_certified",
+        "lgbt_friendly"
+    ):
+        assert field in list_item
+        assert field in detail
+        assert isinstance(list_item[field], bool)
+        assert isinstance(detail[field], bool)
+
+
 def test_get_venue_by_id_includes_busyness_fields(monkeypatch):
-    def fake_get_busyness_predictions(venue_ids, hour=None, day_type=None):
+    def fake_get_busyness_predictions(
+        venue_ids,
+        hour=None,
+        day_type=None,
+        prediction_date=None,
+        selected_date=None,
+        selected_time=None
+    ):
         return {
             "osm_296568074": {
                 "busyness_score": 32,
@@ -1873,6 +2542,89 @@ def test_get_venue_by_id_includes_busyness_fields(monkeypatch):
     assert response.status_code == 200
     assert response.json()["busyness_score"] == 32
     assert response.json()["busyness_label"] == "Low"
+
+
+def test_get_venue_by_id_busyness_uses_selected_date_time(monkeypatch):
+    def fake_get_busyness_predictions(
+        venue_ids,
+        hour=None,
+        day_type=None,
+        prediction_date=None,
+        selected_date=None,
+        selected_time=None
+    ):
+        assert venue_ids == ["osm_296568074"]
+        assert selected_date == date(2026, 7, 24)
+        assert selected_time == time(14, 30)
+
+        return {
+            "osm_296568074": {
+                "busyness_score": 72,
+                "busyness_label": "High",
+                "busyness_predicted_for": "2026-07-24T14:00:00"
+            }
+        }
+
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        fake_get_busyness_predictions
+    )
+
+    response = client.get(
+        "/api/venues/osm_296568074?date=2026-07-24&start_time=14:30:00"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["busyness_score"] == 72
+    assert data["busyness_label"] == "High"
+    assert data["busyness_predicted_for"] == "2026-07-24T14:00:00"
+
+
+def test_get_venue_by_id_suitability_matches_list_for_selected_busyness(monkeypatch):
+    def fake_get_busyness_predictions(
+        venue_ids,
+        hour=None,
+        day_type=None,
+        prediction_date=None,
+        selected_date=None,
+        selected_time=None
+    ):
+        return {
+            venue_id: {
+                "busyness_score": 72,
+                "busyness_label": "High",
+                "busyness_predicted_for": "2026-07-24T14:00:00"
+            }
+            for venue_id in venue_ids
+        }
+
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        fake_get_busyness_predictions
+    )
+
+    list_response = client.get(
+        "/api/venues?borough=Dublin South&date=2026-07-24&start_time=14:30:00"
+    )
+    detail_response = client.get(
+        "/api/venues/osm_296568074?date=2026-07-24&start_time=14:30:00"
+    )
+
+    assert list_response.status_code == 200
+    assert detail_response.status_code == 200
+
+    list_item = next(
+        item
+        for item in list_response.json()["items"]
+        if item["venue_id"] == "osm_296568074"
+    )
+    detail = detail_response.json()
+
+    assert detail["suitability_score"] == list_item["suitability_score"]
+    assert detail["busyness_predicted_for"] == list_item["busyness_predicted_for"]
 
 
 def test_get_venue_availability_returns_real_slots():

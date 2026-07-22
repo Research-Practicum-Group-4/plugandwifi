@@ -17,7 +17,7 @@ export function mapVenue(v: VenueItem): Venue {
   const amenities: string[] = [];
   if (v.has_wifi) amenities.push('WiFi');
   if ((v.plug_access ?? 0) > 0) amenities.push('Power Outlets');
-  if (v.noise_level === 'quiet') amenities.push('Quiet Zone');
+  if (v.calls_allowed) amenities.push('Calls Allowed');
 
   return {
     id: v.venue_id,
@@ -26,7 +26,7 @@ export function mapVenue(v: VenueItem): Venue {
     distance: formatDistance(v.distance_km),
     availability: formatHours(v.opening_hours_summary),
     rating: v.rating ?? 0,
-    price: v.hourly_price ?? v.hourly_fee ?? 5,
+    price: v.hourly_price ?? 5,
     amenities,
     lat: v.lat,
     lng: v.lon,

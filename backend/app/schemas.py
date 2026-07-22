@@ -5,8 +5,8 @@ from pydantic import (
 )
 
 from datetime import (
-    date,
-    time
+    date as date_type,
+    time as time_type
 )
 from typing import Literal
 
@@ -60,7 +60,27 @@ class ChatbotSearchParameters(BaseModel):
 
     venue_type: str | None = None
 
+    date: date_type | None = None
+
+    start_time: time_type | None = None
+
     wifi: bool | None = None
+
+    plug_access: int | None = None
+
+    accessibility_friendly: bool | None = None
+
+    calls_allowed: bool | None = None
+
+    wbe_certified: bool | None = None
+
+    mbe_certified: bool | None = None
+
+    vbe_certified: bool | None = None
+
+    bcorp_certified: bool | None = None
+
+    lgbt_friendly: bool | None = None
 
     busyness: str | None = None
 
@@ -92,11 +112,14 @@ class VenueResponse(BaseModel):
 
     cuisine_type: str | None = None
     has_wifi: bool | None = None
-    
 
-    noise_level: str | None = None
-    noise_score: float | None = None
-    
+    accessibility_friendly: bool = False
+    calls_allowed: bool = False
+    wbe_certified: bool = False
+    mbe_certified: bool = False
+    vbe_certified: bool = False
+    bcorp_certified: bool = False
+    lgbt_friendly: bool = False
 
     rating: float | None = None
     
@@ -105,10 +128,6 @@ class VenueResponse(BaseModel):
     
 
     hourly_price: float | None = None
-
-    plugs_available: int | None = None
-
-    hourly_fee: float | None = None
 
     availability_window: str | None = None
 
@@ -119,6 +138,8 @@ class VenueResponse(BaseModel):
     busyness_score: int | None = None
 
     busyness_label: str | None = None
+
+    busyness_predicted_for: str | None = None
 
     suitability_score: float | None = None
 
@@ -258,9 +279,13 @@ class VenueDetailResponse(BaseModel):
 
     has_wifi: bool | None = None
 
-    noise_level: str | None = None
-
-    noise_score: float | None = None
+    accessibility_friendly: bool = False
+    calls_allowed: bool = False
+    wbe_certified: bool = False
+    mbe_certified: bool = False
+    vbe_certified: bool = False
+    bcorp_certified: bool = False
+    lgbt_friendly: bool = False
 
     best_hours_for_work: str | None = None
 
@@ -298,6 +323,16 @@ class VenueDetailResponse(BaseModel):
 
     busyness_label: str | None = None
 
+    busyness_predicted_for: str | None = None
+
+    suitability_score: float | None = None
+
+    seat_capacity: int
+
+    amenity_tags: list[str]
+
+    rules_text: str | None = None
+
     class Config:
         from_attributes = True
 
@@ -306,7 +341,7 @@ class AvailabilitySlotResponse(BaseModel):
 
     slot_id: int
 
-    date: date
+    date: date_type
 
     start_time: str
 
@@ -328,11 +363,11 @@ class BookingCreate(BaseModel):
 
     venue_id: str
 
-    booking_date: date
+    booking_date: date_type
 
-    start_time: time
+    start_time: time_type
 
-    end_time: time
+    end_time: time_type
 
     seats_reserved: int = Field(ge=1)
 
@@ -345,11 +380,11 @@ class BookingResponse(BaseModel):
 
     venue_id: str
 
-    booking_date: date
+    booking_date: date_type
 
-    start_time: time
+    start_time: time_type
 
-    end_time: time
+    end_time: time_type
 
     seats_reserved: int
 
@@ -362,6 +397,26 @@ class BookingResponse(BaseModel):
     class Config:
 
         from_attributes = True
+
+
+class MockPaymentConfirmRequest(BaseModel):
+
+    booking_id: int
+
+    card_number: str = Field(min_length=12)
+
+
+class MockPaymentResponse(BaseModel):
+
+    booking_id: int
+
+    order_id: str
+
+    status: str
+
+    payment_status: str
+
+    message: str
 
 
 class ReviewCreate(BaseModel):
@@ -413,11 +468,11 @@ class UserBookingItem(BaseModel):
 
     venue_name: str | None = None
 
-    booking_date: date
+    booking_date: date_type
 
-    start_time: time
+    start_time: time_type
 
-    end_time: time
+    end_time: time_type
 
     seats_reserved: int
 
@@ -508,11 +563,11 @@ class ProviderArrivalItem(BaseModel):
 
     confirmation_status: str
 
-    booking_date: date
+    booking_date: date_type
 
-    start_time: time
+    start_time: time_type
 
-    end_time: time
+    end_time: time_type
 
     seats_reserved: int
 
@@ -557,7 +612,7 @@ class AdminDashboardOverviewResponse(BaseModel):
 
 class VenueSuspensionRequest(BaseModel):
 
-    state: Literal["Suspended"] = "Suspended"
+    state: Literal["Active", "Suspended"] = "Suspended"
 
 
 class VenueSuspensionResponse(BaseModel):
