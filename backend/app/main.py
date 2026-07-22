@@ -126,7 +126,7 @@ GEMINI_SYSTEM_INSTRUCTION = (
 def get_gemini_model():
     return os.getenv(
         "GEMINI_MODEL",
-        "gemini-2.0-flash"
+        "gemini-3.1-flash-lite"
     )
 
 
@@ -651,8 +651,14 @@ def call_gemini_search_parameter_extraction(
     prompt = (
         "Extract venue search parameters from the user message. "
         "Return only JSON with these keys: location, radius_km, "
-        "venue_type, wifi, busyness, time. Use null when unknown. "
+        "venue_type, date, start_time, wifi, plug_access, "
+        "accessibility_friendly, calls_allowed, wbe_certified, "
+        "mbe_certified, vbe_certified, bcorp_certified, "
+        "lgbt_friendly, busyness, time. Use null when unknown. "
+        "date must use YYYY-MM-DD. start_time must use HH:MM or HH:MM:SS. "
+        "plug_access should be 1 when plugs are required. "
         "busyness must be one of low, moderate, high, or null. "
+        "Ignore unsupported fields and do not return SQL. "
         f"User message: {message}"
     )
 
@@ -723,6 +729,125 @@ def normalize_busyness_preference(
     return None
 
 
+def parse_chatbot_date(value):
+    if value is None:
+        return None
+
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+
+    lowered_value = str(value).strip().lower()
+
+    if not lowered_value:
+        return None
+
+    if lowered_value in {"today", "now", "current"}:
+        return datetime.now().date()
+
+    if lowered_value == "tomorrow":
+        return datetime.now().date() + timedelta(days=1)
+
+    try:
+        return date.fromisoformat(
+            lowered_value
+        )
+    except ValueError:
+        return None
+
+
+def parse_chatbot_time(value):
+    if value is None:
+        return None
+
+    if isinstance(value, time):
+        return value
+
+    lowered_value = str(value).strip().lower()
+
+    if not lowered_value:
+        return None
+
+    if lowered_value in {"now", "current", "currently"}:
+        now = datetime.now()
+        return time(
+            now.hour,
+            now.minute,
+            0
+        )
+
+    time_match = re.search(
+        r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?",
+        lowered_value
+    )
+
+    if not time_match:
+        return None
+
+    hour = int(
+        time_match.group(1)
+    )
+    minute = int(
+        time_match.group(2) or 0
+    )
+    meridiem = time_match.group(3)
+
+    if meridiem == "pm" and hour < 12:
+        hour += 12
+    elif meridiem == "am" and hour == 12:
+        hour = 0
+
+    if hour > 23 or minute > 59:
+        return None
+
+    return time(
+        hour,
+        minute,
+        0
+    )
+
+
+def parse_chatbot_bool(value):
+    if value is None:
+        return None
+
+    if isinstance(value, bool):
+        return value
+
+    lowered_value = str(value).strip().lower()
+
+    if lowered_value in {"true", "yes", "y", "1", "required", "needed"}:
+        return True
+
+    if lowered_value in {"false", "no", "n", "0", "not required"}:
+        return False
+
+    return None
+
+
+def parse_chatbot_plug_access(value):
+    parsed_bool = parse_chatbot_bool(
+        value
+    )
+
+    if parsed_bool is True:
+        return 1
+
+    if parsed_bool is False:
+        return 0
+
+    try:
+        parsed_int = int(
+            value
+        )
+    except (TypeError, ValueError):
+        return None
+
+    if parsed_int in {0, 1}:
+        return parsed_int
+
+    return None
+
+
 def infer_chatbot_search_parameters(
     message: str
 ):
@@ -773,6 +898,78 @@ def infer_chatbot_search_parameters(
     if requested_time is None and any(term in message_lower for term in ("now", "current", "currently")):
         requested_time = "now"
 
+    requested_date = parse_chatbot_date(
+        extracted.get("date")
+    )
+
+    if requested_date is None:
+        if "tomorrow" in message_lower:
+            requested_date = parse_chatbot_date("tomorrow")
+        elif any(term in message_lower for term in ("today", "now", "current", "currently")):
+            requested_date = parse_chatbot_date("today")
+
+    start_time = parse_chatbot_time(
+        extracted.get("start_time") or requested_time
+    )
+
+    plug_access = parse_chatbot_plug_access(
+        extracted.get("plug_access")
+    )
+
+    if plug_access is None:
+        if any(term in message_lower for term in ("plug", "power outlet", "charging", "socket")):
+            plug_access = 1
+        elif any(term in message_lower for term in ("without plugs", "no plugs")):
+            plug_access = 0
+
+    accessibility_friendly = parse_chatbot_bool(
+        extracted.get("accessibility_friendly")
+    )
+
+    if accessibility_friendly is None and any(term in message_lower for term in ("accessible", "accessibility", "wheelchair")):
+        accessibility_friendly = True
+
+    calls_allowed = parse_chatbot_bool(
+        extracted.get("calls_allowed")
+    )
+
+    if calls_allowed is None:
+        if any(term in message_lower for term in ("calls allowed", "take calls", "phone calls", "zoom calls", "meeting calls")):
+            calls_allowed = True
+        elif any(term in message_lower for term in ("no calls", "without calls", "quiet calls")):
+            calls_allowed = False
+
+    wbe_certified = parse_chatbot_bool(
+        extracted.get("wbe_certified")
+    )
+    mbe_certified = parse_chatbot_bool(
+        extracted.get("mbe_certified")
+    )
+    vbe_certified = parse_chatbot_bool(
+        extracted.get("vbe_certified")
+    )
+    bcorp_certified = parse_chatbot_bool(
+        extracted.get("bcorp_certified")
+    )
+    lgbt_friendly = parse_chatbot_bool(
+        extracted.get("lgbt_friendly")
+    )
+
+    if wbe_certified is None and any(term in message_lower for term in ("women owned", "wbe")):
+        wbe_certified = True
+
+    if mbe_certified is None and any(term in message_lower for term in ("minority owned", "mbe")):
+        mbe_certified = True
+
+    if vbe_certified is None and any(term in message_lower for term in ("veteran owned", "vbe")):
+        vbe_certified = True
+
+    if bcorp_certified is None and any(term in message_lower for term in ("b corp", "bcorp")):
+        bcorp_certified = True
+
+    if lgbt_friendly is None and any(term in message_lower for term in ("lgbt", "lgbtq")):
+        lgbt_friendly = True
+
     location = extracted.get("location")
 
     if not location:
@@ -789,7 +986,17 @@ def infer_chatbot_search_parameters(
         location=location,
         radius_km=radius_km,
         venue_type=venue_type,
+        date=requested_date,
+        start_time=start_time,
         wifi=wifi,
+        plug_access=plug_access,
+        accessibility_friendly=accessibility_friendly,
+        calls_allowed=calls_allowed,
+        wbe_certified=wbe_certified,
+        mbe_certified=mbe_certified,
+        vbe_certified=vbe_certified,
+        bcorp_certified=bcorp_certified,
+        lgbt_friendly=lgbt_friendly,
         busyness=busyness,
         time=requested_time
     )
@@ -804,7 +1011,17 @@ def has_chatbot_search_signal(
             search_parameters.location,
             search_parameters.radius_km,
             search_parameters.venue_type,
+            search_parameters.date,
+            search_parameters.start_time,
             search_parameters.wifi,
+            search_parameters.plug_access,
+            search_parameters.accessibility_friendly,
+            search_parameters.calls_allowed,
+            search_parameters.wbe_certified,
+            search_parameters.mbe_certified,
+            search_parameters.vbe_certified,
+            search_parameters.bcorp_certified,
+            search_parameters.lgbt_friendly,
             search_parameters.busyness,
             search_parameters.time
         )
@@ -859,7 +1076,7 @@ def resolve_chatbot_location(
 def search_venues_for_chatbot(
     search_parameters: ChatbotSearchParameters,
     db: Session,
-    limit: int = 5
+    limit: int = 3
 ):
     query = db.query(Venue).filter(
         public_discovery_state_filter()
@@ -868,6 +1085,46 @@ def search_venues_for_chatbot(
     if search_parameters.wifi is not None:
         query = query.filter(
             Venue.has_wifi == search_parameters.wifi
+        )
+
+    if search_parameters.plug_access is not None:
+        query = query.filter(
+            Venue.plug_access == search_parameters.plug_access
+        )
+
+    if search_parameters.accessibility_friendly is not None:
+        query = query.filter(
+            Venue.accessibility_friendly == search_parameters.accessibility_friendly
+        )
+
+    if search_parameters.calls_allowed is not None:
+        query = query.filter(
+            Venue.calls_allowed == search_parameters.calls_allowed
+        )
+
+    if search_parameters.wbe_certified is not None:
+        query = query.filter(
+            Venue.wbe_certified == search_parameters.wbe_certified
+        )
+
+    if search_parameters.mbe_certified is not None:
+        query = query.filter(
+            Venue.mbe_certified == search_parameters.mbe_certified
+        )
+
+    if search_parameters.vbe_certified is not None:
+        query = query.filter(
+            Venue.vbe_certified == search_parameters.vbe_certified
+        )
+
+    if search_parameters.bcorp_certified is not None:
+        query = query.filter(
+            Venue.bcorp_certified == search_parameters.bcorp_certified
+        )
+
+    if search_parameters.lgbt_friendly is not None:
+        query = query.filter(
+            Venue.lgbt_friendly == search_parameters.lgbt_friendly
         )
 
     if search_parameters.venue_type:
@@ -941,7 +1198,9 @@ def search_venues_for_chatbot(
         [
             venue.venue_id
             for venue in candidate_venues
-        ]
+        ],
+        selected_date=search_parameters.date,
+        selected_time=search_parameters.start_time
     )
 
     if search_parameters.busyness:
@@ -960,13 +1219,46 @@ def search_venues_for_chatbot(
             )
         ]
 
+    venues_with_distance.sort(
+        key=lambda venue_with_distance: (
+            -calculate_suitability_score(
+                venue_with_distance[0],
+                hour=(
+                    search_parameters.start_time.hour
+                    if search_parameters.start_time
+                    else None
+                ),
+                busyness=busyness_predictions.get(
+                    venue_with_distance[0].venue_id
+                )
+            ),
+            (
+                venue_with_distance[1]
+                if venue_with_distance[1] is not None
+                else 999999
+            ),
+            venue_with_distance[0].venue_id
+        )
+    )
+
     selected_venues = venues_with_distance[:limit]
 
     return [
         build_venue_response(
             venue,
             distance_km,
-            busyness_predictions.get(venue.venue_id)
+            busyness_predictions.get(venue.venue_id),
+            calculate_suitability_score(
+                venue,
+                hour=(
+                    search_parameters.start_time.hour
+                    if search_parameters.start_time
+                    else None
+                ),
+                busyness=busyness_predictions.get(
+                    venue.venue_id
+                )
+            )
         )
         for venue, distance_km in selected_venues
     ], True

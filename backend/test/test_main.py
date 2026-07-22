@@ -242,14 +242,11 @@ def test_chatbot_recommend_returns_real_venue_suggestions(monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert data["model"] == "gemini-test-model"
-    assert data["search_parameters"] == {
-        "location": "UCD",
-        "radius_km": None,
-        "venue_type": "library",
-        "wifi": True,
-        "busyness": "low",
-        "time": "now"
-    }
+    assert data["search_parameters"]["location"] == "UCD"
+    assert data["search_parameters"]["venue_type"] == "library"
+    assert data["search_parameters"]["wifi"] is True
+    assert data["search_parameters"]["busyness"] == "low"
+    assert data["search_parameters"]["time"] == "now"
     assert data["venues"][0]["venue_id"] == "osm_296568074"
     assert data["venues"][0]["busyness_label"] == "Low"
     assert data["follow_up_question"] is None
@@ -263,7 +260,10 @@ def test_chatbot_recommend_uses_extracted_radius_and_location(monkeypatch):
             "location": "UCD Library",
             "radius_km": 0.1,
             "venue_type": None,
+            "date": None,
+            "start_time": None,
             "wifi": True,
+            "plug_access": None,
             "busyness": None,
             "time": "now"
         }
@@ -271,7 +271,7 @@ def test_chatbot_recommend_uses_extracted_radius_and_location(monkeypatch):
     monkeypatch.setattr(
         main_module,
         "get_busyness_predictions",
-        lambda venue_ids, hour=None, day_type=None: {}
+        lambda venue_ids, hour=None, day_type=None, prediction_date=None, selected_date=None, selected_time=None: {}
     )
 
     response = client.post(
@@ -289,6 +289,69 @@ def test_chatbot_recommend_uses_extracted_radius_and_location(monkeypatch):
         venue["venue_id"]
         for venue in data["venues"]
     ] == ["osm_296568074"]
+
+
+def test_chatbot_recommend_applies_advanced_filters(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message: {
+            "location": None,
+            "radius_km": None,
+            "venue_type": None,
+            "date": "2026-07-24",
+            "start_time": "14:30",
+            "wifi": True,
+            "plug_access": 1,
+            "accessibility_friendly": True,
+            "calls_allowed": True,
+            "bcorp_certified": True,
+            "busyness": None,
+            "time": None
+        }
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, hour=None, day_type=None, prediction_date=None, selected_date=None, selected_time=None: {
+            venue_id: {
+                "busyness_score": 20,
+                "busyness_label": "Low",
+                "busyness_predicted_for": "2026-07-24T14:00:00"
+            }
+            for venue_id in venue_ids
+        }
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Find an accessible B Corp venue with Wi-Fi, plugs and calls allowed on 24 July at 2:30pm."
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["venues"]) <= 3
+    assert [
+        venue["venue_id"]
+        for venue in data["venues"]
+    ] == ["osm_296568074"]
+    assert data["search_parameters"]["date"] == "2026-07-24"
+    assert data["search_parameters"]["start_time"] == "14:30:00"
+    assert data["search_parameters"]["plug_access"] == 1
+    assert data["search_parameters"]["accessibility_friendly"] is True
+    assert data["search_parameters"]["calls_allowed"] is True
+    assert data["search_parameters"]["bcorp_certified"] is True
+
+
+def test_default_gemini_model_uses_flash_lite(monkeypatch):
+    monkeypatch.delenv(
+        "GEMINI_MODEL",
+        raising=False
+    )
+
+    assert main_module.get_gemini_model() == "gemini-3.1-flash-lite"
 
 
 def test_chatbot_recommend_asks_follow_up_for_unclear_request(monkeypatch):
