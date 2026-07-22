@@ -1,0 +1,58 @@
+# Git
+.git
+.gitignore
+
+# Environment variables and secrets
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+
+# Node / frontend dependencies
+**/node_modules/
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+
+# Frontend generated files
+frontend-web/build/
+frontend-web/dist/
+frontend-web/.next/
+frontend-web/coverage/
+
+# Python generated files
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/htmlcov/
+
+# Python virtual environments
+**/.venv/
+**/venv/
+**/env/
+
+# IDE and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+**/*.log
+
+# Tests and documentation not needed at runtime
+**/.tox/
+docs/
+
+# Exclude large ML files and datasets, but retain predictor source code
+data-ml/*
+!data-ml/src/
+!data-ml/src/**
+
+# Local model artifacts are mounted from Cloud Storage
+**/*.joblib
+**/*.pkl
