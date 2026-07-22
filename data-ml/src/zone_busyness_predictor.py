@@ -63,5 +63,7 @@ class ZoneBusynessPredictor:
         return self.predict_many(venue, date, hour)[0]
 
 
-def load_zone_busyness_predictor():
-    return ZoneBusynessPredictor()
+def load_zone_busyness_predictor(
+    model_path="data-ml/models/zone_busyness_model.joblib"
+):
+    return ZoneBusynessPredictor(model_path)

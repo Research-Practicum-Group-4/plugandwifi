@@ -60,17 +60,24 @@ from .refresh_tokens import (
     issue_refresh_session
 )
 from datetime import date, datetime, time, timedelta
+from contextlib import asynccontextmanager
 from math import asin, cos, radians, sin, sqrt
 
 from fastapi.middleware.cors import CORSMiddleware
 
 import httpx
 import json
+import logging
 import os
 import re
 import sys
 import uuid
+from functools import lru_cache
 from pathlib import Path
+
+
+logger = logging.getLogger(__name__)
+BUSYNESS_PREDICTION_CACHE = {}
 
 
 def get_free_cancellation_hours():
@@ -95,7 +102,15 @@ FREE_CANCELLATION_HOURS = get_free_cancellation_hours()
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    get_zone_busyness_predictor()
+    get_busyness_venues_dataframe()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 GEMINI_SYSTEM_INSTRUCTION = (
@@ -118,7 +133,7 @@ def get_gemini_model():
 def get_busyness_model_path():
     return os.getenv(
         "BUSYNESS_MODEL_PATH",
-        "data-ml/models/busyness_predictor.joblib"
+        "data-ml/models/zone_busyness_model.joblib"
     )
 
 
@@ -134,6 +149,110 @@ def get_default_day_type():
         return "weekend"
 
     return "weekday"
+
+
+def get_busyness_prediction_datetime(
+    selected_date: date | str | None = None,
+    selected_time: time | None = None,
+    hour: int | None = None
+):
+    if isinstance(selected_date, str):
+        try:
+            selected_date = date.fromisoformat(selected_date)
+        except ValueError:
+            selected_date = None
+
+    now = datetime.now()
+
+    if hour is not None:
+        selected_hour = max(
+            0,
+            min(
+                23,
+                int(hour)
+            )
+        )
+    elif selected_time is not None:
+        selected_hour = selected_time.hour
+    else:
+        selected_hour = now.hour
+
+    prediction_date = selected_date or now.date()
+
+    return datetime.combine(
+        prediction_date,
+        time(selected_hour, 0, 0)
+    )
+
+
+def get_busyness_prediction_key(
+    zone_id,
+    prediction_datetime: datetime
+):
+    try:
+        normalized_zone_id = int(zone_id)
+    except (TypeError, ValueError):
+        return None
+
+    return (
+        normalized_zone_id,
+        prediction_datetime.date().isoformat(),
+        prediction_datetime.hour
+    )
+
+
+@lru_cache(maxsize=1)
+def get_zone_busyness_predictor():
+    model_path = Path(get_busyness_model_path())
+    data_ml_src_path = Path("data-ml/src")
+
+    if not model_path.exists() or not data_ml_src_path.exists():
+        return None
+
+    if str(data_ml_src_path) not in sys.path:
+        sys.path.append(str(data_ml_src_path))
+
+    try:
+        from zone_busyness_predictor import load_zone_busyness_predictor
+
+        return load_zone_busyness_predictor(
+            str(model_path)
+        )
+    except Exception:
+        logger.exception("Failed to load zone busyness model")
+        return None
+
+
+@lru_cache(maxsize=1)
+def get_busyness_venues_dataframe():
+    venues_csv_path = Path(get_busyness_venues_csv_path())
+
+    if not venues_csv_path.exists():
+        return None
+
+    try:
+        import pandas as pd
+
+        venues = pd.read_csv(
+            venues_csv_path
+        )
+    except Exception:
+        logger.exception("Failed to load busyness venue CSV")
+        return None
+
+    required_columns = {
+        "venue_id",
+        "zone_id"
+    }
+
+    if not required_columns.issubset(venues.columns):
+        logger.error(
+            "Busyness venue CSV is missing required columns: %s",
+            sorted(required_columns - set(venues.columns))
+        )
+        return None
+
+    return venues
 
 
 SUITABILITY_WEIGHTS = {
@@ -229,57 +348,123 @@ def calculate_suitability_score(
 def get_busyness_predictions(
     venue_ids: list[str],
     hour: int | None = None,
-    day_type: str | None = None
+    day_type: str | None = None,
+    prediction_date: date | str | None = None,
+    selected_date: date | str | None = None,
+    selected_time: time | None = None
 ):
     if not venue_ids:
         return {}
 
-    model_path = Path(get_busyness_model_path())
-    venues_csv_path = Path(get_busyness_venues_csv_path())
-    data_ml_src_path = Path("data-ml/src")
+    prediction_datetime = get_busyness_prediction_datetime(
+        selected_date or prediction_date,
+        selected_time,
+        hour
+    )
+    predicted_for = prediction_datetime.isoformat()
+    predictor = get_zone_busyness_predictor()
+    venues = get_busyness_venues_dataframe()
 
-    if (
-        not model_path.exists()
-        or not venues_csv_path.exists()
-        or not data_ml_src_path.exists()
-    ):
-        return {}
+    empty_prediction = {
+        venue_id: {
+            "busyness_score": None,
+            "busyness_label": None,
+            "busyness_predicted_for": predicted_for
+        }
+        for venue_id in venue_ids
+    }
 
-    if str(data_ml_src_path) not in sys.path:
-        sys.path.append(str(data_ml_src_path))
+    if predictor is None or venues is None:
+        return empty_prediction
 
     try:
-        import pandas as pd
-        from busyness_predictor import load_busyness_predictor
-
-        predictor = load_busyness_predictor(
-            str(model_path)
-        )
-        venues = pd.read_csv(
-            venues_csv_path
-        )
         selected_venues = venues[
             venues["venue_id"].isin(venue_ids)
+        ].copy()
+
+        if selected_venues.empty:
+            return empty_prediction
+
+        selected_venues = selected_venues[
+            selected_venues["zone_id"].notna()
         ]
 
         if selected_venues.empty:
-            return {}
+            return empty_prediction
 
-        prediction_results = predictor.predict_many(
-            selected_venues,
-            hour=hour if hour is not None else datetime.now().hour,
-            day_type=day_type or get_default_day_type()
+        zone_rows = (
+            selected_venues
+            .drop_duplicates(
+                subset=["zone_id"]
+            )
+            .copy()
         )
-    except Exception:
-        return {}
+        missing_zone_rows = []
 
-    return {
-        result["venue_id"]: {
-            "busyness_score": result.get("busyness_score"),
-            "busyness_label": result.get("busyness_label")
-        }
-        for result in prediction_results
-    }
+        for _, zone_row in zone_rows.iterrows():
+            prediction_key = get_busyness_prediction_key(
+                zone_row["zone_id"],
+                prediction_datetime
+            )
+
+            if prediction_key is None:
+                continue
+
+            if prediction_key not in BUSYNESS_PREDICTION_CACHE:
+                missing_zone_rows.append(zone_row)
+
+        if missing_zone_rows:
+            import pandas as pd
+
+            zone_prediction_rows = pd.DataFrame(
+                missing_zone_rows
+            )
+            prediction_results = predictor.predict_many(
+                zone_prediction_rows,
+                date=prediction_datetime.date().isoformat(),
+                hour=prediction_datetime.hour
+            )
+
+            for result, (_, zone_row) in zip(
+                prediction_results,
+                zone_prediction_rows.iterrows()
+            ):
+                prediction_key = get_busyness_prediction_key(
+                    zone_row["zone_id"],
+                    prediction_datetime
+                )
+
+                if prediction_key is None:
+                    continue
+
+                BUSYNESS_PREDICTION_CACHE[prediction_key] = {
+                    "busyness_score": result.get("busyness_score"),
+                    "busyness_label": result.get("busyness_label"),
+                    "busyness_predicted_for": predicted_for
+                }
+    except Exception:
+        logger.exception("Failed to predict zone busyness")
+        return empty_prediction
+
+    predictions = empty_prediction.copy()
+
+    for _, venue in selected_venues.iterrows():
+        prediction_key = get_busyness_prediction_key(
+            venue["zone_id"],
+            prediction_datetime
+        )
+
+        if prediction_key is None:
+            continue
+
+        zone_prediction = BUSYNESS_PREDICTION_CACHE.get(
+            prediction_key
+        )
+
+        if zone_prediction is not None:
+            predictions[venue["venue_id"]] = zone_prediction
+
+    return predictions
 
 
 def build_venue_response(
@@ -314,6 +499,9 @@ def build_venue_response(
         "distance_km": distance_km,
         "busyness_score": busyness.get("busyness_score"),
         "busyness_label": busyness.get("busyness_label"),
+        "busyness_predicted_for": busyness.get(
+            "busyness_predicted_for"
+        ),
         "suitability_score": (
             suitability_score
             if suitability_score is not None
@@ -369,6 +557,9 @@ def build_venue_detail_response(
         "actual_hourly_price": venue.actual_hourly_price,
         "busyness_score": busyness.get("busyness_score"),
         "busyness_label": busyness.get("busyness_label"),
+        "busyness_predicted_for": busyness.get(
+            "busyness_predicted_for"
+        ),
         "suitability_score": calculate_suitability_score(venue),
         "seat_capacity": venue.seat_capacity or 1,
         "amenity_tags": deserialize_amenity_tags(
@@ -2117,7 +2308,9 @@ def get_venues(
         [
             venue.venue_id
             for venue, _ in selected_venues
-        ]
+        ],
+        selected_date=date,
+        selected_time=start_time
     )
 
     items = [
@@ -2197,6 +2390,9 @@ def get_venue_suggestions(
 )
 def get_venue_by_id(
     venue_id: str,
+    date: date | None = None,
+    start_time: time | None = None,
+    end_time: time | None = None,
     db: Session = Depends(get_db)
 ):
     venue = (
@@ -2217,7 +2413,9 @@ def get_venue_by_id(
     busyness_predictions = get_busyness_predictions(
         [
             venue.venue_id
-        ]
+        ],
+        selected_date=date,
+        selected_time=start_time
     )
 
     return build_venue_detail_response(

@@ -107,8 +107,109 @@ def test_postgresql_engine_options(monkeypatch):
     }
 
 
+def test_get_busyness_predictions_uses_zone_model_contract(
+    monkeypatch
+):
+    main_module.BUSYNESS_PREDICTION_CACHE.clear()
+
+    call_count = {
+        "predict_many": 0
+    }
+
+    class FakeZonePredictor:
+        def predict_many(self, venues, date, hour):
+            call_count["predict_many"] += 1
+            assert list(venues["zone_id"]) == [101]
+            assert str(date) == "2026-07-22"
+            assert hour == 14
+
+            return [
+                {
+                    "venue_id": "osm_296568074",
+                    "busyness_score": 72,
+                    "busyness_label": "High"
+                }
+            ]
+
+    pd = __import__("pandas")
+    venue_rows = pd.DataFrame(
+        [
+            {
+                "venue_id": "osm_296568074",
+                "zone_id": 101,
+                "name": "UCD Library Shared Space"
+            },
+            {
+                "venue_id": "osm_296568075",
+                "zone_id": 101,
+                "name": "UCD Village Study Hub"
+            },
+            {
+                "venue_id": "osm_296568076",
+                "zone_id": 102,
+                "name": "UCD Business Lounge"
+            }
+        ]
+    )
+
+    monkeypatch.setattr(
+        main_module,
+        "get_zone_busyness_predictor",
+        lambda: FakeZonePredictor()
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_venues_dataframe",
+        lambda: venue_rows
+    )
+
+    predictions = main_module.get_busyness_predictions(
+        [
+            "osm_296568074",
+            "osm_296568075"
+        ],
+        hour=14,
+        prediction_date="2026-07-22"
+    )
+
+    assert predictions == {
+        "osm_296568074": {
+            "busyness_score": 72,
+            "busyness_label": "High",
+            "busyness_predicted_for": "2026-07-22T14:00:00"
+        },
+        "osm_296568075": {
+            "busyness_score": 72,
+            "busyness_label": "High",
+            "busyness_predicted_for": "2026-07-22T14:00:00"
+        }
+    }
+    assert call_count["predict_many"] == 1
+
+    cached_predictions = main_module.get_busyness_predictions(
+        [
+            "osm_296568074",
+            "osm_296568075"
+        ],
+        hour=14,
+        prediction_date="2026-07-22"
+    )
+
+    assert cached_predictions == predictions
+    assert call_count["predict_many"] == 1
+
+    main_module.BUSYNESS_PREDICTION_CACHE.clear()
+
+
 def test_chatbot_recommend_returns_real_venue_suggestions(monkeypatch):
-    def fake_get_busyness_predictions(venue_ids, hour=None, day_type=None):
+    def fake_get_busyness_predictions(
+        venue_ids,
+        hour=None,
+        day_type=None,
+        prediction_date=None,
+        selected_date=None,
+        selected_time=None
+    ):
         return {
             "osm_296568074": {
                 "busyness_score": 32,
@@ -463,7 +564,14 @@ def test_get_venues_with_data():
 
 
 def test_get_venues_includes_busyness_fields(monkeypatch):
-    def fake_get_busyness_predictions(venue_ids, hour=None, day_type=None):
+    def fake_get_busyness_predictions(
+        venue_ids,
+        hour=None,
+        day_type=None,
+        prediction_date=None,
+        selected_date=None,
+        selected_time=None
+    ):
         return {
             "osm_296568074": {
                 "busyness_score": 32,
@@ -489,6 +597,48 @@ def test_get_venues_includes_busyness_fields(monkeypatch):
     assert data["items"][0]["busyness_label"] == "Low"
     assert data["items"][1]["busyness_score"] == 85
     assert data["items"][1]["busyness_label"] == "High"
+
+
+def test_get_venues_busyness_uses_selected_date_time(monkeypatch):
+    def fake_get_busyness_predictions(
+        venue_ids,
+        hour=None,
+        day_type=None,
+        prediction_date=None,
+        selected_date=None,
+        selected_time=None
+    ):
+        assert selected_date == date(2026, 7, 24)
+        assert selected_time == time(14, 30)
+
+        return {
+            "osm_296568074": {
+                "busyness_score": 72,
+                "busyness_label": "High",
+                "busyness_predicted_for": "2026-07-24T14:00:00"
+            }
+        }
+
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        fake_get_busyness_predictions
+    )
+
+    response = client.get(
+        "/api/venues?borough=Dublin South&date=2026-07-24&start_time=14:30:00"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    venue = next(
+        item
+        for item in data["items"]
+        if item["venue_id"] == "osm_296568074"
+    )
+    assert venue["busyness_score"] == 72
+    assert venue["busyness_label"] == "High"
+    assert venue["busyness_predicted_for"] == "2026-07-24T14:00:00"
 
 
 def test_get_venues_includes_suitability_score():
@@ -2004,7 +2154,14 @@ def test_get_venue_by_id_uses_aligned_detail_contract():
 
 
 def test_get_venue_by_id_includes_busyness_fields(monkeypatch):
-    def fake_get_busyness_predictions(venue_ids, hour=None, day_type=None):
+    def fake_get_busyness_predictions(
+        venue_ids,
+        hour=None,
+        day_type=None,
+        prediction_date=None,
+        selected_date=None,
+        selected_time=None
+    ):
         return {
             "osm_296568074": {
                 "busyness_score": 32,
@@ -2023,6 +2180,44 @@ def test_get_venue_by_id_includes_busyness_fields(monkeypatch):
     assert response.status_code == 200
     assert response.json()["busyness_score"] == 32
     assert response.json()["busyness_label"] == "Low"
+
+
+def test_get_venue_by_id_busyness_uses_selected_date_time(monkeypatch):
+    def fake_get_busyness_predictions(
+        venue_ids,
+        hour=None,
+        day_type=None,
+        prediction_date=None,
+        selected_date=None,
+        selected_time=None
+    ):
+        assert venue_ids == ["osm_296568074"]
+        assert selected_date == date(2026, 7, 24)
+        assert selected_time == time(14, 30)
+
+        return {
+            "osm_296568074": {
+                "busyness_score": 72,
+                "busyness_label": "High",
+                "busyness_predicted_for": "2026-07-24T14:00:00"
+            }
+        }
+
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        fake_get_busyness_predictions
+    )
+
+    response = client.get(
+        "/api/venues/osm_296568074?date=2026-07-24&start_time=14:30:00"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["busyness_score"] == 72
+    assert data["busyness_label"] == "High"
+    assert data["busyness_predicted_for"] == "2026-07-24T14:00:00"
 
 
 def test_get_venue_availability_returns_real_slots():
