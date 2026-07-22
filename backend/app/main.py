@@ -264,6 +264,8 @@ SUITABILITY_WEIGHTS = {
     "train": 0.20
 }
 
+SUITABILITY_BUSYNESS_WEIGHT = 0.25
+
 
 def clamp_normalized_score(value):
     if value is None:
@@ -312,9 +314,31 @@ def get_hourly_profile_suitability_score(
     return 0.0
 
 
+def get_busyness_suitability_score(busyness=None):
+    if not busyness:
+        return None
+
+    busyness_score = busyness.get(
+        "busyness_score"
+    )
+
+    if busyness_score is None:
+        return None
+
+    try:
+        normalized_busyness = float(busyness_score) / 100
+    except (TypeError, ValueError):
+        return None
+
+    return 1 - clamp_normalized_score(
+        normalized_busyness
+    )
+
+
 def calculate_suitability_score(
     venue: Venue,
-    hour: int | None = None
+    hour: int | None = None,
+    busyness=None
 ):
     components = {
         "wifi": clamp_normalized_score(venue.wifi_norm),
@@ -327,8 +351,19 @@ def calculate_suitability_score(
         "bus": clamp_normalized_score(venue.bus_norm),
         "train": clamp_normalized_score(venue.train_norm)
     }
+    weights = dict(
+        SUITABILITY_WEIGHTS
+    )
+    busyness_suitability = get_busyness_suitability_score(
+        busyness
+    )
+
+    if busyness_suitability is not None:
+        components["area_busyness"] = busyness_suitability
+        weights["area_busyness"] = SUITABILITY_BUSYNESS_WEIGHT
+
     total_weight = sum(
-        SUITABILITY_WEIGHTS.values()
+        weights.values()
     )
 
     if total_weight == 0:
@@ -336,7 +371,7 @@ def calculate_suitability_score(
 
     score = sum(
         components[name] * weight / total_weight
-        for name, weight in SUITABILITY_WEIGHTS.items()
+        for name, weight in weights.items()
     )
 
     return round(
@@ -512,7 +547,8 @@ def build_venue_response(
 
 def build_venue_detail_response(
     venue: Venue,
-    busyness=None
+    busyness=None,
+    suitability_score=None
 ):
     busyness = busyness or {}
 
@@ -560,7 +596,14 @@ def build_venue_detail_response(
         "busyness_predicted_for": busyness.get(
             "busyness_predicted_for"
         ),
-        "suitability_score": calculate_suitability_score(venue),
+        "suitability_score": (
+            suitability_score
+            if suitability_score is not None
+            else calculate_suitability_score(
+                venue,
+                busyness=busyness
+            )
+        ),
         "seat_capacity": venue.seat_capacity or 1,
         "amenity_tags": deserialize_amenity_tags(
             venue.amenity_tags
@@ -2206,6 +2249,7 @@ def get_venues(
     offset = (
         page - 1
     ) * limit
+    busyness_predictions = None
 
     if lat is not None and lon is not None:
         venues_with_distance = []
@@ -2232,10 +2276,22 @@ def get_venues(
             )
 
         if is_suitability_sort(sort):
+            busyness_predictions = get_busyness_predictions(
+                [
+                    venue.venue_id
+                    for venue, _ in venues_with_distance
+                ],
+                selected_date=date,
+                selected_time=start_time
+            )
             venues_with_distance.sort(
                 key=lambda venue_with_distance: (
                     -calculate_suitability_score(
-                        venue_with_distance[0]
+                        venue_with_distance[0],
+                        hour=start_time.hour if start_time else None,
+                        busyness=busyness_predictions.get(
+                            venue_with_distance[0].venue_id
+                        )
                     ),
                     venue_with_distance[1]
                 )
@@ -2261,9 +2317,23 @@ def get_venues(
     else:
         if is_suitability_sort(sort):
             venues = query.all()
+            busyness_predictions = get_busyness_predictions(
+                [
+                    venue.venue_id
+                    for venue in venues
+                ],
+                selected_date=date,
+                selected_time=start_time
+            )
             venues.sort(
                 key=lambda venue: (
-                    -calculate_suitability_score(venue),
+                    -calculate_suitability_score(
+                        venue,
+                        hour=start_time.hour if start_time else None,
+                        busyness=busyness_predictions.get(
+                            venue.venue_id
+                        )
+                    ),
                     venue.venue_id
                 )
             )
@@ -2304,21 +2374,28 @@ def get_venues(
             for venue in venues
         ]
 
-    busyness_predictions = get_busyness_predictions(
-        [
-            venue.venue_id
-            for venue, _ in selected_venues
-        ],
-        selected_date=date,
-        selected_time=start_time
-    )
+    if busyness_predictions is None:
+        busyness_predictions = get_busyness_predictions(
+            [
+                venue.venue_id
+                for venue, _ in selected_venues
+            ],
+            selected_date=date,
+            selected_time=start_time
+        )
 
     items = [
         build_venue_response(
             venue,
             distance_km,
             busyness_predictions.get(venue.venue_id),
-            calculate_suitability_score(venue)
+            calculate_suitability_score(
+                venue,
+                hour=start_time.hour if start_time else None,
+                busyness=busyness_predictions.get(
+                    venue.venue_id
+                )
+            )
         )
         for venue, distance_km in selected_venues
     ]
@@ -2420,7 +2497,14 @@ def get_venue_by_id(
 
     return build_venue_detail_response(
         venue,
-        busyness_predictions.get(venue.venue_id)
+        busyness_predictions.get(venue.venue_id),
+        calculate_suitability_score(
+            venue,
+            hour=start_time.hour if start_time else None,
+            busyness=busyness_predictions.get(
+                venue.venue_id
+            )
+        )
     )
 
 
