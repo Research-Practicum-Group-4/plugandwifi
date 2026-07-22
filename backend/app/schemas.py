@@ -119,6 +119,8 @@ class VenueResponse(BaseModel):
 
     busyness_label: str | None = None
 
+    busyness_predicted_for: str | None = None
+
     suitability_score: float | None = None
 
     class Config:
@@ -300,6 +302,8 @@ class VenueDetailResponse(BaseModel):
     busyness_score: int | None = None
 
     busyness_label: str | None = None
+
+    busyness_predicted_for: str | None = None
 
     suitability_score: float | None = None
 
