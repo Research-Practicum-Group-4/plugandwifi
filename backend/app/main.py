@@ -118,7 +118,7 @@ def get_gemini_model():
 def get_busyness_model_path():
     return os.getenv(
         "BUSYNESS_MODEL_PATH",
-        "data-ml/models/busyness_predictor.joblib"
+        "data-ml/models/zone_busyness_model.joblib"
     )
 
 
@@ -229,7 +229,8 @@ def calculate_suitability_score(
 def get_busyness_predictions(
     venue_ids: list[str],
     hour: int | None = None,
-    day_type: str | None = None
+    day_type: str | None = None,
+    prediction_date: date | str | None = None
 ):
     if not venue_ids:
         return {}
@@ -250,14 +251,17 @@ def get_busyness_predictions(
 
     try:
         import pandas as pd
-        from busyness_predictor import load_busyness_predictor
+        from zone_busyness_predictor import load_zone_busyness_predictor
 
-        predictor = load_busyness_predictor(
+        predictor = load_zone_busyness_predictor(
             str(model_path)
         )
         venues = pd.read_csv(
             venues_csv_path
         )
+        if "zone_id" not in venues.columns:
+            return {}
+
         selected_venues = venues[
             venues["venue_id"].isin(venue_ids)
         ]
@@ -267,8 +271,8 @@ def get_busyness_predictions(
 
         prediction_results = predictor.predict_many(
             selected_venues,
-            hour=hour if hour is not None else datetime.now().hour,
-            day_type=day_type or get_default_day_type()
+            date=prediction_date or date.today(),
+            hour=hour if hour is not None else datetime.now().hour
         )
     except Exception:
         return {}

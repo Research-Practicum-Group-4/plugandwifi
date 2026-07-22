@@ -107,6 +107,72 @@ def test_postgresql_engine_options(monkeypatch):
     }
 
 
+def test_get_busyness_predictions_uses_zone_model_contract(
+    tmp_path,
+    monkeypatch
+):
+    model_path = tmp_path / "zone_busyness_model.joblib"
+    venues_csv_path = tmp_path / "nyc_venues.csv"
+    model_path.write_text("fake model artifact")
+    venues_csv_path.write_text(
+        "venue_id,zone_id,name\n"
+        "osm_296568074,101,UCD Library Shared Space\n"
+        "osm_296568075,102,UCD Village Study Hub\n"
+    )
+
+    class FakeZonePredictor:
+        def predict_many(self, venues, date, hour):
+            assert list(venues["venue_id"]) == ["osm_296568074"]
+            assert list(venues["zone_id"]) == [101]
+            assert str(date) == "2026-07-22"
+            assert hour == 14
+
+            return [
+                {
+                    "venue_id": "osm_296568074",
+                    "busyness_score": 72,
+                    "busyness_label": "High"
+                }
+            ]
+
+    fake_module = type(
+        "FakeZoneBusynessModule",
+        (),
+        {
+            "load_zone_busyness_predictor": (
+                lambda model_path_arg: FakeZonePredictor()
+            )
+        }
+    )
+
+    monkeypatch.setenv(
+        "BUSYNESS_MODEL_PATH",
+        str(model_path)
+    )
+    monkeypatch.setenv(
+        "BUSYNESS_VENUES_CSV",
+        str(venues_csv_path)
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "zone_busyness_predictor",
+        fake_module
+    )
+
+    predictions = main_module.get_busyness_predictions(
+        ["osm_296568074"],
+        hour=14,
+        prediction_date="2026-07-22"
+    )
+
+    assert predictions == {
+        "osm_296568074": {
+            "busyness_score": 72,
+            "busyness_label": "High"
+        }
+    }
+
+
 def test_chatbot_recommend_returns_real_venue_suggestions(monkeypatch):
     def fake_get_busyness_predictions(venue_ids, hour=None, day_type=None):
         return {
