@@ -474,6 +474,7 @@ def setup_and_seed_database():
             venue_id="osm_296568074",
             name="UCD Library Shared Space",
             borough="Dublin South",
+            cuisine_type="library",
             has_wifi=True,
             accessibility_friendly=True,
             calls_allowed=True,
@@ -502,6 +503,7 @@ def setup_and_seed_database():
             venue_id="osm_296568075",
             name="UCD Village Study Hub",
             borough="Dublin South",
+            cuisine_type="cafe",
             has_wifi=True,
             accessibility_friendly=False,
             calls_allowed=False,
@@ -711,6 +713,63 @@ def test_get_venues_includes_suitability_score():
     data = response.json()
     assert data["items"][0]["suitability_score"] == 74.31
     assert data["items"][1]["suitability_score"] == 46.0
+
+
+def test_get_venues_filters_by_advanced_filter_fields():
+    response = client.get(
+        "/api/venues?borough=Dublin South"
+        "&wifi=true"
+        "&plug_access=1"
+        "&accessibility_friendly=true"
+        "&calls_allowed=true"
+        "&bcorp_certified=true"
+        "&lgbt_friendly=true"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [
+        item["venue_id"]
+        for item in data["items"]
+    ] == ["osm_296568074"]
+
+
+def test_get_venues_filters_by_multiple_venue_types_with_or_behaviour():
+    response = client.get(
+        "/api/venues?borough=Dublin South&venue_type=library&venue_type=cafe"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert {
+        item["venue_id"]
+        for item in data["items"]
+    } == {
+        "osm_296568074",
+        "osm_296568075"
+    }
+
+    library_response = client.get(
+        "/api/venues?borough=Dublin South&venue_type=library"
+    )
+
+    assert library_response.status_code == 200
+    assert [
+        item["venue_id"]
+        for item in library_response.json()["items"]
+    ] == ["osm_296568074"]
+
+
+def test_get_venues_filters_by_name_with_other_filters():
+    response = client.get(
+        "/api/venues?name=library&wifi=true&accessibility_friendly=true"
+    )
+
+    assert response.status_code == 200
+    assert [
+        item["venue_id"]
+        for item in response.json()["items"]
+    ] == ["osm_296568074"]
 
 
 def test_get_venues_can_sort_by_suitability():

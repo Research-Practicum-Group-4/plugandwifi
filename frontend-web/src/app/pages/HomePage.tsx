@@ -9,12 +9,11 @@ import {
   Search,
   LayoutGrid,
   Map,
-  Volume2,
+  Wifi,
   Phone,
   Star,
   Accessibility,
   ChevronDown,
-  Wifi,
   Zap,
   Navigation,
   Volume,
@@ -176,8 +175,8 @@ export function HomePage() {
         {/* Filter chips with icons */}
         <div className="flex flex-wrap gap-2 justify-center">
           <Button variant="outline" size="sm">
-            <Volume2 className="size-4 mr-2" />
-            No Loud Music
+            <Wifi className="size-4 mr-2" />
+            WiFi Available
           </Button>
           <Button variant="outline" size="sm">
             <Phone className="size-4 mr-2" />

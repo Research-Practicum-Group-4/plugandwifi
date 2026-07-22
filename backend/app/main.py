@@ -2390,6 +2390,26 @@ def get_venues(
 
     plug_access: int | None = None,
 
+    venue_type: list[str] | None = Query(
+        None
+    ),
+
+    name: str | None = None,
+
+    accessibility_friendly: bool | None = None,
+
+    calls_allowed: bool | None = None,
+
+    wbe_certified: bool | None = None,
+
+    mbe_certified: bool | None = None,
+
+    vbe_certified: bool | None = None,
+
+    bcorp_certified: bool | None = None,
+
+    lgbt_friendly: bool | None = None,
+
     max_price: float | None = None,
 
     borough: str | None = None,
@@ -2490,6 +2510,65 @@ def get_venues(
 
         query = query.filter(
             Venue.plug_access == plug_access
+        )
+
+    if venue_type:
+        normalized_types = [
+            item.strip().lower()
+            for item in venue_type
+            if item and item.strip()
+        ]
+
+        if normalized_types:
+            query = query.filter(
+                func.lower(Venue.cuisine_type).in_(
+                    normalized_types
+                )
+            )
+
+    if name:
+        search_name = name.strip().lower()
+
+        if search_name:
+            query = query.filter(
+                func.lower(Venue.name).like(
+                    f"%{search_name}%"
+                )
+            )
+
+    if accessibility_friendly is not None:
+        query = query.filter(
+            Venue.accessibility_friendly == accessibility_friendly
+        )
+
+    if calls_allowed is not None:
+        query = query.filter(
+            Venue.calls_allowed == calls_allowed
+        )
+
+    if wbe_certified is not None:
+        query = query.filter(
+            Venue.wbe_certified == wbe_certified
+        )
+
+    if mbe_certified is not None:
+        query = query.filter(
+            Venue.mbe_certified == mbe_certified
+        )
+
+    if vbe_certified is not None:
+        query = query.filter(
+            Venue.vbe_certified == vbe_certified
+        )
+
+    if bcorp_certified is not None:
+        query = query.filter(
+            Venue.bcorp_certified == bcorp_certified
+        )
+
+    if lgbt_friendly is not None:
+        query = query.filter(
+            Venue.lgbt_friendly == lgbt_friendly
         )
 
     if max_price is not None:
