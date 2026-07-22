@@ -12,6 +12,7 @@ export interface LoginResponse {
 }
 
 export interface Venue {
+  [key: string]: unknown;
   venue_id: string;
   name: string;
   cuisine_type: string;
@@ -19,8 +20,6 @@ export interface Venue {
   has_wifi: boolean;
   wifi_free: boolean;
   opening_now: boolean;
-  noise_score: number;
-  noise_level: string;
   seats_avail: number;
   total_seats: number;
   hourly_price: number;
@@ -28,6 +27,20 @@ export interface Venue {
   lat: number;
   lon: number;
   borough?: string;
+  state?: string;
+  plug_access?: number | null;
+  availability_window?: string | null;
+  opening_hours_summary?: string | boolean | null;
+  busyness_score?: number | null;
+  busyness_label?: string | null;
+  suitability_score?: number | null;
+  accessibility_friendly: boolean;
+  calls_allowed: boolean;
+  wbe_certified: boolean;
+  mbe_certified: boolean;
+  vbe_certified: boolean;
+  bcorp_certified: boolean;
+  lgbt_friendly: boolean;
 }
 
 export interface HourlyProfileDetail {
@@ -54,6 +67,9 @@ export interface VenueDetail extends Venue {
   hotel_stars: string | null;
   hourly_profile: HourlyProfile;
   best_hours_for_work: number[];
+  seat_capacity: number;
+  amenity_tags: string[];
+  rules_text: string | null;
 }
 
 export interface AvailabilitySlot {

@@ -189,7 +189,6 @@ export function SearchPage() {
 
       try {
         const queryParams = {
-          noise_level: filters.noLoudMusic ? "quiet" : undefined,
           wifi_free: filters.freeWifi ? true : undefined,
           max_price: priceRange[1],
           date: searchDate || undefined,
@@ -749,7 +748,7 @@ export function SearchPage() {
                     const amenities: string[] = [];
                     if (venue.has_wifi) amenities.push("WiFi");
                     if (venue.wifi_free) amenities.push("Free WiFi");
-                    if (venue.noise_level === "quiet") amenities.push("Quiet Space");
+                    if (venue.calls_allowed) amenities.push("Calls Allowed");
                     if (venue.seats_avail > 0) amenities.push(`${venue.seats_avail} seats left`);
 
                     return (

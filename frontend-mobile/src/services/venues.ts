@@ -7,7 +7,6 @@ type VenueFilters = {
   radius?: number;
   wifi?: boolean;
   plug_access?: number;
-  noise_level?: string;
   max_price?: number;
   borough?: string;
   page?: number;

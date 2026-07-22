@@ -9,16 +9,22 @@ export interface VenueItem {
   borough: string;
   cuisine_type: string | null;
   has_wifi: boolean | null;
-  noise_level: string | null;
-  noise_score: number | null;
   rating: number | null;
   plug_access: number | null;
   hourly_price: number | null;
-  hourly_fee: number | null;
   availability_window: string | null;
   opening_hours_summary: string | boolean | null;
   distance_km: number | null;
-  plugs_available?: number | null;
+  busyness_score?: number | null;
+  busyness_label?: string | null;
+  suitability_score?: number | null;
+  accessibility_friendly: boolean;
+  calls_allowed: boolean;
+  wbe_certified: boolean;
+  mbe_certified: boolean;
+  vbe_certified: boolean;
+  bcorp_certified: boolean;
+  lgbt_friendly: boolean;
 }
 
 export interface VenueDetail extends VenueItem {
@@ -57,7 +63,6 @@ export interface VenueFilterParams {
   radius?: number;
   wifi?: boolean;
   plug_access?: number;
-  noise_level?: string;
   max_price?: number;
   borough?: string;
   duration_hours?: number;

@@ -139,7 +139,7 @@ def get_default_day_type():
 SUITABILITY_WEIGHTS = {
     "wifi": 0.35,
     "plug": 0.30,
-    "noise": 0.25,
+    "hourly_profile": 0.25,
     "rating": 0.10,
     "bus": 0.10,
     "train": 0.20
@@ -164,7 +164,7 @@ def clamp_normalized_score(value):
     )
 
 
-def get_noise_suitability_score(
+def get_hourly_profile_suitability_score(
     venue: Venue,
     hour: int | None = None
 ):
@@ -190,23 +190,6 @@ def get_noise_suitability_score(
         except (TypeError, ValueError, json.JSONDecodeError):
             pass
 
-    if venue.noise_score is not None:
-        return 1 - clamp_normalized_score(
-            venue.noise_score
-        )
-
-    if venue.noise_level:
-        noise_level = venue.noise_level.lower()
-
-        if noise_level in {"quiet", "low"}:
-            return 1.0
-
-        if noise_level in {"moderate", "medium"}:
-            return 0.5
-
-        if noise_level in {"loud", "high"}:
-            return 0.0
-
     return 0.0
 
 
@@ -217,7 +200,7 @@ def calculate_suitability_score(
     components = {
         "wifi": clamp_normalized_score(venue.wifi_norm),
         "plug": clamp_normalized_score(venue.plug_norm),
-        "noise": get_noise_suitability_score(
+        "hourly_profile": get_hourly_profile_suitability_score(
             venue,
             hour
         ),
@@ -316,13 +299,16 @@ def build_venue_response(
         "borough": venue.borough,
         "cuisine_type": venue.cuisine_type,
         "has_wifi": venue.has_wifi,
-        "noise_level": venue.noise_level,
-        "noise_score": venue.noise_score,
+        "accessibility_friendly": bool(venue.accessibility_friendly),
+        "calls_allowed": bool(venue.calls_allowed),
+        "wbe_certified": bool(venue.wbe_certified),
+        "mbe_certified": bool(venue.mbe_certified),
+        "vbe_certified": bool(venue.vbe_certified),
+        "bcorp_certified": bool(venue.bcorp_certified),
+        "lgbt_friendly": bool(venue.lgbt_friendly),
         "rating": venue.rating,
         "plug_access": venue.plug_access,
         "hourly_price": venue.hourly_price,
-        "plugs_available": venue.plug_access,
-        "hourly_fee": venue.hourly_price,
         "availability_window": None,
         "opening_hours_summary": venue.opening_hours,
         "distance_km": distance_km,
@@ -358,8 +344,13 @@ def build_venue_detail_response(
         "lon": venue.lon,
         "opening_hours": venue.opening_hours,
         "has_wifi": venue.has_wifi,
-        "noise_level": venue.noise_level,
-        "noise_score": venue.noise_score,
+        "accessibility_friendly": bool(venue.accessibility_friendly),
+        "calls_allowed": bool(venue.calls_allowed),
+        "wbe_certified": bool(venue.wbe_certified),
+        "mbe_certified": bool(venue.mbe_certified),
+        "vbe_certified": bool(venue.vbe_certified),
+        "bcorp_certified": bool(venue.bcorp_certified),
+        "lgbt_friendly": bool(venue.lgbt_friendly),
         "best_hours_for_work": venue.best_hours_for_work,
         "hourly_profile": venue.hourly_profile,
         "partner": venue.partner,
@@ -377,7 +368,13 @@ def build_venue_detail_response(
         "hourly_price": venue.hourly_price,
         "actual_hourly_price": venue.actual_hourly_price,
         "busyness_score": busyness.get("busyness_score"),
-        "busyness_label": busyness.get("busyness_label")
+        "busyness_label": busyness.get("busyness_label"),
+        "suitability_score": calculate_suitability_score(venue),
+        "seat_capacity": venue.seat_capacity or 1,
+        "amenity_tags": deserialize_amenity_tags(
+            venue.amenity_tags
+        ),
+        "rules_text": venue.rules_text or ""
     }
 
 
@@ -1867,8 +1864,6 @@ def get_venues(
 
     plug_access: int | None = None,
 
-    noise_level: str | None = None,
-
     max_price: float | None = None,
 
     borough: str | None = None,
@@ -1969,12 +1964,6 @@ def get_venues(
 
         query = query.filter(
             Venue.plug_access == plug_access
-        )
-
-    if noise_level:
-
-        query = query.filter(
-            Venue.noise_level == noise_level
         )
 
     if max_price is not None:

@@ -37,7 +37,6 @@ export function SearchScreen({ navigation }: MainTabScreenProps<'Search'>) {
     (async () => {
       try {
         const params: any = { lat: 40.7831, lon: -73.9712, limit: 50 };
-        if (filters.noLoudMusic) params.noise_level = 'quiet';
         if (priceRange[1] < 10) params.max_price = priceRange[1];
         const r = await fetchVenues(params);
         setVenues(r.items.map(mapVenue));

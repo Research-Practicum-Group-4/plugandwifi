@@ -22,7 +22,7 @@ export function VenueDetailScreen({
     );
   }
 
-  const price = venue.hourly_price ?? venue.hourly_fee ?? 0;
+  const price = venue.hourly_price ?? 0;
   const ratingText = venue.rating ? `★ ${venue.rating}` : '';
 
   return (
@@ -43,8 +43,8 @@ export function VenueDetailScreen({
         {venue.borough ? (
           <Text style={styles.bodyText}>Borough: {venue.borough}</Text>
         ) : null}
-        {venue.noise_level ? (
-          <Text style={styles.bodyText}>Noise: {venue.noise_level}</Text>
+        {venue.calls_allowed ? (
+          <Text style={styles.bodyText}>Calls allowed</Text>
         ) : null}
         {venue.opening_hours_summary ? (
           <Text style={styles.bodyText}>Hours: {venue.opening_hours_summary}</Text>

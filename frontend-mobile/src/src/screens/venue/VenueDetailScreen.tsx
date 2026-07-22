@@ -81,7 +81,7 @@ export function VenueDetailScreen({ navigation, route }: RootStackScreenProps<'V
           const amenities: string[] = [];
           if (data.has_wifi) amenities.push('WiFi');
           if ((data.plug_access ?? 0) > 0) amenities.push('Power Outlets');
-          if (data.noise_level === 'quiet') amenities.push('Quiet Zone');
+          if (data.calls_allowed) amenities.push('Calls Allowed');
           const dist = data.distance_km != null ? (data.distance_km < 1 ? `${Math.round(data.distance_km * 1000)}m` : `${data.distance_km.toFixed(1)} km`) : '—';
           const hours = typeof data.opening_hours_summary === 'string' ? data.opening_hours_summary : (data.opening_hours || 'Varies');
           setVenue({
@@ -89,7 +89,7 @@ export function VenueDetailScreen({ navigation, route }: RootStackScreenProps<'V
             type: data.cuisine_type || 'Workspace',
             distance: dist, availability: hours,
             rating: data.rating ?? 0,
-            price: data.hourly_price ?? data.hourly_fee ?? 5,
+            price: data.hourly_price ?? 5,
             amenities, lat: data.lat, lng: data.lon,
           });
         }

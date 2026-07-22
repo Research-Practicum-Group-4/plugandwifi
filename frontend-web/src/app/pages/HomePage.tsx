@@ -405,8 +405,8 @@ export function HomePage() {
                             <div className="flex items-center gap-1" title="Power Outlets">
                               <Zap className="size-4" />
                             </div>
-                            {venue.noise_level === "quiet" && (
-                              <div className="flex items-center gap-1" title="Quiet Environment">
+                            {venue.calls_allowed && (
+                              <div className="flex items-center gap-1" title="Calls Allowed">
                                 <Volume className="size-4" />
                               </div>
                             )}
