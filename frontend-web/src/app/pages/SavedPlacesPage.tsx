@@ -43,14 +43,19 @@ export function SavedPlacesPage() {
             has_wifi: d.has_wifi || false,
             wifi_free: d.wifi_free || false,
             opening_now: true,
-            noise_score: d.noise_score || 4.0,
-            noise_level: d.noise_level || "quiet",
             seats_avail: d.seats_avail || 10,
             total_seats: d.total_seats || 20,
             hourly_price: d.hourly_price || 0,
             rating: d.rating || 4.5,
             lat: d.lat,
-            lon: d.lon
+            lon: d.lon,
+            accessibility_friendly: d.accessibility_friendly,
+            calls_allowed: d.calls_allowed,
+            wbe_certified: d.wbe_certified,
+            mbe_certified: d.mbe_certified,
+            vbe_certified: d.vbe_certified,
+            bcorp_certified: d.bcorp_certified,
+            lgbt_friendly: d.lgbt_friendly
           }));
 
         setVenues(validVenues);

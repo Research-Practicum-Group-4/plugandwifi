@@ -64,6 +64,20 @@ const checkAuth = () => {
 // ==========================================
 const MOCK_VENUE_NUM = 30;
 
+const DEFAULT_VENUE_CONTRACT_FIELDS = {
+  accessibility_friendly: false,
+  calls_allowed: false,
+  wbe_certified: false,
+  mbe_certified: false,
+  vbe_certified: false,
+  bcorp_certified: false,
+  lgbt_friendly: true,
+  seat_capacity: 1,
+  amenity_tags: [] as string[],
+  rules_text: "",
+  suitability_score: null,
+};
+
 const BASE_VENUES: VenueDetail[] = [
   {
     venue_id: "osm_12345",
@@ -84,8 +98,7 @@ const BASE_VENUES: VenueDetail[] = [
     has_wifi: true,
     wifi_free: true,
     hotel_stars: null,
-    noise_score: 0.44,
-    noise_level: "moderate",
+    ...DEFAULT_VENUE_CONTRACT_FIELDS,
     hourly_profile: {
       "08": { score: 0.80, label: "loud" },
       "14": { score: 0.44, label: "moderate" }
@@ -116,8 +129,7 @@ const BASE_VENUES: VenueDetail[] = [
     has_wifi: true,
     wifi_free: true,
     hotel_stars: null,
-    noise_score: 0.12,
-    noise_level: "quiet",
+    ...DEFAULT_VENUE_CONTRACT_FIELDS,
     hourly_profile: {
       "08": { score: 0.20, label: "quiet" },
       "14": { score: 0.12, label: "quiet" }
@@ -148,8 +160,7 @@ const BASE_VENUES: VenueDetail[] = [
     has_wifi: true,
     wifi_free: true,
     hotel_stars: "5",
-    noise_score: 0.25,
-    noise_level: "quiet",
+    ...DEFAULT_VENUE_CONTRACT_FIELDS,
     hourly_profile: {
       "09": { score: 0.30, label: "quiet" },
       "15": { score: 0.25, label: "quiet" }
@@ -180,8 +191,7 @@ const BASE_VENUES: VenueDetail[] = [
     has_wifi: true,
     wifi_free: true,
     hotel_stars: null,
-    noise_score: 0.65,
-    noise_level: "loud",
+    ...DEFAULT_VENUE_CONTRACT_FIELDS,
     hourly_profile: {
       "12": { score: 0.85, label: "loud" },
       "16": { score: 0.65, label: "moderate" }
@@ -212,8 +222,7 @@ const BASE_VENUES: VenueDetail[] = [
     has_wifi: true,
     wifi_free: false,
     hotel_stars: null,
-    noise_score: 0.20,
-    noise_level: "quiet",
+    ...DEFAULT_VENUE_CONTRACT_FIELDS,
     hourly_profile: {
       "09": { score: 0.20, label: "quiet" },
       "17": { score: 0.35, label: "moderate" }
@@ -244,7 +253,7 @@ const generateMockVenues = (): VenueDetail[] => {
   const streets = ["Dame Street", "Grand Canal Dock", "Broadway", "Wall Street", "5th Avenue", "O'Connell Street"];
   const boroughs = ["Manhattan", "Brooklyn", "Dublin South", "Dublin North", "Dublin Center"];
   const zipcodes = ["D02XY23", "D06ABC1", "10001", "10005", "10016", "D04V1W8"];
-  const noiseLevels = ["quiet", "moderate", "loud"];
+  const hourlyProfileLabels = ["quiet", "moderate", "loud"];
 
   for (let i = 5; i < MOCK_VENUE_NUM; i++) {
     const venue_id = `osm_123${50 + i}`;
@@ -255,9 +264,9 @@ const generateMockVenues = (): VenueDetail[] => {
     const street = randomChoose(streets);
     const borough = randomChoose(boroughs);
     const zipcode = randomChoose(zipcodes);
-    const noise_level = randomChoose(noiseLevels);
+    const hourly_profile_label = randomChoose(hourlyProfileLabels);
     
-    const noise_score = Math.round((noise_level === "quiet" ? Math.random() * 0.3 : noise_level === "moderate" ? 0.3 + Math.random() * 0.4 : 0.7 + Math.random() * 0.3) * 100) / 100;
+    const hourly_profile_score = Math.round((hourly_profile_label === "quiet" ? Math.random() * 0.3 : hourly_profile_label === "moderate" ? 0.3 + Math.random() * 0.4 : 0.7 + Math.random() * 0.3) * 100) / 100;
     const rating = Math.round((3.8 + Math.random() * 1.2) * 10) / 10;
     const hourly_price = Math.round((1.5 + Math.random() * 8) * 2) / 2;
     const total_seats = randomChoose([15, 20, 25, 30, 40, 50, 100]);
@@ -287,11 +296,10 @@ const generateMockVenues = (): VenueDetail[] => {
       has_wifi: true,
       wifi_free: Math.random() > 0.3,
       hotel_stars: osm_type === "hotel" ? `${Math.floor(Math.random() * 2) + 4}` : null,
-      noise_score,
-      noise_level,
+      ...DEFAULT_VENUE_CONTRACT_FIELDS,
       hourly_profile: {
-        "09": { score: Math.round(noise_score * 0.9 * 100) / 100, label: noise_level },
-        "15": { score: noise_score, label: noise_level }
+        "09": { score: Math.round(hourly_profile_score * 0.9 * 100) / 100, label: hourly_profile_label },
+        "15": { score: hourly_profile_score, label: hourly_profile_label }
       },
       best_hours_for_work: [9, 10, 11, 14, 15, 16],
       distance_km,
@@ -466,7 +474,6 @@ export const api = {
     has_wifi?: boolean;
     wifi_free?: boolean;
     opening_now?: boolean;
-    noise_level?: string;
     max_price?: number;
     page?: number;
     limit?: number;
@@ -498,9 +505,6 @@ export const api = {
         }
         if (filters.opening_now !== undefined) {
           filtered = filtered.filter(v => v.opening_now === filters.opening_now);
-        }
-        if (filters.noise_level) {
-          filtered = filtered.filter(v => v.noise_level.toLowerCase() === filters.noise_level?.toLowerCase());
         }
         if (filters.max_price !== undefined) {
           filtered = filtered.filter(v => v.hourly_price <= filters.max_price!);
@@ -547,14 +551,19 @@ export const api = {
           has_wifi: v.has_wifi,
           wifi_free: v.wifi_free,
           opening_now: v.opening_now,
-          noise_score: v.noise_score,
-          noise_level: v.noise_level,
           seats_avail: v.seats_avail,
           total_seats: v.total_seats,
           hourly_price: v.hourly_price,
           rating: v.rating,
           lat: v.lat,
-          lon: v.lon
+          lon: v.lon,
+          accessibility_friendly: Boolean(v.accessibility_friendly),
+          calls_allowed: Boolean(v.calls_allowed),
+          wbe_certified: Boolean(v.wbe_certified),
+          mbe_certified: Boolean(v.mbe_certified),
+          vbe_certified: Boolean(v.vbe_certified),
+          bcorp_certified: Boolean(v.bcorp_certified),
+          lgbt_friendly: Boolean(v.lgbt_friendly),
         })),
         page,
         limit,
@@ -568,7 +577,6 @@ export const api = {
       if (filters) {
         if (filters.has_wifi !== undefined) params.wifi = filters.has_wifi;
         else if (filters.wifi_free !== undefined) params.wifi = filters.wifi_free;
-        if (filters.noise_level) params.noise_level = filters.noise_level;
         if (filters.borough) params.borough = filters.borough;
         if (filters.max_price !== undefined) params.max_price = filters.max_price;
         if (filters.page !== undefined) params.page = filters.page;

@@ -311,6 +311,13 @@ def setup_and_seed_database():
             name="UCD Library Shared Space",
             borough="Dublin South",
             has_wifi=True,
+            accessibility_friendly=True,
+            calls_allowed=True,
+            wbe_certified=False,
+            mbe_certified=False,
+            vbe_certified=False,
+            bcorp_certified=True,
+            lgbt_friendly=True,
             noise_level="quiet",
             hourly_price=3.5,
             opening_hours="Mo-Fr 09:00-17:00",
@@ -332,6 +339,13 @@ def setup_and_seed_database():
             name="UCD Village Study Hub",
             borough="Dublin South",
             has_wifi=True,
+            accessibility_friendly=False,
+            calls_allowed=False,
+            wbe_certified=True,
+            mbe_certified=False,
+            vbe_certified=False,
+            bcorp_certified=False,
+            lgbt_friendly=True,
             noise_level="moderate",
             hourly_price=4.0,
             opening_hours="Mo-Fr 10:00-18:00",
@@ -415,17 +429,37 @@ def test_get_venues_with_data():
     assert len(data["items"]) == 2
     assert data["items"][0]["name"] == "UCD Library Shared Space"
     required_fields = {
-        "plugs_available",
-        "noise_level",
-        "hourly_fee",
+        "plug_access",
+        "hourly_price",
         "availability_window",
         "opening_hours_summary",
         "distance_km",
+        "accessibility_friendly",
+        "calls_allowed",
+        "wbe_certified",
+        "mbe_certified",
+        "vbe_certified",
+        "bcorp_certified",
+        "lgbt_friendly",
     }
     assert required_fields.issubset(data["items"][0].keys())
-    assert data["items"][0]["plugs_available"] == 1
-    assert data["items"][0]["hourly_fee"] == 3.5
+    assert data["items"][0]["plug_access"] == 1
+    assert data["items"][0]["hourly_price"] == 3.5
     assert data["items"][0]["opening_hours_summary"] == "Mo-Fr 09:00-17:00"
+    assert "noise_level" not in data["items"][0]
+    assert "noise_score" not in data["items"][0]
+    assert "plugs_available" not in data["items"][0]
+    assert "hourly_fee" not in data["items"][0]
+    for field in (
+        "accessibility_friendly",
+        "calls_allowed",
+        "wbe_certified",
+        "mbe_certified",
+        "vbe_certified",
+        "bcorp_certified",
+        "lgbt_friendly"
+    ):
+        assert isinstance(data["items"][0][field], bool)
 
 
 def test_get_venues_includes_busyness_fields(monkeypatch):
@@ -462,8 +496,8 @@ def test_get_venues_includes_suitability_score():
 
     assert response.status_code == 200
     data = response.json()
-    assert data["items"][0]["suitability_score"] == 91.23
-    assert data["items"][1]["suitability_score"] == 58.5
+    assert data["items"][0]["suitability_score"] == 74.31
+    assert data["items"][1]["suitability_score"] == 46.0
 
 
 def test_get_venues_can_sort_by_suitability():
@@ -477,7 +511,6 @@ def test_get_venues_can_sort_by_suitability():
         venue.rating_norm = 1.0
         venue.bus_norm = 1.0
         venue.train_norm = 1.0
-        venue.noise_score = 0.0
         db.commit()
     finally:
         db.close()
@@ -508,7 +541,6 @@ def test_get_venues_radius_search_can_sort_by_suitability():
         venue.rating_norm = 1.0
         venue.bus_norm = 1.0
         venue.train_norm = 1.0
-        venue.noise_score = 0.0
         db.commit()
     finally:
         db.close()
@@ -540,8 +572,6 @@ def test_get_venues_suitability_score_handles_null_fields():
         venue.rating_norm = None
         venue.bus_norm = None
         venue.train_norm = None
-        venue.noise_score = None
-        venue.noise_level = None
         db.commit()
     finally:
         db.close()
@@ -1934,6 +1964,43 @@ def test_get_venue_by_id():
     # Non-existent venue ID lookup
     res_404 = client.get("/api/venues/ghost_venue_id")
     assert res_404.status_code == 404
+
+
+def test_get_venue_by_id_uses_aligned_detail_contract():
+    list_response = client.get("/api/venues?borough=Dublin South")
+    assert list_response.status_code == 200
+    list_item = next(
+        item
+        for item in list_response.json()["items"]
+        if item["venue_id"] == "osm_296568074"
+    )
+
+    detail_response = client.get("/api/venues/osm_296568074")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+
+    assert detail["suitability_score"] == list_item["suitability_score"]
+    assert isinstance(detail["suitability_score"], float)
+    assert detail["seat_capacity"] == 1
+    assert isinstance(detail["seat_capacity"], int)
+    assert detail["amenity_tags"] == []
+    assert isinstance(detail["rules_text"], str)
+    assert "noise_level" not in detail
+    assert "noise_score" not in detail
+
+    for field in (
+        "accessibility_friendly",
+        "calls_allowed",
+        "wbe_certified",
+        "mbe_certified",
+        "vbe_certified",
+        "bcorp_certified",
+        "lgbt_friendly"
+    ):
+        assert field in list_item
+        assert field in detail
+        assert isinstance(list_item[field], bool)
+        assert isinstance(detail[field], bool)
 
 
 def test_get_venue_by_id_includes_busyness_fields(monkeypatch):

@@ -48,7 +48,6 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
     setLoading(true);
     try {
       const params: any = { lat: userLoc.lat, lon: userLoc.lng, radius: 5 };
-      if (filters.noLoudMusic) params.noise_level = 'quiet';
       const r = await fetchVenues(params);
       setVenues(r.items.map(mapVenue));
       if (!initialized) setInitialized(true);

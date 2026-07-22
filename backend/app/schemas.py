@@ -92,11 +92,14 @@ class VenueResponse(BaseModel):
 
     cuisine_type: str | None = None
     has_wifi: bool | None = None
-    
 
-    noise_level: str | None = None
-    noise_score: float | None = None
-    
+    accessibility_friendly: bool = False
+    calls_allowed: bool = False
+    wbe_certified: bool = False
+    mbe_certified: bool = False
+    vbe_certified: bool = False
+    bcorp_certified: bool = False
+    lgbt_friendly: bool = False
 
     rating: float | None = None
     
@@ -105,10 +108,6 @@ class VenueResponse(BaseModel):
     
 
     hourly_price: float | None = None
-
-    plugs_available: int | None = None
-
-    hourly_fee: float | None = None
 
     availability_window: str | None = None
 
@@ -258,9 +257,13 @@ class VenueDetailResponse(BaseModel):
 
     has_wifi: bool | None = None
 
-    noise_level: str | None = None
-
-    noise_score: float | None = None
+    accessibility_friendly: bool = False
+    calls_allowed: bool = False
+    wbe_certified: bool = False
+    mbe_certified: bool = False
+    vbe_certified: bool = False
+    bcorp_certified: bool = False
+    lgbt_friendly: bool = False
 
     best_hours_for_work: str | None = None
 
@@ -297,6 +300,14 @@ class VenueDetailResponse(BaseModel):
     busyness_score: int | None = None
 
     busyness_label: str | None = None
+
+    suitability_score: float | None = None
+
+    seat_capacity: int
+
+    amenity_tags: list[str]
+
+    rules_text: str | None = None
 
     class Config:
         from_attributes = True
