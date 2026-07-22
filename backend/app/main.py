@@ -64,6 +64,7 @@ from .refresh_tokens import (
 from datetime import date, datetime, time, timedelta
 from contextlib import asynccontextmanager
 from math import asin, cos, radians, sin, sqrt
+from zoneinfo import ZoneInfo
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -80,6 +81,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 BUSYNESS_PREDICTION_CACHE = {}
+NYC_TIMEZONE = ZoneInfo("America/New_York")
 
 
 def get_free_cancellation_hours():
@@ -142,15 +144,18 @@ def get_busyness_model_path():
 def get_busyness_venues_csv_path():
     return os.getenv(
         "BUSYNESS_VENUES_CSV",
-        "data/processed/nyc_venues.csv"
+        "data-ml/models/nyc_venues.csv"
     )
 
 
-def get_default_day_type():
-    if date.today().weekday() >= 5:
-        return "weekend"
+def get_day_type(prediction_date: date):
+    return "weekend" if prediction_date.weekday() >= 5 else "weekday"
 
-    return "weekday"
+
+def get_default_day_type():
+    return get_day_type(
+        datetime.now(NYC_TIMEZONE).date()
+    )
 
 
 def get_busyness_prediction_datetime(
@@ -164,7 +169,7 @@ def get_busyness_prediction_datetime(
         except ValueError:
             selected_date = None
 
-    now = datetime.now()
+    now = datetime.now(NYC_TIMEZONE)
 
     if hour is not None:
         selected_hour = max(
@@ -201,6 +206,33 @@ def get_busyness_prediction_key(
         prediction_datetime.date().isoformat(),
         prediction_datetime.hour
     )
+
+
+def get_busyness_zone_id_for_venue(venue_id: str):
+    venues = get_busyness_venues_dataframe()
+
+    if venues is None:
+        return None
+
+    selected_venue = venues[
+        venues["venue_id"] == venue_id
+    ]
+
+    if selected_venue.empty:
+        return None
+
+    zone_id = selected_venue.iloc[0].get("zone_id")
+
+    if zone_id is None:
+        return None
+
+    try:
+        if hasattr(zone_id, "item"):
+            zone_id = zone_id.item()
+    except ValueError:
+        pass
+
+    return zone_id
 
 
 @lru_cache(maxsize=1)
@@ -255,6 +287,123 @@ def get_busyness_venues_dataframe():
         return None
 
     return venues
+
+
+def get_busyness_diagnostics(sample_venue_id: str | None = None):
+    model_path = Path(get_busyness_model_path())
+    venues_csv_path = Path(get_busyness_venues_csv_path())
+    required_columns = {
+        "venue_id",
+        "zone_id"
+    }
+    predictor = get_zone_busyness_predictor()
+    venues = get_busyness_venues_dataframe()
+    csv_columns = []
+    missing_columns = sorted(required_columns)
+
+    if venues is not None:
+        csv_columns = list(venues.columns)
+        missing_columns = sorted(
+            required_columns - set(csv_columns)
+        )
+
+    diagnostic = {
+        "status": "ready",
+        "timezone": str(NYC_TIMEZONE),
+        "model_path": str(model_path),
+        "model_exists": model_path.exists(),
+        "venues_csv_path": str(venues_csv_path),
+        "venues_csv_exists": venues_csv_path.exists(),
+        "predictor_loaded": predictor is not None,
+        "venues_csv_loaded": venues is not None,
+        "required_columns": sorted(required_columns),
+        "missing_columns": missing_columns,
+        "venue_mapping_count": (
+            int(len(venues))
+            if venues is not None
+            else 0
+        ),
+        "cache_entries": len(BUSYNESS_PREDICTION_CACHE),
+        "sample": None
+    }
+
+    if (
+        not diagnostic["model_exists"]
+        or not diagnostic["venues_csv_exists"]
+        or not diagnostic["predictor_loaded"]
+        or not diagnostic["venues_csv_loaded"]
+        or missing_columns
+    ):
+        diagnostic["status"] = "not_ready"
+
+    if sample_venue_id:
+        prediction = get_busyness_predictions(
+            [
+                sample_venue_id
+            ]
+        ).get(sample_venue_id)
+        zone_id = get_busyness_zone_id_for_venue(
+            sample_venue_id
+        )
+
+        diagnostic["sample"] = {
+            "venue_id": sample_venue_id,
+            "zone_id": zone_id,
+            "prediction": prediction,
+            "prediction_ready": bool(
+                prediction
+                and prediction.get("busyness_score") is not None
+                and prediction.get("busyness_label") is not None
+            )
+        }
+
+        if not diagnostic["sample"]["prediction_ready"]:
+            diagnostic["status"] = "not_ready"
+
+    return diagnostic
+
+
+def log_busyness_prediction(
+    venue: Venue,
+    prediction,
+    selected_date: date | None = None,
+    selected_time: time | None = None
+):
+    prediction_datetime = get_busyness_prediction_datetime(
+        selected_date=selected_date,
+        selected_time=selected_time
+    )
+    zone_id = get_busyness_zone_id_for_venue(
+        venue.venue_id
+    )
+    prediction_key = get_busyness_prediction_key(
+        zone_id,
+        prediction_datetime
+    )
+    prediction = prediction or {}
+    log_payload = {
+        "event": "busyness_prediction",
+        "venue_id": venue.venue_id,
+        "venue_name": venue.name,
+        "zone_id": zone_id,
+        "prediction_datetime": prediction_datetime.isoformat(),
+        "timezone": str(NYC_TIMEZONE),
+        "weekday": prediction_datetime.weekday(),
+        "day_type": get_day_type(
+            prediction_datetime.date()
+        ),
+        "hour": prediction_datetime.hour,
+        "cache_key": prediction_key,
+        "final_score": prediction.get("busyness_score"),
+        "final_label": prediction.get("busyness_label")
+    }
+
+    logger.info(
+        json.dumps(
+            log_payload,
+            default=str
+        )
+    )
 
 
 SUITABILITY_WEIGHTS = {
@@ -2066,6 +2215,20 @@ def health_check(db: Session = Depends(get_db)):
         )
 
 
+@app.get("/api/diagnostics/busyness", status_code=200)
+def busyness_diagnostics(
+    sample_venue_id: str | None = None
+):
+    """
+    Checks whether the busyness model artifact and venue-zone mapping are
+    available. This is intentionally separate from /api/health because DB
+    health does not prove ML prediction readiness.
+    """
+    return get_busyness_diagnostics(
+        sample_venue_id
+    )
+
+
 @app.post(
     "/api/chatbot/recommend",
     response_model=ChatbotRecommendResponse
@@ -2867,16 +3030,24 @@ def get_venue_by_id(
         selected_date=date,
         selected_time=start_time
     )
+    busyness_prediction = busyness_predictions.get(
+        venue.venue_id
+    )
+
+    log_busyness_prediction(
+        venue,
+        busyness_prediction,
+        selected_date=date,
+        selected_time=start_time
+    )
 
     return build_venue_detail_response(
         venue,
-        busyness_predictions.get(venue.venue_id),
+        busyness_prediction,
         calculate_suitability_score(
             venue,
             hour=start_time.hour if start_time else None,
-            busyness=busyness_predictions.get(
-                venue.venue_id
-            )
+            busyness=busyness_prediction
         )
     )
 
