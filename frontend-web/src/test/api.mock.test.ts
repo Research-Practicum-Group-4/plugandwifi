@@ -1,0 +1,317 @@
+/**
+ * Integration tests for api.ts running in MOCK mode (VITE_USE_MOCK=true).
+ * These tests call the real api object with the mock data store active —
+ * no HTTP traffic, no external services needed.
+ */
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// ── Mock import.meta.env before importing api ────────────────────────────
+vi.stubEnv('VITE_USE_MOCK', 'true');
+vi.stubEnv('VITE_API_BASE_URL', '/api');
+vi.stubEnv('VITE_GOOGLE_MAPS_KEY', '');
+
+// Mock localStorage used by checkAuth / interceptors
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, val: string) => { store[key] = val; },
+    removeItem: (key: string) => { delete store[key]; },
+    clear: () => { store = {}; },
+  };
+})();
+Object.defineProperty(global, 'localStorage', { value: localStorageMock });
+
+// Leaflet imports crash in jsdom; stub them out
+vi.mock('leaflet', () => ({}));
+
+const { api } = await import('../services/api');
+
+// ── getVenues ─────────────────────────────────────────────────────────────
+
+describe('api.getVenues (mock)', () => {
+  it('returns items, pagination metadata, and has_more flag', async () => {
+    const result = await api.getVenues({ page: 1, limit: 5 });
+    expect(result.items.length).toBeLessThanOrEqual(5);
+    expect(result).toHaveProperty('total_items');
+    expect(result).toHaveProperty('has_more');
+    expect(result.page).toBe(1);
+    expect(result.limit).toBe(5);
+  });
+
+  it('each item has required Venue fields', async () => {
+    const result = await api.getVenues({ page: 1, limit: 3 });
+    for (const v of result.items) {
+      expect(v).toHaveProperty('venue_id');
+      expect(v).toHaveProperty('name');
+      expect(v).toHaveProperty('rating');
+      expect(v).toHaveProperty('lat');
+      expect(v).toHaveProperty('lon');
+    }
+  });
+
+  it('filters by noise_level=quiet', async () => {
+    const result = await api.getVenues({ noise_level: 'quiet', limit: 50 });
+    result.items.forEach((v) => expect(v.noise_level).toBe('quiet'));
+  });
+
+  it('filters by has_wifi=true', async () => {
+    const result = await api.getVenues({ has_wifi: true, limit: 50 });
+    result.items.forEach((v) => expect(v.has_wifi).toBe(true));
+  });
+
+  it('pages correctly — page 2 items differ from page 1', async () => {
+    const p1 = await api.getVenues({ page: 1, limit: 5 });
+    const p2 = await api.getVenues({ page: 2, limit: 5 });
+    const p1Ids = p1.items.map((v) => v.venue_id);
+    const p2Ids = p2.items.map((v) => v.venue_id);
+    // No venue should appear on both pages
+    expect(p1Ids.some((id) => p2Ids.includes(id))).toBe(false);
+  });
+
+  it('returns empty items for an out-of-range page', async () => {
+    const result = await api.getVenues({ page: 9999, limit: 5 });
+    expect(result.items).toHaveLength(0);
+    expect(result.has_more).toBe(false);
+  });
+
+  it('total_items and total_pages are consistent', async () => {
+    const result = await api.getVenues({ page: 1, limit: 10 });
+    expect(result.total_pages).toBe(Math.ceil(result.total_items / 10));
+  });
+
+  it('radius filter: returns only venues within the given distance', async () => {
+    // Centre on Manhattan; 1 km radius should return only close-by fixtures
+    const result = await api.getVenues({ lat: 40.7589, lon: -73.9851, radius: 1, limit: 50 });
+    result.items.forEach((v) => expect(v.distance_km).toBeLessThanOrEqual(1));
+  });
+});
+
+// ── getVenueDetail ────────────────────────────────────────────────────────
+
+describe('api.getVenueDetail (mock)', () => {
+  it('returns the correct venue for a known venue_id', async () => {
+    const venue = await api.getVenueDetail('osm_12345');
+    expect(venue.venue_id).toBe('osm_12345');
+    expect(venue.name).toBe('Starbucks Ranelagh');
+  });
+
+  it('throws for an unknown venue_id', async () => {
+    await expect(api.getVenueDetail('does_not_exist')).rejects.toThrow('Venue not found');
+  });
+});
+
+// ── login ─────────────────────────────────────────────────────────────────
+
+describe('api.login (mock)', () => {
+  it('returns an access_token and user on valid credentials', async () => {
+    const result = await api.login({ email: 'user@test.com', password: 'pass' });
+    expect(result.access_token).toBeTruthy();
+    expect(result.user.email).toBe('user@test.com');
+    expect(result.user.role).toBe('user');
+  });
+
+  it('assigns provider role when email contains "provider"', async () => {
+    const result = await api.login({ email: 'provider@test.com', password: 'pass' });
+    expect(result.user.role).toBe('provider');
+  });
+
+  it('throws on empty credentials', async () => {
+    await expect(api.login({ email: '', password: '' })).rejects.toThrow();
+  });
+});
+
+// ── createBooking ─────────────────────────────────────────────────────────
+
+describe('api.createBooking (mock)', () => {
+  beforeEach(() => {
+    localStorageMock.setItem('access_token', 'mock_token');
+  });
+
+  it('returns a confirmed booking_id', async () => {
+    const result = await api.createBooking({
+      venue_id: 'osm_12346',
+      booking_date: '2026-08-01',
+      start_time: '10:00',
+      end_time: '12:00',
+      seats_reserved: 1,
+    });
+    expect(result.booking_id).toBeGreaterThan(0);
+    expect(result.status).toBe('confirmed');
+  });
+});
+
+// ── getUserBookings ───────────────────────────────────────────────────────
+
+describe('api.getUserBookings (mock)', () => {
+  beforeEach(() => {
+    localStorageMock.setItem('access_token', 'mock_token');
+  });
+
+  it('returns upcoming, completed, and cancelled buckets', async () => {
+    const result = await api.getUserBookings();
+    expect(Array.isArray(result.upcoming)).toBe(true);
+    expect(Array.isArray(result.completed)).toBe(true);
+    expect(Array.isArray(result.cancelled)).toBe(true);
+  });
+});
+
+// ── getSuggestions ────────────────────────────────────────────────────────
+
+describe('api.getSuggestions (mock)', () => {
+  it('returns venues whose names include the query string', async () => {
+    const result = await api.getSuggestions('Library');
+    result.items.forEach((v) =>
+      expect(v.name.toLowerCase()).toContain('library')
+    );
+  });
+
+  it('respects the limit parameter', async () => {
+    const result = await api.getSuggestions('a', 3);
+    expect(result.items.length).toBeLessThanOrEqual(3);
+  });
+});
+
+// ── Admin API ─────────────────────────────────────────────────────────────
+
+describe('api.getAdminStats (mock)', () => {
+  beforeEach(() => {
+    localStorageMock.setItem('access_token', 'mock-admin-token');
+  });
+
+  it('returns all required financial and platform fields', async () => {
+    const result = await api.getAdminStats();
+    expect(result).toHaveProperty('total_revenue');
+    expect(result).toHaveProperty('total_bookings');
+    expect(result).toHaveProperty('avg_booking_value');
+    expect(result).toHaveProperty('median_venue_revenue');
+    expect(result).toHaveProperty('total_venues');
+    expect(result).toHaveProperty('active_venues');
+    expect(result).toHaveProperty('pending_approval');
+    expect(result).toHaveProperty('suspended_venues');
+    expect(result).toHaveProperty('top_performer');
+    expect(result).toHaveProperty('total_users');
+    expect(result).toHaveProperty('active_users');
+    expect(result).toHaveProperty('new_this_month');
+    expect(result).toHaveProperty('churn_rate');
+  });
+
+  it('active_venues is less than total_venues', async () => {
+    const result = await api.getAdminStats();
+    expect(result.active_venues).toBeLessThanOrEqual(result.total_venues);
+  });
+
+  it('throws when unauthenticated', async () => {
+    localStorageMock.removeItem('access_token');
+    await expect(api.getAdminStats()).rejects.toThrow('Authentication required');
+  });
+});
+
+describe('api.getAdminCustomerIssues (mock)', () => {
+  beforeEach(() => {
+    localStorageMock.setItem('access_token', 'mock-admin-token');
+  });
+
+  it('returns an array of customer issues', async () => {
+    const result = await api.getAdminCustomerIssues();
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('each issue has required fields', async () => {
+    const result = await api.getAdminCustomerIssues();
+    for (const issue of result) {
+      expect(issue).toHaveProperty('id');
+      expect(issue).toHaveProperty('user_id');
+      expect(issue).toHaveProperty('user_name');
+      expect(issue).toHaveProperty('issue');
+      expect(issue).toHaveProperty('description');
+      expect(['low', 'medium', 'high']).toContain(issue.severity);
+      expect(issue).toHaveProperty('reported_at');
+      expect(issue).toHaveProperty('status');
+    }
+  });
+
+  it('throws when unauthenticated', async () => {
+    localStorageMock.removeItem('access_token');
+    await expect(api.getAdminCustomerIssues()).rejects.toThrow('Authentication required');
+  });
+});
+
+describe('api.getAdminVenueIssues (mock)', () => {
+  beforeEach(() => {
+    localStorageMock.setItem('access_token', 'mock-admin-token');
+  });
+
+  it('returns an array of venue issues', async () => {
+    const result = await api.getAdminVenueIssues();
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('each issue has required fields', async () => {
+    const result = await api.getAdminVenueIssues();
+    for (const issue of result) {
+      expect(issue).toHaveProperty('id');
+      expect(issue).toHaveProperty('venue_id');
+      expect(issue).toHaveProperty('venue_name');
+      expect(issue).toHaveProperty('issue');
+      expect(issue).toHaveProperty('description');
+      expect(['low', 'medium', 'high']).toContain(issue.severity);
+      expect(issue).toHaveProperty('reported_at');
+      expect(issue).toHaveProperty('status');
+    }
+  });
+});
+
+describe('api.adminActionCustomer (mock)', () => {
+  beforeEach(() => {
+    localStorageMock.setItem('access_token', 'mock-admin-token');
+  });
+
+  it('warn action returns status=warned', async () => {
+    const result = await api.adminActionCustomer(1, 'warn');
+    expect(result.action).toBe('warn');
+    expect(result.status).toBe('warned');
+    expect(result.id).toBe(1);
+  });
+
+  it('suspend action returns status=suspended', async () => {
+    const result = await api.adminActionCustomer(2, 'suspend');
+    expect(result.action).toBe('suspend');
+    expect(result.status).toBe('suspended');
+  });
+
+  it('ban action returns status=banned', async () => {
+    const result = await api.adminActionCustomer(3, 'ban');
+    expect(result.action).toBe('ban');
+    expect(result.status).toBe('banned');
+  });
+
+  it('throws when unauthenticated', async () => {
+    localStorageMock.removeItem('access_token');
+    await expect(api.adminActionCustomer(1, 'warn')).rejects.toThrow('Authentication required');
+  });
+});
+
+describe('api.adminActionVenue (mock)', () => {
+  beforeEach(() => {
+    localStorageMock.setItem('access_token', 'mock-admin-token');
+  });
+
+  it('warn action returns status=warned', async () => {
+    const result = await api.adminActionVenue(1, 'warn');
+    expect(result.action).toBe('warn');
+    expect(result.status).toBe('warned');
+  });
+
+  it('suspend action returns status=suspended', async () => {
+    const result = await api.adminActionVenue(1, 'suspend');
+    expect(result.status).toBe('suspended');
+  });
+
+  it('ban action returns status=banned', async () => {
+    const result = await api.adminActionVenue(1, 'ban');
+    expect(result.status).toBe('banned');
+  });
+});

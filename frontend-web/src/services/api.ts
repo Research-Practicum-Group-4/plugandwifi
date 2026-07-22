@@ -14,6 +14,11 @@ import {
   VenueSuggestionsResponse,
   ChatbotRecommendResponse,
   FavoriteResponse,
+  AdminActionType,
+  AdminActionResponse,
+  AdminCustomerIssue,
+  AdminVenueIssue,
+  AdminStatsResponse,
 } from "../types/api";
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
@@ -95,7 +100,9 @@ const BASE_VENUES: VenueDetail[] = [
     seats_avail: 12,
     total_seats: 20,
     hourly_price: 3.5,
-    rating: 4.6
+    rating: 4.6,
+    busyness_score: 45,
+    busyness_label: null,
   },
   {
     venue_id: "osm_12346",
@@ -127,7 +134,9 @@ const BASE_VENUES: VenueDetail[] = [
     seats_avail: 45,
     total_seats: 100,
     hourly_price: 1.5,
-    rating: 4.8
+    rating: 4.8,
+    busyness_score: 12,
+    busyness_label: null,
   },
   {
     venue_id: "osm_12347",
@@ -159,7 +168,9 @@ const BASE_VENUES: VenueDetail[] = [
     seats_avail: 8,
     total_seats: 15,
     hourly_price: 6.0,
-    rating: 4.8
+    rating: 4.8,
+    busyness_score: 25,
+    busyness_label: null,
   },
   {
     venue_id: "osm_12348",
@@ -191,7 +202,9 @@ const BASE_VENUES: VenueDetail[] = [
     seats_avail: 5,
     total_seats: 25,
     hourly_price: 4.0,
-    rating: 4.6
+    rating: 4.6,
+    busyness_score: 78,
+    busyness_label: null,
   },
   {
     venue_id: "osm_12349",
@@ -223,21 +236,31 @@ const BASE_VENUES: VenueDetail[] = [
     seats_avail: 18,
     total_seats: 40,
     hourly_price: 8.0,
-    rating: 4.9
+    rating: 4.9,
+    busyness_score: 95,
+    busyness_label: null,
   }
 ];
 
 const generateMockVenues = (): VenueDetail[] => {
   const venues = [...BASE_VENUES];
-  const randomChoose = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
-  
+
+  // Deterministic LCG seeded by index — no Math.random() so results are stable across refreshes
+  const lcg = (seed: number) => {
+    let s = (seed * 1664525 + 1013904223) >>> 0;
+    return {
+      next: () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0x100000000; },
+      pick: <T>(arr: T[]): T => { s = (s * 1664525 + 1013904223) >>> 0; return arr[s % arr.length]; },
+    };
+  };
+
   const names = [
     "Tech Space Cafe", "The Quiet Nook", "Study Corner Cafe",
     "Borough Library Room", "Elite Business Lounge", "Metropolitan Lounge",
     "Boutique Workspace", "Green Oasis Lounge", "Urban Study Hall", "The Hub",
     "Corner Co-working Cafe", "Central Park Lounge"
   ];
-  
+
   const osmTypes = ["cafe", "library", "hotel", "office"];
   const cuisineTypes = ["Coffee/Tea", "Library", "Hotel/Lounge", "Co-working/Lounge"];
   const cuisineDetails = ["coffee_shop", "academic_library", "hotel_lobby", "modern_cafe", "business_lounge"];
@@ -245,28 +268,31 @@ const generateMockVenues = (): VenueDetail[] => {
   const boroughs = ["Manhattan", "Brooklyn", "Dublin South", "Dublin North", "Dublin Center"];
   const zipcodes = ["D02XY23", "D06ABC1", "10001", "10005", "10016", "D04V1W8"];
   const noiseLevels = ["quiet", "moderate", "loud"];
+  const seatOptions = [15, 20, 25, 30, 40, 50, 100];
 
   for (let i = 5; i < MOCK_VENUE_NUM; i++) {
+    const rng = lcg(i * 31337);
     const venue_id = `osm_123${50 + i}`;
-    const name = `${randomChoose(names)} ${i}`;
-    const osm_type = randomChoose(osmTypes);
-    const cuisine_type = randomChoose(cuisineTypes);
-    const cuisine_detail = randomChoose(cuisineDetails);
-    const street = randomChoose(streets);
-    const borough = randomChoose(boroughs);
-    const zipcode = randomChoose(zipcodes);
-    const noise_level = randomChoose(noiseLevels);
-    
-    const noise_score = Math.round((noise_level === "quiet" ? Math.random() * 0.3 : noise_level === "moderate" ? 0.3 + Math.random() * 0.4 : 0.7 + Math.random() * 0.3) * 100) / 100;
-    const rating = Math.round((3.8 + Math.random() * 1.2) * 10) / 10;
-    const hourly_price = Math.round((1.5 + Math.random() * 8) * 2) / 2;
-    const total_seats = randomChoose([15, 20, 25, 30, 40, 50, 100]);
-    const seats_avail = Math.floor(Math.random() * total_seats);
-    
-    const inDublin = Math.random() > 0.5;
-    const lat = inDublin ? 53.30 + Math.random() * 0.05 : 40.74 + Math.random() * 0.04;
-    const lon = inDublin ? -6.25 + Math.random() * 0.05 : -73.98 + Math.random() * 0.04;
-    const distance_km = Math.round((0.1 + Math.random() * 2.5) * 10) / 10;
+    const name = `${rng.pick(names)} ${i}`;
+    const osm_type = rng.pick(osmTypes);
+    const cuisine_type = rng.pick(cuisineTypes);
+    const cuisine_detail = rng.pick(cuisineDetails);
+    const street = rng.pick(streets);
+    const borough = rng.pick(boroughs);
+    const zipcode = rng.pick(zipcodes);
+    const noise_level = rng.pick(noiseLevels);
+
+    const nr = rng.next();
+    const noise_score = Math.round((noise_level === "quiet" ? nr * 0.3 : noise_level === "moderate" ? 0.3 + nr * 0.4 : 0.7 + nr * 0.3) * 100) / 100;
+    const rating = Math.round((3.8 + rng.next() * 1.2) * 10) / 10;
+    const hourly_price = Math.round((1.5 + rng.next() * 8) * 2) / 2;
+    const total_seats = rng.pick(seatOptions);
+    const seats_avail = Math.floor(rng.next() * total_seats);
+
+    const inDublin = rng.next() > 0.5;
+    const lat = inDublin ? 53.30 + rng.next() * 0.05 : 40.74 + rng.next() * 0.04;
+    const lon = inDublin ? -6.25 + rng.next() * 0.05 : -73.98 + rng.next() * 0.04;
+    const distance_km = Math.round((0.1 + rng.next() * 2.5) * 10) / 10;
 
     venues.push({
       venue_id,
@@ -283,10 +309,10 @@ const generateMockVenues = (): VenueDetail[] => {
       lat,
       lon,
       opening_hours: "Mo-Su 08:00-22:00",
-      opening_now: Math.random() > 0.1,
+      opening_now: rng.next() > 0.1,
       has_wifi: true,
-      wifi_free: Math.random() > 0.3,
-      hotel_stars: osm_type === "hotel" ? `${Math.floor(Math.random() * 2) + 4}` : null,
+      wifi_free: rng.next() > 0.3,
+      hotel_stars: osm_type === "hotel" ? `${Math.floor(rng.next() * 2) + 4}` : null,
       noise_score,
       noise_level,
       hourly_profile: {
@@ -298,7 +324,9 @@ const generateMockVenues = (): VenueDetail[] => {
       seats_avail,
       total_seats,
       hourly_price,
-      rating
+      rating,
+      busyness_score: Math.round(rng.next() * 100),
+      busyness_label: null, // derived on display from busyness_score
     });
   }
   return venues;
@@ -396,13 +424,17 @@ const generateMockAvailability = (venues: VenueDetail[]): Record<string, VenueAv
   let slotId = 14;
   for (const v of venues) {
     if (!availability[v.venue_id]) {
+      // Seed availability deterministically from the venue_id string
+      let h = 5381;
+      for (let k = 0; k < v.venue_id.length; k++) { h = (((h << 5) + h) ^ v.venue_id.charCodeAt(k)) >>> 0; }
+      const avail = (offset: number) => (((h * (offset + 1)) >>> 0) % 10) > 2;
       availability[v.venue_id] = {
         venue_id: v.venue_id,
         available_slots: [
-          { slot_id: slotId++, start_time: "2026-06-05T09:00:00", end_time: "2026-06-05T10:00:00", available: Math.random() > 0.3 },
-          { slot_id: slotId++, start_time: "2026-06-05T10:00:00", end_time: "2026-06-05T11:00:00", available: Math.random() > 0.3 },
-          { slot_id: slotId++, start_time: "2026-06-05T11:00:00", end_time: "2026-06-05T12:00:00", available: Math.random() > 0.3 },
-          { slot_id: slotId++, start_time: "2026-06-05T14:00:00", end_time: "2026-06-05T15:00:00", available: Math.random() > 0.3 }
+          { slot_id: slotId++, start_time: "2026-06-05T09:00:00", end_time: "2026-06-05T10:00:00", available: avail(0) },
+          { slot_id: slotId++, start_time: "2026-06-05T10:00:00", end_time: "2026-06-05T11:00:00", available: avail(1) },
+          { slot_id: slotId++, start_time: "2026-06-05T11:00:00", end_time: "2026-06-05T12:00:00", available: avail(2) },
+          { slot_id: slotId++, start_time: "2026-06-05T14:00:00", end_time: "2026-06-05T15:00:00", available: avail(3) }
         ]
       };
     }
@@ -554,7 +586,9 @@ export const api = {
           hourly_price: v.hourly_price,
           rating: v.rating,
           lat: v.lat,
-          lon: v.lon
+          lon: v.lon,
+          busyness_score: v.busyness_score ?? null,
+          busyness_label: v.busyness_label ?? null,
         })),
         page,
         limit,
@@ -563,17 +597,15 @@ export const api = {
         has_more
       };
     } else {
-      // Map filters to backend query parameters
-      const params: any = {};
+      // Only 867 / ~13,000 OSM venues have confirmed wifi — always filter to wifi:true
+      // so no wifi-less venues are ever shown in the app.
+      const params: any = { wifi: true };
       if (filters) {
-        if (filters.has_wifi !== undefined) params.wifi = filters.has_wifi;
-        else if (filters.wifi_free !== undefined) params.wifi = filters.wifi_free;
         if (filters.noise_level) params.noise_level = filters.noise_level;
         if (filters.borough) params.borough = filters.borough;
         if (filters.max_price !== undefined) params.max_price = filters.max_price;
         if (filters.page !== undefined) params.page = filters.page;
         if (filters.limit !== undefined) params.limit = filters.limit;
-        if (filters.name !== undefined) params.name = filters.name;
         if (filters.lat !== undefined) params.lat = filters.lat;
         if (filters.lon !== undefined) params.lon = filters.lon;
         if (filters.radius !== undefined) params.radius = filters.radius;
@@ -582,8 +614,19 @@ export const api = {
         if (filters.end_time !== undefined) params.end_time = filters.end_time;
         if (filters.seats_required !== undefined) params.seats_required = filters.seats_required;
       }
-      const response = await axiosInstance.get<VenueListResponse>("/venues", { params });
-      return response.data;
+      const response = await axiosInstance.get<any>("/venues", { params });
+      const raw = response.data;
+      // Normalise list items: backend omits wifi_free/opening_now/seats_avail
+      const items = (raw.items ?? []).map((v: any) => ({
+        ...v,
+        wifi_free: v.wifi_free ?? (v.has_wifi ?? false),
+        opening_now: v.opening_now ?? true,
+        seats_avail: v.seats_avail ?? v.plugs_available ?? 0,
+        total_seats: v.total_seats ?? 0,
+        distance_km: v.distance_km ?? 0,
+        suitability_score: v.suitability_score ?? null,
+      }));
+      return { ...raw, items } as VenueListResponse;
     }
   },
 
@@ -595,8 +638,25 @@ export const api = {
       if (venue) return venue;
       throw new Error("Venue not found");
     } else {
-      const response = await axiosInstance.get<VenueDetail>(`/venues/${venueId}`);
-      return response.data;
+      const response = await axiosInstance.get<any>(`/venues/${venueId}`);
+      const d = response.data;
+      // Backend stores best_hours_for_work and hourly_profile as JSON strings
+      return {
+        ...d,
+        best_hours_for_work: typeof d.best_hours_for_work === "string"
+          ? JSON.parse(d.best_hours_for_work)
+          : (d.best_hours_for_work ?? []),
+        hourly_profile: typeof d.hourly_profile === "string"
+          ? JSON.parse(d.hourly_profile)
+          : (d.hourly_profile ?? {}),
+        // Fields not in backend detail response — provide safe defaults
+        wifi_free: d.wifi_free ?? (d.inferred_wifi ?? d.has_wifi ?? false),
+        opening_now: d.opening_now ?? true,
+        seats_avail: d.seats_avail ?? d.seat_capacity ?? 0,
+        total_seats: d.total_seats ?? d.seat_capacity ?? 0,
+        hotel_stars: d.hotel_stars ?? null,
+        distance_km: d.distance_km ?? 0,
+      } as VenueDetail;
     }
   },
 
@@ -651,8 +711,8 @@ export const api = {
       mockBookings.push(newBooking);
 
       // Prune seat availability
-      if (venue && venue.seats_avail > 0) {
-        venue.seats_avail = Math.max(0, venue.seats_avail - booking.seats_reserved);
+      if (venue && (venue.seats_avail ?? 0) > 0) {
+        venue.seats_avail = Math.max(0, (venue.seats_avail ?? 0) - booking.seats_reserved);
       }
 
       return {
@@ -868,5 +928,158 @@ export const api = {
       const response = await axiosInstance.delete<{ message: string }>(`/favorites/${venueId}`);
       return response.data;
     }
-  }
+  },
+
+  // 14. Admin — Get platform stats
+  getAdminStats: async (): Promise<AdminStatsResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(300);
+      return {
+        total_revenue: 45670,
+        total_bookings: 1890,
+        avg_booking_value: 24,
+        median_venue_revenue: 1250,
+        total_venues: 127,
+        active_venues: 98,
+        pending_approval: 15,
+        suspended_venues: 14,
+        top_performer: "The Grand Hotel Lobby",
+        total_users: 3456,
+        active_users: 2890,
+        new_this_month: 234,
+        churn_rate: 5.2,
+      };
+    } else {
+      const response = await axiosInstance.get<AdminStatsResponse>("/admin/stats");
+      return response.data;
+    }
+  },
+
+  // 15. Admin — Get customer issues
+  getAdminCustomerIssues: async (): Promise<AdminCustomerIssue[]> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(300);
+      return [
+        {
+          id: 1,
+          user_id: "USR-1234",
+          user_name: "John Doe",
+          issue: "Unorderly behavior at The Grand Hotel Lobby",
+          description: "Customer was causing disturbance and using inappropriate language with staff",
+          severity: "high",
+          reported_at: "2026-06-01",
+          status: "pending",
+        },
+        {
+          id: 2,
+          user_id: "USR-5678",
+          user_name: "Jane Smith",
+          issue: "Multiple no-shows without cancellation",
+          description: "Customer has not shown up for 3 consecutive bookings in the past week",
+          severity: "medium",
+          reported_at: "2026-05-30",
+          status: "pending",
+        },
+        {
+          id: 3,
+          user_id: "USR-9012",
+          user_name: "Mike Johnson",
+          issue: "Damage to venue property",
+          description: "Spilled liquid on furniture causing damage, refused to compensate",
+          severity: "high",
+          reported_at: "2026-05-28",
+          status: "pending",
+        },
+      ];
+    } else {
+      const response = await axiosInstance.get<AdminCustomerIssue[]>("/admin/customer-issues");
+      return response.data;
+    }
+  },
+
+  // 16. Admin — Get venue issues
+  getAdminVenueIssues: async (): Promise<AdminVenueIssue[]> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(300);
+      return [
+        {
+          id: 1,
+          venue_id: "osm_12345",
+          venue_name: "Bryant Park Cafe",
+          issue: "Multiple noise complaints",
+          description: "Venue has received 5 noise complaints from customers in the past month",
+          severity: "high",
+          reported_at: "2026-06-02",
+          status: "pending",
+        },
+        {
+          id: 2,
+          venue_id: "osm_12347",
+          venue_name: "Grand Central Lounge",
+          issue: "Overbooked seats 3 times",
+          description: "Venue accepted more bookings than available seats on 3 separate occasions",
+          severity: "medium",
+          reported_at: "2026-05-29",
+          status: "pending",
+        },
+      ];
+    } else {
+      const response = await axiosInstance.get<AdminVenueIssue[]>("/admin/venue-issues");
+      return response.data;
+    }
+  },
+
+  // 17. Admin — Take action on a customer issue
+  adminActionCustomer: async (issueId: number, action: AdminActionType): Promise<AdminActionResponse> => {
+    checkAuth();
+    const statusMap: Record<AdminActionType, AdminActionResponse["status"]> = {
+      warn: "warned",
+      suspend: "suspended",
+      ban: "banned",
+    };
+    if (USE_MOCK) {
+      await delay(400);
+      return {
+        id: issueId,
+        action,
+        status: statusMap[action],
+        message: `Action '${action}' applied to customer issue #${issueId}`,
+      };
+    } else {
+      const response = await axiosInstance.post<AdminActionResponse>(
+        `/admin/customer-issues/${issueId}/action`,
+        { action }
+      );
+      return response.data;
+    }
+  },
+
+  // 18. Admin — Take action on a venue issue
+  adminActionVenue: async (issueId: number, action: AdminActionType): Promise<AdminActionResponse> => {
+    checkAuth();
+    const statusMap: Record<AdminActionType, AdminActionResponse["status"]> = {
+      warn: "warned",
+      suspend: "suspended",
+      ban: "banned",
+    };
+    if (USE_MOCK) {
+      await delay(400);
+      return {
+        id: issueId,
+        action,
+        status: statusMap[action],
+        message: `Action '${action}' applied to venue issue #${issueId}`,
+      };
+    } else {
+      const response = await axiosInstance.post<AdminActionResponse>(
+        `/admin/venue-issues/${issueId}/action`,
+        { action }
+      );
+      return response.data;
+    }
+  },
+
 };

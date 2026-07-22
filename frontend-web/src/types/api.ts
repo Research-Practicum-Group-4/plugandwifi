@@ -11,25 +11,6 @@ export interface LoginResponse {
   user: User;
 }
 
-export interface Venue {
-  venue_id: string;
-  name: string;
-  cuisine_type: string;
-  distance_km: number;
-  has_wifi: boolean;
-  wifi_free: boolean;
-  opening_now: boolean;
-  noise_score: number;
-  noise_level: string;
-  seats_avail: number;
-  total_seats: number;
-  hourly_price: number;
-  rating: number;
-  lat: number;
-  lon: number;
-  borough?: string;
-}
-
 export interface HourlyProfileDetail {
   score: number;
   label: string;
@@ -39,6 +20,32 @@ export interface HourlyProfile {
   [hour: string]: HourlyProfileDetail;
 }
 
+// Core venue shape returned by GET /api/venues (list endpoint)
+export interface Venue {
+  venue_id: string;
+  name: string;
+  cuisine_type: string;
+  distance_km: number;
+  has_wifi: boolean | null;
+  // wifi_free / opening_now / seats_avail are mock-only; real API does not emit them
+  wifi_free?: boolean;
+  opening_now?: boolean;
+  noise_score: number;
+  noise_level: string;
+  seats_avail?: number;
+  total_seats?: number;
+  hourly_price: number;
+  rating: number;
+  lat: number;
+  lon: number;
+  borough?: string;
+  plug_access?: number | null;
+  suitability_score?: number | null;    // 0–100 from backend scoring model
+  busyness_score?: number | null;       // 0–100 from ML model; null when unavailable
+  busyness_label?: string | null;       // "Low" | "Medium" | "High" | "Unavailable"
+}
+
+// Full venue shape returned by GET /api/venues/{id} (detail endpoint)
 export interface VenueDetail extends Venue {
   osm_type: string;
   cuisine_detail: string;
@@ -54,6 +61,16 @@ export interface VenueDetail extends Venue {
   hotel_stars: string | null;
   hourly_profile: HourlyProfile;
   best_hours_for_work: number[];
+  // Additional detail fields from backend
+  inferred_wifi?: boolean | null;
+  wifi_user_reported?: boolean | null;
+  nearest_subway?: string | null;
+  nearest_subway_m?: number | null;
+  nearest_bus?: string | null;
+  nearest_bus_m?: number | null;
+  plug_user_reported?: boolean | null;
+  rating_user_reported?: number | null;
+  actual_hourly_price?: number | null;
 }
 
 export interface AvailabilitySlot {
@@ -80,15 +97,6 @@ export interface BookingResponse {
   booking_id: number;
   status: string;
   message: string;
-}
-
-export interface UserBooking {
-  booking_id: number;
-  venue_name: string;
-  date: string;
-  start_time: string;
-  end_time: string;
-  status: string;
 }
 
 export interface UserBookingItem {
@@ -191,6 +199,8 @@ export interface VenueSuggestionsResponse {
 export interface ChatbotRecommendResponse {
   response: string;
   model: string;
+  venues?: Venue[];
+  follow_up_question?: string | null;
 }
 
 export interface FavoriteResponse {
@@ -199,4 +209,52 @@ export interface FavoriteResponse {
   message: string;
 }
 
+// ── Admin types ───────────────────────────────────────────────────────────────
 
+export type AdminActionType = "warn" | "suspend" | "ban";
+export type AdminIssueStatus = "pending" | "warned" | "suspended" | "banned" | "resolved";
+
+export interface AdminCustomerIssue {
+  id: number;
+  user_id: string;
+  user_name: string;
+  issue: string;
+  description: string;
+  severity: "low" | "medium" | "high";
+  reported_at: string;
+  status: AdminIssueStatus;
+}
+
+export interface AdminVenueIssue {
+  id: number;
+  venue_id: string;
+  venue_name: string;
+  issue: string;
+  description: string;
+  severity: "low" | "medium" | "high";
+  reported_at: string;
+  status: AdminIssueStatus;
+}
+
+export interface AdminActionResponse {
+  id: number;
+  action: AdminActionType;
+  status: AdminIssueStatus;
+  message: string;
+}
+
+export interface AdminStatsResponse {
+  total_revenue: number;
+  total_bookings: number;
+  avg_booking_value: number;
+  median_venue_revenue: number;
+  total_venues: number;
+  active_venues: number;
+  pending_approval: number;
+  suspended_venues: number;
+  top_performer: string;
+  total_users: number;
+  active_users: number;
+  new_this_month: number;
+  churn_rate: number;
+}

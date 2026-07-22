@@ -18,34 +18,35 @@ import {
   Zap,
   Navigation,
   Volume,
+  Loader2,
+  MapPin,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { api } from "../../services/api";
-import { Venue } from "../../types/api";
 import { MapView } from "../components/MapView";
 import { ManhattanMap } from "../components/ManhattanMap";
 import { manhattanVenues } from "../data/manhattanVenues";
+import { enrichVenue, EnrichedVenue, venueImage, busynessDisplay } from "../utils/venueEnrichment";
 
-// Helper function to calculate color gradient from red (0) to green (100)
+const PAGE_SIZE = 6;
+
+const EDI_BADGE_STYLES: Record<string, React.CSSProperties> = {
+  "WBE-Certified":    { background: "repeating-linear-gradient(90deg, transparent, transparent 25%, #9333ea 25%, #9333ea 50%, transparent 50%, transparent 75%, #9333ea 75%, #9333ea 100%)" },
+  "MBE-Certified":    { background: "repeating-linear-gradient(90deg, transparent, transparent 33%, #78350f 33%, #78350f 66%, #000000 66%, #000000 100%)" },
+  "LGBT+ Friendly":   { background: "linear-gradient(90deg, #e40303 0%, #e40303 16.67%, #ff8c00 16.67%, #ff8c00 33.33%, #ffed00 33.33%, #ffed00 50%, #008026 50%, #008026 66.67%, #24408e 66.67%, #24408e 83.33%, #732982 83.33%, #732982 100%)" },
+  "B-Corp Certified": { backgroundColor: "#2d6a4f" },
+  "VBE-Certified":    { backgroundColor: "#1d4ed8" },
+};
+
 function getSuitabilityColor(score: number): string {
-  const clampedScore = Math.max(0, Math.min(100, score));
-  if (clampedScore <= 50) {
-    const green = Math.round((clampedScore / 50) * 180);
-    return `rgb(200, ${green}, 0)`;
-  } else {
-    const red = Math.round(40 + ((100 - clampedScore) / 50) * 160);
-    return `rgb(${red}, 180, 0)`;
-  }
+  const s = Math.max(0, Math.min(100, score));
+  if (s <= 50) return `rgb(200, ${Math.round((s / 50) * 180)}, 0)`;
+  return `rgb(${Math.round(40 + ((100 - s) / 50) * 160)}, 180, 0)`;
 }
 
-const busynessLevels = [
-  { label: "You'll be the first one", color: "bg-emerald-100 text-emerald-700" },
-  { label: "It's a tiny group today", color: "bg-teal-100 text-teal-700" },
-  { label: "It's a normal day", color: "bg-blue-100 text-blue-700" },
-  { label: "It's a busy day", color: "bg-orange-100 text-orange-700" },
-  { label: "It's a full house!", color: "bg-red-100 text-red-700" },
-];
+
+type GeoState = "idle" | "requesting" | "granted" | "denied";
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -55,15 +56,19 @@ export function HomePage() {
   const [showOwnedByFilters, setShowOwnedByFilters] = useState(false);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
 
-  // API state
-  const [apiVenues, setApiVenues] = useState<Venue[]>([]);
-  const [apiLoading, setApiLoading] = useState(true);
-  const [apiFailed, setApiFailed] = useState(false);
+  // Geolocation state machine
+  const [geoState, setGeoState] = useState<GeoState>("idle");
+  const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
 
-  // "Show More" pagination state (for fallback data)
-  const [visibleVenues, setVisibleVenues] = useState(6);
+  // API venue state
+  const [venues, setVenues] = useState<EnrichedVenue[]>([]);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
-  // Manhattan neighborhoods for autocomplete
+  // Fallback show-more state (used when API fails)
+  const [fallbackVisible, setFallbackVisible] = useState(PAGE_SIZE);
+
   const locationSuggestions = [
     "Midtown Manhattan",
     "Times Square",
@@ -75,37 +80,51 @@ export function HomePage() {
     "Flatiron District",
   ].filter((loc) => loc.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  useEffect(() => {
-    setApiLoading(true);
-    api
-      .getVenues({ page: 1, limit: 18 })
-      .then((data: any) => {
-        const venuesList = Array.isArray(data) ? data : (data?.items || []);
-        setApiVenues(venuesList);
-        setApiFailed(false);
-        setApiLoading(false);
-        })
-      .catch((err) => {
-        console.error("Failed to fetch venues from API, using fallback data:", err);
-        setApiFailed(true);
-        setApiLoading(false);
+  const fetchVenues = useCallback(async (coords?: { lat: number; lon: number }) => {
+    setLoading(true);
+    setLoadError(false);
+    try {
+      const data = await api.getVenues({
+        page: 1,
+        limit: 200,
+        ...(coords ? { lat: coords.lat, lon: coords.lon, radius: 5 } : {}),
       });
+      const sorted = [...data.items].sort((a, b) => b.rating - a.rating);
+      setVenues(sorted.map(enrichVenue));
+      setVisibleCount(PAGE_SIZE);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // Determine which venues to display
-  const usingFallback = apiFailed || (!apiLoading && (!apiVenues || apiVenues.length === 0));
+  // Request browser geolocation on mount; fetch venues once we know coords (or skip)
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      fetchVenues();
+      return;
+    }
+    setGeoState("requesting");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        setUserCoords(coords);
+        setGeoState("granted");
+        fetchVenues(coords);
+      },
+      () => {
+        setGeoState("denied");
+        fetchVenues(); // fall back — unfiltered venue list
+      },
+      { timeout: 8000 }
+    );
+  }, [fetchVenues]);
 
-  const getApiVenueImage = (venueId: string) => {
-    // ** HARDCODED **
-    const images: Record<string, string> = {
-      osm_12345: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400",
-      osm_12346: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400",
-      osm_12347: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400",
-      osm_12348: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400",
-      osm_12349: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400",
-    };
-    return images[venueId] || "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400";
-  };
+  const usingFallback = loadError || (!loading && venues.length === 0 && geoState !== "requesting");
+  const visibleVenues = usingFallback ? [] : venues.slice(0, visibleCount);
+  const hasMore = !usingFallback && visibleCount < venues.length;
+  const isLoadingOrGeo = loading || geoState === "requesting";
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -115,6 +134,14 @@ export function HomePage() {
         <p className="text-muted-foreground mb-8">
           Book quality workspace with WiFi and power outlets in hotel lobbies, cafes, and lounges
         </p>
+
+        {/* Geo denied nudge */}
+        {geoState === "denied" && (
+          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mb-4">
+            <MapPin className="size-4" />
+            <span>Enable location for nearby results — showing all venues for now</span>
+          </div>
+        )}
 
         <div className="flex gap-2 mb-6">
           <div className="flex-1 relative">
@@ -126,11 +153,11 @@ export function HomePage() {
                 setSearchQuery(e.target.value);
                 setShowLocationSuggestions(e.target.value.length > 0);
               }}
-              onFocus={() => setShowLocationSuggestions(searchQuery?.length > 0)}
+              onFocus={() => setShowLocationSuggestions(searchQuery.length > 0)}
               onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 200)}
               className="pl-10 h-12"
             />
-            {showLocationSuggestions && locationSuggestions?.length > 0 && (
+            {showLocationSuggestions && locationSuggestions.length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-2 bg-card border rounded-lg shadow-lg z-50 max-h-60 overflow-auto">
                 {locationSuggestions.map((location, idx) => (
                   <button
@@ -173,7 +200,7 @@ export function HomePage() {
           </Button>
         </div>
 
-        {/* Filter chips with icons */}
+        {/* Filter chips */}
         <div className="flex flex-wrap gap-2 justify-center">
           <Button variant="outline" size="sm">
             <Volume2 className="size-4 mr-2" />
@@ -204,47 +231,23 @@ export function HomePage() {
           {showOwnedByFilters && (
             <>
               <Button variant="outline" size="sm" className="relative overflow-hidden">
-                <span
-                  className="absolute inset-0 opacity-20"
-                  style={{
-                    background:
-                      "repeating-linear-gradient(90deg, transparent, transparent 25%, #9333ea 25%, #9333ea 50%, transparent 50%, transparent 75%, #9333ea 75%, #9333ea 100%)",
-                  }}
-                />
+                <span className="absolute inset-0 opacity-20" style={EDI_BADGE_STYLES["WBE-Certified"]} />
                 <span className="relative z-10">WBE-Certified</span>
               </Button>
               <Button variant="outline" size="sm" className="relative overflow-hidden">
-                <span
-                  className="absolute inset-0 opacity-20"
-                  style={{
-                    background:
-                      "repeating-linear-gradient(90deg, transparent, transparent 33%, #78350f 33%, #78350f 66%, #000000 66%, #000000 100%)",
-                  }}
-                />
+                <span className="absolute inset-0 opacity-20" style={EDI_BADGE_STYLES["MBE-Certified"]} />
                 <span className="relative z-10">MBE-Certified</span>
               </Button>
               <Button variant="outline" size="sm" className="relative overflow-hidden">
-                <span
-                  className="absolute inset-0 opacity-25"
-                  style={{
-                    background:
-                      "linear-gradient(90deg, #e40303 0%, #e40303 16.67%, #ff8c00 16.67%, #ff8c00 33.33%, #ffed00 33.33%, #ffed00 50%, #008026 50%, #008026 66.67%, #24408e 66.67%, #24408e 83.33%, #732982 83.33%, #732982 100%)",
-                  }}
-                />
+                <span className="absolute inset-0 opacity-25" style={EDI_BADGE_STYLES["LGBT+ Friendly"]} />
                 <span className="relative z-10">LGBT+ Friendly</span>
               </Button>
               <Button variant="outline" size="sm" className="relative overflow-hidden">
-                <span
-                  className="absolute inset-0 opacity-15 rounded"
-                  style={{ backgroundColor: "#2d6a4f" }}
-                />
+                <span className="absolute inset-0 opacity-15 rounded" style={EDI_BADGE_STYLES["B-Corp Certified"]} />
                 <span className="relative z-10">B-Corp Certified</span>
               </Button>
               <Button variant="outline" size="sm" className="relative overflow-hidden">
-                <span
-                  className="absolute inset-0 opacity-15 rounded"
-                  style={{ backgroundColor: "#1d4ed8" }}
-                />
+                <span className="absolute inset-0 opacity-15 rounded" style={EDI_BADGE_STYLES["VBE-Certified"]} />
                 <span className="relative z-10">VBE-Certified</span>
               </Button>
             </>
@@ -272,188 +275,234 @@ export function HomePage() {
         </Tabs>
       </div>
 
-      {/* Nearby Suggestions */}
+      {/* Venue listing */}
       <div className="mb-12">
-        <h2 className="mb-6">Available Near You</h2>
+        <h2 className="mb-6">
+          {geoState === "granted" && userCoords ? "Available Near You" : "Available Workspaces"}
+        </h2>
 
-        {apiLoading ? (
-          <div className="text-center py-12 text-muted-foreground">Loading workspaces...</div>
-        ) : viewMode === "grid" ? (
+        {/* Loading / geo requesting */}
+        {isLoadingOrGeo && (
+          <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
+            <Loader2 className="size-5 animate-spin" />
+            <span>
+              {geoState === "requesting" ? "Getting your location…" : "Loading workspaces…"}
+            </span>
+          </div>
+        )}
+
+        {/* Error state */}
+        {!isLoadingOrGeo && loadError && (
+          <div className="text-center py-16 text-muted-foreground">
+            <p className="mb-4">Couldn't load venues right now.</p>
+            <Button variant="outline" onClick={() => fetchVenues(userCoords ?? undefined)}>
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {/* Grid — API venues */}
+        {!isLoadingOrGeo && !usingFallback && viewMode === "grid" && (
           <>
             <div className="grid md:grid-cols-3 gap-6">
-              {usingFallback
-                ? (manhattanVenues || []).slice(0, visibleVenues).map((venue) => {
-                    const busyness = busynessLevels[Math.abs(typeof venue.id === 'number' ? venue.id : 0) % (busynessLevels?.length || 1)] || busynessLevels[0];
-                    return (
-                      <Card
-                        key={venue.id}
-                        className="overflow-hidden hover:shadow-lg transition-shadow"
-                      >
-                        <div className="aspect-video relative overflow-hidden">
-                          <img
-                            src={venue.image}
-                            alt={venue.name}
-                            className="w-full h-full object-cover"
-                          />
+              {visibleVenues.map((venue) => {
+                const busyness = busynessDisplay(venue.venue_id, venue.busyness_score);
+                const suitability = venue.suitability_score != null
+                  ? Math.round(venue.suitability_score)
+                  : Math.round(venue.rating * 20);
+                return (
+                  <Card key={venue.venue_id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                    <div className="aspect-video relative overflow-hidden bg-muted">
+                      <VenuePhoto venue={venue} />
+                    </div>
+                    <CardContent className="pt-4 space-y-3">
+                      <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${busyness.color}`}>
+                        {busyness.label}
+                      </span>
+
+                      <div className="flex items-start justify-between">
+                        <h4 className="flex-1 pr-2">{venue.name}</h4>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
+                          <span>{venue.rating.toFixed(1)}</span>
                         </div>
-                        <CardContent className="pt-4 space-y-3">
-                          <span
-                            className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${busyness.color}`}
-                          >
-                            {busyness.label}
-                          </span>
-                          <div className="flex items-start justify-between">
-                            <h4>{venue.name}</h4>
-                            <div className="flex items-center gap-1">
-                              <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
-                              <span>{venue.rating}</span>
-                            </div>
-                          </div>
-                          {venue.suitabilityScore !== undefined && (
-                            <div>
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-muted-foreground">Suitability for you</span>
-                                <span
-                                  className="font-semibold"
-                                  style={{ color: getSuitabilityColor(venue.suitabilityScore) }}
-                                >
-                                  {venue.suitabilityScore}/100
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                          <p className="text-muted-foreground text-sm">
-                            {venue.type} • {venue.availability}
-                          </p>
-                          <div className="flex items-center gap-3 text-muted-foreground">
-                            <div className="flex items-center gap-1" title="WiFi Available">
-                              <Wifi className="size-4" />
-                            </div>
-                            <div className="flex items-center gap-1" title="Power Outlets">
-                              <Zap className="size-4" />
-                            </div>
-                            <div className="flex items-center gap-1" title="Quiet Environment">
-                              <Volume className="size-4" />
-                            </div>
-                            <div className="flex items-center gap-1 text-sm">
-                              <Navigation className="size-4" />
-                              {venue.distance}km
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <p style={{ color: "#2f8a64" }}>${venue.price}/hour</p>
-                            <Button
-                              size="sm"
-                              style={{ backgroundColor: "#253c50" }}
-                              onClick={() => navigate(`/venue/${venue.id}`)}
-                            >
-                              Book a Space
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })
-                : (apiVenues || []).map((venue, idx) => {
-                    const suitability = Math.round(venue.rating * 20);
-                    const busyness = busynessLevels[idx % busynessLevels?.length];
-                    return (
-                      <Card
-                        key={venue.venue_id}
-                        className="overflow-hidden hover:shadow-lg transition-shadow"
-                      >
-                        <div className="aspect-video relative overflow-hidden">
-                          <img
-                            src={getApiVenueImage(venue.venue_id)}
-                            alt={venue.name}
-                            className="w-full h-full object-cover"
-                          />
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Suitability for you</span>
+                        <span
+                          className="font-semibold"
+                          style={{ color: getSuitabilityColor(suitability) }}
+                        >
+                          {suitability}/100
+                        </span>
+                      </div>
+
+                      <p className="text-muted-foreground text-sm">
+                        {venue.cuisine_type} • {venue.distance_km.toFixed(1)}km away
+                      </p>
+
+                      <div className="flex items-center gap-3 text-muted-foreground">
+                        {venue.has_wifi && <Wifi className="size-4" title="WiFi Available" />}
+                        <Zap className="size-4" title="Power Outlets" />
+                        {venue.noise_level === "quiet" && (
+                          <Volume className="size-4" title="Quiet Environment" />
+                        )}
+                        <div className="flex items-center gap-1 text-sm ml-auto">
+                          <Navigation className="size-4" />
+                          {venue.distance_km.toFixed(1)}km
                         </div>
-                        <CardContent className="pt-4 space-y-3">
-                          <span
-                            className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${busyness.color}`}
-                          >
-                            {busyness.label}
-                          </span>
-                          <div className="flex items-start justify-between">
-                            <h4>{venue.name}</h4>
-                            <div className="flex items-center gap-1">
-                              <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
-                              <span>{venue.rating}</span>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-muted-foreground">Suitability for you</span>
-                              <span
-                                className="font-semibold"
-                                style={{ color: getSuitabilityColor(suitability) }}
-                              >
-                                {suitability}/100
-                              </span>
-                            </div>
-                          </div>
-                          <p className="text-muted-foreground text-sm">
-                            {venue.cuisine_type} • {venue.distance_km}km away
-                          </p>
-                          <div className="flex items-center gap-3 text-muted-foreground">
-                            {venue.has_wifi && (
-                              <div className="flex items-center gap-1" title="WiFi Available">
-                                <Wifi className="size-4" />
-                              </div>
-                            )}
-                            <div className="flex items-center gap-1" title="Power Outlets">
-                              <Zap className="size-4" />
-                            </div>
-                            {venue.noise_level === "quiet" && (
-                              <div className="flex items-center gap-1" title="Quiet Environment">
-                                <Volume className="size-4" />
-                              </div>
-                            )}
-                            <div className="flex items-center gap-1 text-sm">
-                              <Navigation className="size-4" />
-                              {venue.distance_km}km
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <p style={{ color: "#2f8a64" }}>${venue.hourly_price}/hour</p>
-                            <Button
-                              size="sm"
-                              style={{ backgroundColor: "#253c50" }}
-                              onClick={() => navigate(`/venue/${venue.venue_id}`)}
+                      </div>
+
+                      {/* EDI certification badges */}
+                      {venue.certifications.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {venue.certifications.map((cert) => (
+                            <span
+                              key={cert}
+                              className="relative inline-block text-xs font-medium px-2 py-0.5 rounded border border-border overflow-hidden"
                             >
-                              Book a Space
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
+                              <span className="absolute inset-0 opacity-15" style={EDI_BADGE_STYLES[cert]} />
+                              <span className="relative z-10">{cert}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-1">
+                        <p style={{ color: "#2f8a64" }}>${venue.enrichedPrice}/hour</p>
+                        <Button
+                          size="sm"
+                          style={{ backgroundColor: "#253c50" }}
+                          onClick={() => navigate(`/venue/${venue.venue_id}`)}
+                        >
+                          Book a Space
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
 
-            {/* Show More button (only for fallback manhattanVenues) */}
-            {usingFallback && visibleVenues < (manhattanVenues?.length || 0) && (
+            {hasMore && (
+              <div className="flex justify-center mt-8">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                >
+                  Show More Venues ({venues.length - visibleCount} remaining)
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Map — API venues (pass full sorted list, not just the visible slice) */}
+        {!isLoadingOrGeo && !usingFallback && viewMode === "map" && (
+          <Card className="h-[600px] overflow-hidden border border-border shadow-sm">
+            <MapView venues={venues} height="600px" />
+          </Card>
+        )}
+
+        {/* Fallback grid — API failed or returned empty */}
+        {!isLoadingOrGeo && usingFallback && viewMode === "grid" && (
+          <>
+            <div className="grid md:grid-cols-3 gap-6">
+              {manhattanVenues.slice(0, fallbackVisible).map((venue) => {
+                const busyness = busynessDisplay(String(venue.id));
+                return (
+                  <Card key={venue.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                    <div className="aspect-video relative overflow-hidden">
+                      <img src={venue.image} alt={venue.name} className="w-full h-full object-cover" />
+                    </div>
+                    <CardContent className="pt-4 space-y-3">
+                      <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${busyness.color}`}>
+                        {busyness.label}
+                      </span>
+                      <div className="flex items-start justify-between">
+                        <h4>{venue.name}</h4>
+                        <div className="flex items-center gap-1">
+                          <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
+                          <span>{venue.rating}</span>
+                        </div>
+                      </div>
+                      {venue.suitabilityScore !== undefined && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Suitability for you</span>
+                          <span
+                            className="font-semibold"
+                            style={{ color: getSuitabilityColor(venue.suitabilityScore) }}
+                          >
+                            {venue.suitabilityScore}/100
+                          </span>
+                        </div>
+                      )}
+                      <p className="text-muted-foreground text-sm">
+                        {venue.type} • {venue.availability}
+                      </p>
+                      <div className="flex items-center gap-3 text-muted-foreground">
+                        <div className="flex items-center gap-1" title="WiFi Available">
+                          <Wifi className="size-4" />
+                        </div>
+                        <div className="flex items-center gap-1" title="Power Outlets">
+                          <Zap className="size-4" />
+                        </div>
+                        <div className="flex items-center gap-1" title="Quiet Environment">
+                          <Volume className="size-4" />
+                        </div>
+                        <div className="flex items-center gap-1 text-sm">
+                          <Navigation className="size-4" />
+                          {venue.distance}km
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p style={{ color: "#2f8a64" }}>${venue.price}/hour</p>
+                        <Button
+                          size="sm"
+                          style={{ backgroundColor: "#253c50" }}
+                          onClick={() => navigate(`/venue/${venue.id}`)}
+                        >
+                          Book a Space
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+            {fallbackVisible < manhattanVenues.length && (
               <div className="flex justify-center mt-8">
                 <Button
                   variant="outline"
                   size="lg"
                   onClick={() =>
-                    setVisibleVenues((prev) => Math.min(prev + 6, manhattanVenues?.length || 0))
+                    setFallbackVisible((v) => Math.min(v + PAGE_SIZE, manhattanVenues.length))
                   }
                 >
-                  Show More Venues ({(manhattanVenues?.length || 0) - visibleVenues} remaining)
+                  Show More Venues ({manhattanVenues.length - fallbackVisible} remaining)
                 </Button>
               </div>
             )}
           </>
-        ) : usingFallback ? (
+        )}
+
+        {/* Fallback map */}
+        {!isLoadingOrGeo && usingFallback && viewMode === "map" && (
           <ManhattanMap venues={manhattanVenues} height="600px" />
-        ) : (
-          <Card className="h-[600px] overflow-hidden border border-border shadow-sm">
-            <MapView venues={apiVenues} height="600px" />
-          </Card>
         )}
       </div>
     </div>
+  );
+}
+
+function VenuePhoto({ venue }: { venue: EnrichedVenue }) {
+  return (
+    <img
+      src={venueImage(venue.venue_id, venue.cuisine_type)}
+      alt={venue.name}
+      className="w-full h-full object-cover"
+    />
   );
 }
