@@ -2,9 +2,12 @@ FROM python:3.10-slim
 
 WORKDIR /code
 
-COPY requirements.txt .
+COPY backend/requirements.txt ./requirements.txt
+
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY backend/ ./
 
-CMD exec uvicorn app.main:app --host 0.0.0.0 --port $PORT
+COPY data-ml/src/ ./data-ml/src/
+
+CMD exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}
