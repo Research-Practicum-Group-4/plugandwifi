@@ -436,6 +436,7 @@ export function HomePage() {
                           >
                             {venue.suitabilityScore}/100
                           </span>
+                          </div>
                           <div className="flex items-start justify-between">
                             <h4>{venue.name}</h4>
                             <div className="flex items-center gap-1">
