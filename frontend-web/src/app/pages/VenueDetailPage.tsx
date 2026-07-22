@@ -12,6 +12,15 @@ import { Star, MapPin, Wifi, Zap, Clock, Heart, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../services/api";
 import { VenueDetail, AvailabilitySlot } from "../../types/api";
+import { enrichVenue, EnrichedVenue, venueImages } from "../utils/venueEnrichment";
+
+const EDI_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
+  "WBE-Certified":    { bg: "bg-purple-100", text: "text-purple-700" },
+  "MBE-Certified":    { bg: "bg-amber-100",  text: "text-amber-800"  },
+  "LGBT+ Friendly":   { bg: "bg-pink-100",   text: "text-pink-700"   },
+  "B-Corp Certified": { bg: "bg-green-100",  text: "text-green-700"  },
+  "VBE-Certified":    { bg: "bg-blue-100",   text: "text-blue-700"   },
+};
 
 export function VenueDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -39,7 +48,7 @@ export function VenueDetailPage() {
 
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
-  const [venue, setVenue] = useState<VenueDetail | null>(null);
+  const [venue, setVenue] = useState<(VenueDetail & EnrichedVenue) | null>(null);
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -65,7 +74,7 @@ export function VenueDetailPage() {
       }),
     ])
       .then(([venueData, availabilityData]) => {
-        setVenue(venueData);
+        setVenue(enrichVenue(venueData) as VenueDetail & EnrichedVenue);
         setSlots(availabilityData.available_slots);
         setLoading(false);
       })
@@ -77,7 +86,7 @@ export function VenueDetailPage() {
   }, [id]);
 
   const duration = getDurationHours(startTime, endTime);
-  const totalPrice = venue ? venue.hourly_price * duration * seatsReserved : 0;
+  const totalPrice = venue ? venue.enrichedPrice * duration * seatsReserved : 0;
 
   const handleBooking = () => {
     if (!venue) return;
@@ -104,8 +113,7 @@ export function VenueDetailPage() {
         duration: duration.toString(),
         price: totalPrice,
         seatsReserved,
-        // ** HARDCODED ** - pass gallery images for checkout page
-        venueImages: getVenueImages(venue.venue_id),
+        venueImages: venueImages(venue.venue_id, venue.cuisine_type),
       },
     });
   };
@@ -148,22 +156,6 @@ export function VenueDetailPage() {
     }
   };
 
-  const getVenueImages = (venueId: string) => {
-    // ** HARDCODED ** - venue image galleries
-    const defaultImages = [
-      "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",
-      "https://images.unsplash.com/photo-1519167758481-83f29da8c851?w=800",
-      "https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=800",
-    ];
-    if (venueId === "osm_12346") {
-      return [
-        "https://images.unsplash.com/photo-1497366216548-37526070297c?w=800",
-        "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=800",
-        "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=800",
-      ];
-    }
-    return defaultImages;
-  };
 
   const formatSlotTime = (startTime: string, endTime: string) => {
     try {
@@ -230,7 +222,7 @@ export function VenueDetailPage() {
     );
   }
 
-  const images = getVenueImages(venue.venue_id);
+  const images = venueImages(venue.venue_id, venue.cuisine_type);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -284,7 +276,7 @@ export function VenueDetailPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <div className="flex items-center gap-1">
                 <Star className="size-5 fill-yellow-400 stroke-yellow-400" />
                 <span>{venue.rating}</span>
@@ -292,6 +284,22 @@ export function VenueDetailPage() {
               <span className="text-muted-foreground">(142 reviews)</span>
               <Badge>{venue.cuisine_type}</Badge>
             </div>
+
+            {venue.certifications.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {venue.certifications.map((cert) => {
+                  const style = EDI_BADGE_STYLES[cert] ?? { bg: "bg-gray-100", text: "text-gray-700" };
+                  return (
+                    <span
+                      key={cert}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium ${style.bg} ${style.text}`}
+                    >
+                      {cert}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <Separator className="my-6" />
@@ -420,7 +428,7 @@ export function VenueDetailPage() {
             <CardContent className="space-y-6">
               <div>
                 <div className="flex items-baseline gap-2 mb-4">
-                  <span className="text-3xl">${venue.hourly_price}</span>
+                  <span className="text-3xl">${venue.enrichedPrice}</span>
                   <span className="text-muted-foreground">per hour</span>
                 </div>
 
@@ -435,7 +443,7 @@ export function VenueDetailPage() {
                           1 hour
                         </Label>
                       </div>
-                      <span>${venue.hourly_price}</span>
+                      <span>${venue.enrichedPrice}</span>
                     </div>
                     <div className="flex items-center justify-between p-3 rounded-lg border">
                       <div className="flex items-center gap-2">
@@ -444,7 +452,7 @@ export function VenueDetailPage() {
                           2 hours
                         </Label>
                       </div>
-                      <span>${venue.hourly_price * 2}</span>
+                      <span>${venue.enrichedPrice * 2}</span>
                     </div>
                     <div className="flex items-center justify-between p-3 rounded-lg border">
                       <div className="flex items-center gap-2">
@@ -453,7 +461,7 @@ export function VenueDetailPage() {
                           3 hours
                         </Label>
                       </div>
-                      <span>${venue.hourly_price * 3}</span>
+                      <span>${venue.enrichedPrice * 3}</span>
                     </div>
                   </RadioGroup>
                 </div>

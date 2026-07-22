@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Search, Star, Filter, Clock, MapPin, Sparkles, Phone, Accessibility, Plug, Wifi } from "lucide-react";
 import { api } from "../../services/api";
-import { Venue } from "../../types/api";
+import { enrichVenue, EnrichedVenue, venueImage, busynessDisplay } from "../utils/venueEnrichment";
 import { MapView } from "../components/MapView";
 import { ManhattanMap } from "../components/ManhattanMap";
 import { manhattanVenues } from "../data/manhattanVenues";
@@ -38,7 +38,6 @@ const LANDMARKS: Record<string, { lat: number; lon: number }> = {
   "NYU": { lat: 40.7295, lon: -73.9965 },
 };
 
-// Helper function to calculate color gradient from red (0) to green (100)
 function getSuitabilityColor(score: number): string {
   const clampedScore = Math.max(0, Math.min(100, score));
   if (clampedScore <= 50) {
@@ -50,13 +49,17 @@ function getSuitabilityColor(score: number): string {
   }
 }
 
-const busynessLevels = [
-  { label: "You'll be the first one", color: "bg-emerald-100 text-emerald-700" },
-  { label: "It's a tiny group today", color: "bg-teal-100 text-teal-700" },
-  { label: "It's a normal day", color: "bg-blue-100 text-blue-700" },
-  { label: "It's a busy day", color: "bg-orange-100 text-orange-700" },
-  { label: "It's a full house!", color: "bg-red-100 text-red-700" },
-];
+
+
+const EDI_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
+  "WBE-Certified":    { bg: "bg-purple-100", text: "text-purple-700" },
+  "MBE-Certified":    { bg: "bg-amber-100",  text: "text-amber-800"  },
+  "LGBT+ Friendly":   { bg: "bg-pink-100",   text: "text-pink-700"   },
+  "B-Corp Certified": { bg: "bg-green-100",  text: "text-green-700"  },
+  "VBE-Certified":    { bg: "bg-blue-100",   text: "text-blue-700"   },
+};
+
+type GeoState = "idle" | "requesting" | "granted" | "denied";
 
 const SUPPORTED_VENUE_TYPES = [
   "cafe",
@@ -81,6 +84,7 @@ export function SearchPage() {
     fourPlusStars: false,
     callsAllowed: false,
     accessibilityFriendly: false,
+    plugAccess: false,
     wbeOwned: false,
     mbeOwned: false,
     lgbtFriendly: false,
@@ -91,9 +95,8 @@ export function SearchPage() {
   const [priceRange, setPriceRange] = useState([1, 10]);
   const [duration, setDuration] = useState("any");
 
-  // paginatedVenues for List View; allVenues for Map View
-  const [paginatedVenues, setPaginatedVenues] = useState<Venue[]>([]);
-  const [allVenues, setAllVenues] = useState<Venue[]>([]);
+  const [paginatedVenues, setPaginatedVenues] = useState<EnrichedVenue[]>([]);
+  const [allVenues, setAllVenues] = useState<EnrichedVenue[]>([]);
   const [apiFailed, setApiFailed] = useState(false);
 
   const [loading, setLoading] = useState(true);
@@ -106,6 +109,26 @@ export function SearchPage() {
   const [autocompleteItems, setAutocompleteItems] = useState<{ name: string; type: "landmark" | "venue"; id?: string; coords?: { lat: number; lon: number } }[]>([]);
 
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+  const [geoState, setGeoState] = useState<GeoState>("idle");
+  const [geoCoords, setGeoCoords] = useState<{ lat: number; lon: number } | null>(null);
+
+  // Request browser geolocation on mount
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setGeoState("denied");
+      return;
+    }
+    setGeoState("requesting");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGeoCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        setGeoState("granted");
+      },
+      () => setGeoState("denied"),
+      { timeout: 8000, maximumAge: 60000 }
+    );
+  }, []);
 
   // Debounce search input
   useEffect(() => {
@@ -172,6 +195,9 @@ export function SearchPage() {
 
   // Main Data Fetching Engine
   useEffect(() => {
+    // Wait until geolocation has resolved (granted or denied) before fetching
+    if (geoState === "requesting") return;
+
     const executeQuery = async () => {
       setLoading(true);
 
@@ -196,6 +222,19 @@ export function SearchPage() {
           nameFilter = debouncedSearchQuery;
         }
       }
+
+      // Apply client-side post-filters (EDI + accessibility + plug)
+      const applyEdiFilters = (venues: EnrichedVenue[]): EnrichedVenue[] => {
+        let result = venues;
+        if (filters.accessibilityFriendly) result = result.filter(v => v.isAccessible);
+        if (filters.plugAccess)            result = result.filter(v => (v.plug_access ?? 0) > 0);
+        if (filters.wbeOwned)              result = result.filter(v => v.certifications.includes("WBE-Certified"));
+        if (filters.mbeOwned)              result = result.filter(v => v.certifications.includes("MBE-Certified"));
+        if (filters.lgbtFriendly)          result = result.filter(v => v.certifications.includes("LGBT+ Friendly"));
+        if (filters.bCorpCertified)        result = result.filter(v => v.certifications.includes("B-Corp Certified"));
+        if (filters.vbeOwned)              result = result.filter(v => v.certifications.includes("VBE-Certified"));
+        return result;
+      };
 
       try {
         const durationHours =
@@ -231,13 +270,14 @@ export function SearchPage() {
             limit: 1000,
           });
 
-          let matched = [...allData.items];
+          let matched: EnrichedVenue[] = allData.items.map(enrichVenue);
           if (filters.fourPlusStars) {
             matched = matched.filter((v) => v.rating >= 4.0);
           }
           matched = matched.filter(
-            (v) => v.hourly_price >= priceRange[0] && v.hourly_price <= priceRange[1]
+            (v) => v.enrichedPrice >= priceRange[0] && v.enrichedPrice <= priceRange[1]
           );
+          matched = applyEdiFilters(matched);
 
           setAllVenues(matched);
           setTotalPages(Math.ceil(matched.length / limit) || 1);
@@ -251,15 +291,16 @@ export function SearchPage() {
             limit: 1000,
           });
 
-          let matched = allData.items.filter((v) =>
-            v.name.toLowerCase().includes(nameFilter!.toLowerCase())
-          );
+          let matched: EnrichedVenue[] = allData.items
+            .filter((v) => v.name.toLowerCase().includes(nameFilter!.toLowerCase()))
+            .map(enrichVenue);
           if (filters.fourPlusStars) {
             matched = matched.filter((v) => v.rating >= 4.0);
           }
           matched = matched.filter(
-            (v) => v.hourly_price >= priceRange[0] && v.hourly_price <= priceRange[1]
+            (v) => v.enrichedPrice >= priceRange[0] && v.enrichedPrice <= priceRange[1]
           );
+          matched = applyEdiFilters(matched);
 
           setAllVenues(matched);
           setTotalPages(Math.ceil(matched.length / limit) || 1);
@@ -267,24 +308,31 @@ export function SearchPage() {
           setHasMore(matched.length > currentPage * limit);
           setApiFailed(false);
         } else {
+          // General browse — pass user coords when available for proximity sorting
+          const geoParams = geoState === "granted" && geoCoords
+            ? { lat: geoCoords.lat, lon: geoCoords.lon, radius: 5.0 }
+            : {};
+
           const [allData, pageData] = await Promise.all([
-            api.getVenues({ ...queryParams, page: 1, limit: 1000 }),
-            api.getVenues({ ...queryParams, page: currentPage, limit: limit }),
+            api.getVenues({ ...queryParams, ...geoParams, page: 1, limit: 1000 }),
+            api.getVenues({ ...queryParams, ...geoParams, page: currentPage, limit: limit }),
           ]);
 
-          let finalAll = [...allData.items];
-          let finalPage = [...pageData.items];
+          let finalAll: EnrichedVenue[] = allData.items.map(enrichVenue);
+          let finalPage: EnrichedVenue[] = pageData.items.map(enrichVenue);
 
           if (filters.fourPlusStars) {
             finalAll = finalAll.filter((v) => v.rating >= 4.0);
             finalPage = finalPage.filter((v) => v.rating >= 4.0);
           }
           finalAll = finalAll.filter(
-            (v) => v.hourly_price >= priceRange[0] && v.hourly_price <= priceRange[1]
+            (v) => v.enrichedPrice >= priceRange[0] && v.enrichedPrice <= priceRange[1]
           );
           finalPage = finalPage.filter(
-            (v) => v.hourly_price >= priceRange[0] && v.hourly_price <= priceRange[1]
+            (v) => v.enrichedPrice >= priceRange[0] && v.enrichedPrice <= priceRange[1]
           );
+          finalAll  = applyEdiFilters(finalAll);
+          finalPage = applyEdiFilters(finalPage);
 
           setAllVenues(finalAll);
           setPaginatedVenues(finalPage);
@@ -309,18 +357,6 @@ export function SearchPage() {
   const displayVenues = apiFailed ? manhattanVenues : paginatedVenues;
   const displayCount = apiFailed ? manhattanVenues.length : allVenues.length;
 
-  const getApiVenueImage = (venueId: string) => {
-    // ** HARDCODED **
-    const images: Record<string, string> = {
-      osm_12345: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400",
-      osm_12346: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400",
-      osm_12347: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400",
-      osm_12348: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400",
-      osm_12349: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400",
-    };
-    return images[venueId] || "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400";
-  };
-
   const clearAllFilters = () => {
     setFilters({
       freeWifi: false,
@@ -328,6 +364,7 @@ export function SearchPage() {
       fourPlusStars: false,
       callsAllowed: false,
       accessibilityFriendly: false,
+      plugAccess: false,
       wbeOwned: false,
       mbeOwned: false,
       lgbtFriendly: false,
@@ -473,6 +510,21 @@ export function SearchPage() {
                   Accessibility Friendly
                 </Label>
               </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="plugAccess"
+                  checked={filters.plugAccess}
+                  onCheckedChange={(checked) => {
+                    setFilters({ ...filters, plugAccess: checked as boolean });
+                    setCurrentPage(1);
+                  }}
+                />
+                <Label htmlFor="plugAccess" className="flex items-center gap-2 cursor-pointer">
+                  <Zap className="size-4" />
+                  Plug Access
+                </Label>
+              </div>
             </div>
           </div>
 
@@ -484,7 +536,7 @@ export function SearchPage() {
                 <Checkbox
                   id="wbeOwned"
                   checked={filters.wbeOwned}
-                  onCheckedChange={(checked) => setFilters({ ...filters, wbeOwned: checked as boolean })}
+                  onCheckedChange={(checked) => { setFilters({ ...filters, wbeOwned: checked as boolean }); setCurrentPage(1); }}
                 />
                 <Label htmlFor="wbeOwned" className="cursor-pointer relative inline-block px-3 py-1 rounded">
                   <span
@@ -498,7 +550,7 @@ export function SearchPage() {
                 <Checkbox
                   id="mbeOwned"
                   checked={filters.mbeOwned}
-                  onCheckedChange={(checked) => setFilters({ ...filters, mbeOwned: checked as boolean })}
+                  onCheckedChange={(checked) => { setFilters({ ...filters, mbeOwned: checked as boolean }); setCurrentPage(1); }}
                 />
                 <Label htmlFor="mbeOwned" className="cursor-pointer relative inline-block px-3 py-1 rounded">
                   <span
@@ -512,7 +564,7 @@ export function SearchPage() {
                 <Checkbox
                   id="lgbtFriendly"
                   checked={filters.lgbtFriendly}
-                  onCheckedChange={(checked) => setFilters({ ...filters, lgbtFriendly: checked as boolean })}
+                  onCheckedChange={(checked) => { setFilters({ ...filters, lgbtFriendly: checked as boolean }); setCurrentPage(1); }}
                 />
                 <Label htmlFor="lgbtFriendly" className="cursor-pointer relative inline-block px-3 py-1 rounded">
                   <span
@@ -526,7 +578,7 @@ export function SearchPage() {
                 <Checkbox
                   id="bCorpCertified"
                   checked={filters.bCorpCertified}
-                  onCheckedChange={(checked) => setFilters({ ...filters, bCorpCertified: checked as boolean })}
+                  onCheckedChange={(checked) => { setFilters({ ...filters, bCorpCertified: checked as boolean }); setCurrentPage(1); }}
                 />
                 <Label htmlFor="bCorpCertified" className="cursor-pointer relative inline-block px-3 py-1 rounded">
                   <span className="absolute inset-0 opacity-15 rounded" style={{ backgroundColor: "#2d6a4f" }} />
@@ -537,7 +589,7 @@ export function SearchPage() {
                 <Checkbox
                   id="vbeOwned"
                   checked={filters.vbeOwned}
-                  onCheckedChange={(checked) => setFilters({ ...filters, vbeOwned: checked as boolean })}
+                  onCheckedChange={(checked) => { setFilters({ ...filters, vbeOwned: checked as boolean }); setCurrentPage(1); }}
                 />
                 <Label htmlFor="vbeOwned" className="cursor-pointer relative inline-block px-3 py-1 rounded">
                   <span className="absolute inset-0 opacity-15 rounded" style={{ backgroundColor: "#1d4ed8" }} />
@@ -555,7 +607,7 @@ export function SearchPage() {
                 setPriceRange(val);
                 setCurrentPage(1);
               }}
-              min={1}
+              min={3}
               max={10}
               step={1}
               className="mb-2"
@@ -721,7 +773,10 @@ export function SearchPage() {
                 <p className="text-muted-foreground">{displayCount} spaces available</p>
 
                 {loading && !apiFailed ? (
-                  <div className="text-center py-12 text-muted-foreground">Loading workspaces...</div>
+                  <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                    <Loader2 className="size-5 animate-spin" />
+                    {geoState === "requesting" ? "Getting your location…" : "Loading workspaces…"}
+                  </div>
                 ) : displayVenues.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     No spaces found matching filters.
@@ -729,7 +784,7 @@ export function SearchPage() {
                 ) : apiFailed ? (
                   // Fallback: render manhattanVenues with Figma card UI
                   manhattanVenues.map((venue) => {
-                    const busyness = busynessLevels[venue.id % busynessLevels.length];
+                    const busyness = busynessDisplay(String(venue.id));
                     return (
                       <Card key={venue.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                         <div className="grid md:grid-cols-[250px_1fr] gap-4">
@@ -807,10 +862,13 @@ export function SearchPage() {
                     );
                   })
                 ) : (
-                  // API data with improved card UI
-                  paginatedVenues.map((venue, venueIdx) => {
-                    const suitability = Math.round(venue.rating * 20);
-                    const busyness = busynessLevels[venueIdx % busynessLevels.length];
+                  // API data with enriched card UI
+                  paginatedVenues.map((venue) => {
+                    // Use ML suitability_score from backend when available, fall back to rating proxy
+                    const suitability = venue.suitability_score != null
+                      ? Math.round(venue.suitability_score)
+                      : Math.round(venue.rating * 20);
+                    const busyness = busynessDisplay(venue.venue_id, venue.busyness_score);
                     const amenities: string[] = [];
                     if (venue.has_wifi) amenities.push("WiFi");
                     if (venue.wifi_free) amenities.push("Free WiFi");
@@ -825,7 +883,7 @@ export function SearchPage() {
                         <div className="grid md:grid-cols-[250px_1fr] gap-4">
                           <div className="aspect-video md:aspect-square overflow-hidden">
                             <img
-                              src={getApiVenueImage(venue.venue_id)}
+                              src={venueImage(venue.venue_id, venue.cuisine_type)}
                               alt={venue.name}
                               className="w-full h-full object-cover"
                             />
@@ -861,6 +919,23 @@ export function SearchPage() {
                               ))}
                             </div>
 
+                            {/* EDI certification badges */}
+                            {venue.certifications.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 mb-3">
+                                {venue.certifications.map((cert) => {
+                                  const style = EDI_BADGE_STYLES[cert] ?? { bg: "bg-gray-100", text: "text-gray-700" };
+                                  return (
+                                    <span
+                                      key={cert}
+                                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${style.bg} ${style.text}`}
+                                    >
+                                      {cert}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+
                             <div className="mb-3">
                               <div className="flex items-center justify-between text-xs">
                                 <span className="text-muted-foreground">Suitability for you</span>
@@ -882,7 +957,7 @@ export function SearchPage() {
                               </div>
                               <div className="flex items-center gap-4">
                                 <p className="text-2xl" style={{ color: "#2f8a64" }}>
-                                  ${venue.hourly_price}/hr
+                                  ${venue.enrichedPrice}/hr
                                 </p>
                                 <Link
                                   to={`/venue/${venue.venue_id}`}

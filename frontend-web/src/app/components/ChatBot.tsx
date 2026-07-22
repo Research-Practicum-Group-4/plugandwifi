@@ -44,9 +44,23 @@ export function ChatBot() {
 
     try {
       const data = await api.getChatbotReply(userText);
+
+      // Build response text: main response + follow-up + venue list if provided
+      let text = data.response;
+      if (data.follow_up_question) {
+        text += `\n\n${data.follow_up_question}`;
+      }
+      if (data.venues && data.venues.length > 0) {
+        const venueLines = data.venues
+          .slice(0, 3)
+          .map((v) => `• ${v.name} (${v.borough ?? v.cuisine_type ?? "venue"})`)
+          .join("\n");
+        text += `\n\n${venueLines}`;
+      }
+
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: data.response,
+        text,
         sender: "ai",
         timestamp: new Date(),
       };

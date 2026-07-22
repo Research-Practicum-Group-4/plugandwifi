@@ -11,6 +11,16 @@ export interface LoginResponse {
   user: User;
 }
 
+export interface HourlyProfileDetail {
+  score: number;
+  label: string;
+}
+
+export interface HourlyProfile {
+  [hour: string]: HourlyProfileDetail;
+}
+
+// Core venue shape returned by GET /api/venues (list endpoint)
 export interface Venue {
   [key: string]: unknown;
   venue_id: string;
@@ -43,15 +53,7 @@ export interface Venue {
   lgbt_friendly: boolean;
 }
 
-export interface HourlyProfileDetail {
-  score: number;
-  label: string;
-}
-
-export interface HourlyProfile {
-  [hour: string]: HourlyProfileDetail;
-}
-
+// Full venue shape returned by GET /api/venues/{id} (detail endpoint)
 export interface VenueDetail extends Venue {
   osm_type: string;
   cuisine_detail: string;
@@ -106,15 +108,6 @@ export interface MockPaymentResponse {
   status: string;
   payment_status: string;
   message: string;
-}
-
-export interface UserBooking {
-  booking_id: number;
-  venue_name: string;
-  date: string;
-  start_time: string;
-  end_time: string;
-  status: string;
 }
 
 export interface UserBookingItem {
@@ -217,6 +210,8 @@ export interface VenueSuggestionsResponse {
 export interface ChatbotRecommendResponse {
   response: string;
   model: string;
+  venues?: Venue[];
+  follow_up_question?: string | null;
 }
 
 export interface FavoriteResponse {
@@ -225,4 +220,52 @@ export interface FavoriteResponse {
   message: string;
 }
 
+// ── Admin types ───────────────────────────────────────────────────────────────
 
+export type AdminActionType = "warn" | "suspend" | "ban";
+export type AdminIssueStatus = "pending" | "warned" | "suspended" | "banned" | "resolved";
+
+export interface AdminCustomerIssue {
+  id: number;
+  user_id: string;
+  user_name: string;
+  issue: string;
+  description: string;
+  severity: "low" | "medium" | "high";
+  reported_at: string;
+  status: AdminIssueStatus;
+}
+
+export interface AdminVenueIssue {
+  id: number;
+  venue_id: string;
+  venue_name: string;
+  issue: string;
+  description: string;
+  severity: "low" | "medium" | "high";
+  reported_at: string;
+  status: AdminIssueStatus;
+}
+
+export interface AdminActionResponse {
+  id: number;
+  action: AdminActionType;
+  status: AdminIssueStatus;
+  message: string;
+}
+
+export interface AdminStatsResponse {
+  total_revenue: number;
+  total_bookings: number;
+  avg_booking_value: number;
+  median_venue_revenue: number;
+  total_venues: number;
+  active_venues: number;
+  pending_approval: number;
+  suspended_venues: number;
+  top_performer: string;
+  total_users: number;
+  active_users: number;
+  new_this_month: number;
+  churn_rate: number;
+}
