@@ -108,22 +108,9 @@ def test_postgresql_engine_options(monkeypatch):
 
 
 def test_get_busyness_predictions_uses_zone_model_contract(
-    tmp_path,
     monkeypatch
 ):
-    main_module.get_zone_busyness_predictor.cache_clear()
-    main_module.get_busyness_venues_dataframe.cache_clear()
     main_module.BUSYNESS_PREDICTION_CACHE.clear()
-
-    model_path = tmp_path / "zone_busyness_model.joblib"
-    venues_csv_path = tmp_path / "nyc_venues.csv"
-    model_path.write_text("fake model artifact")
-    venues_csv_path.write_text(
-        "venue_id,zone_id,name\n"
-        "osm_296568074,101,UCD Library Shared Space\n"
-        "osm_296568075,101,UCD Village Study Hub\n"
-        "osm_296568076,102,UCD Business Lounge\n"
-    )
 
     call_count = {
         "predict_many": 0
@@ -144,28 +131,36 @@ def test_get_busyness_predictions_uses_zone_model_contract(
                 }
             ]
 
-    fake_module = type(
-        "FakeZoneBusynessModule",
-        (),
-        {
-            "load_zone_busyness_predictor": (
-                lambda model_path_arg: FakeZonePredictor()
-            )
-        }
+    pd = __import__("pandas")
+    venue_rows = pd.DataFrame(
+        [
+            {
+                "venue_id": "osm_296568074",
+                "zone_id": 101,
+                "name": "UCD Library Shared Space"
+            },
+            {
+                "venue_id": "osm_296568075",
+                "zone_id": 101,
+                "name": "UCD Village Study Hub"
+            },
+            {
+                "venue_id": "osm_296568076",
+                "zone_id": 102,
+                "name": "UCD Business Lounge"
+            }
+        ]
     )
 
-    monkeypatch.setenv(
-        "BUSYNESS_MODEL_PATH",
-        str(model_path)
+    monkeypatch.setattr(
+        main_module,
+        "get_zone_busyness_predictor",
+        lambda: FakeZonePredictor()
     )
-    monkeypatch.setenv(
-        "BUSYNESS_VENUES_CSV",
-        str(venues_csv_path)
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "zone_busyness_predictor",
-        fake_module
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_venues_dataframe",
+        lambda: venue_rows
     )
 
     predictions = main_module.get_busyness_predictions(
@@ -203,8 +198,6 @@ def test_get_busyness_predictions_uses_zone_model_contract(
     assert cached_predictions == predictions
     assert call_count["predict_many"] == 1
 
-    main_module.get_zone_busyness_predictor.cache_clear()
-    main_module.get_busyness_venues_dataframe.cache_clear()
     main_module.BUSYNESS_PREDICTION_CACHE.clear()
 
 
