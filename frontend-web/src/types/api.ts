@@ -96,6 +96,16 @@ export interface BookingResponse {
   booking_id: number;
   status: string;
   message: string;
+  payment_status?: string;
+  order_id?: string;
+}
+
+export interface MockPaymentResponse {
+  booking_id: number;
+  order_id: string;
+  status: string;
+  payment_status: string;
+  message: string;
 }
 
 export interface UserBooking {

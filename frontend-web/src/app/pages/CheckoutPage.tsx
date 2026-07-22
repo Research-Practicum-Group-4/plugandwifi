@@ -110,7 +110,7 @@ export function CheckoutPage() {
   // ** HARDCODED ** - venue images from VenueDetailPage state or default gallery
   const venueImages: string[] = bookingData.venueImages || DEFAULT_VENUE_GALLERY;
 
-  const [paymentMethod, setPaymentMethod] = useState("googlepay");
+  const [paymentMethod, setPaymentMethod] = useState("stripe");
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSignIn, setShowSignIn] = useState(false);
   const [activeImage, setActiveImage] = useState(0);
@@ -120,6 +120,10 @@ export function CheckoutPage() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [cardNumber, setCardNumber] = useState("4242 4242 4242 4242");
+  const [expiry, setExpiry] = useState("12/30");
+  const [cvc, setCvc] = useState("123");
+  const [cardName, setCardName] = useState("");
 
   // Redirect if not logged in (but also allow sign-in modal)
   useEffect(() => {
@@ -142,19 +146,28 @@ export function CheckoutPage() {
     setIsProcessing(true);
 
     try {
-      const response = await api.createBooking({
+      const booking = await api.createBooking({
         venue_id: bookingData.venueId,
         booking_date: bookingData.bookingDate || "2026-06-15",
         start_time: bookingData.startTime || "09:00:00",
         end_time: bookingData.endTime || "12:00:00",
         seats_reserved: bookingData.seatsReserved || 1,
       });
+      const payment = await api.confirmMockPayment({
+        booking_id: booking.booking_id,
+        card_number: paymentMethod === "stripe" ? cardNumber : "4242 4242 4242 4242",
+      });
+
+      if (payment.payment_status !== "paid") {
+        throw new Error(payment.message || "Payment failed.");
+      }
 
       setIsProcessing(false);
-      toast.success("Booking confirmed!");
+      toast.success("Payment approved. Booking confirmed!");
       navigate("/booking-confirmation", {
         state: {
-          bookingId: response.booking_id,
+          bookingId: payment.booking_id,
+          orderId: payment.order_id,
           venueName: bookingData.venueName,
           bookingDate: bookingData.bookingDate,
           startTime: bookingData.startTime,
@@ -167,8 +180,8 @@ export function CheckoutPage() {
     } catch (err: any) {
       console.error("Booking failed:", err);
       setIsProcessing(false);
-      const errorMsg = err.response?.data?.detail || "Booking placement failed.";
-      toast.error("Booking failed", { description: errorMsg });
+      const errorMsg = err.response?.data?.detail || err.message || "Payment or booking failed.";
+      toast.error("Checkout failed", { description: errorMsg });
     }
   };
 
@@ -339,21 +352,48 @@ export function CheckoutPage() {
                   <div className="space-y-4 pt-4 border-t">
                     <div className="space-y-2">
                       <Label htmlFor="cardNumber">Card Number</Label>
-                      <Input id="cardNumber" placeholder="1234 5678 9012 3456" required />
+                      <Input
+                        id="cardNumber"
+                        placeholder="4242 4242 4242 4242"
+                        value={cardNumber}
+                        onChange={(e) => setCardNumber(e.target.value)}
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Demo cards: 4242 4242 4242 4242 succeeds, 4000 0000 0000 0002 fails.
+                      </p>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="expiry">Expiry Date</Label>
-                        <Input id="expiry" placeholder="MM/YY" required />
+                        <Input
+                          id="expiry"
+                          placeholder="MM/YY"
+                          value={expiry}
+                          onChange={(e) => setExpiry(e.target.value)}
+                          required
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="cvc">CVC</Label>
-                        <Input id="cvc" placeholder="123" required />
+                        <Input
+                          id="cvc"
+                          placeholder="123"
+                          value={cvc}
+                          onChange={(e) => setCvc(e.target.value)}
+                          required
+                        />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="cardName">Name on Card</Label>
-                      <Input id="cardName" placeholder="John Doe" required />
+                      <Input
+                        id="cardName"
+                        placeholder="John Doe"
+                        value={cardName || `${firstName} ${lastName}`.trim()}
+                        onChange={(e) => setCardName(e.target.value)}
+                        required
+                      />
                     </div>
                   </div>
                 )}
@@ -365,7 +405,7 @@ export function CheckoutPage() {
                   disabled={isProcessing}
                   style={{ backgroundColor: "#253c50" }}
                 >
-                  {isProcessing ? "Processing..." : "Complete Booking"}
+                  {isProcessing ? "Processing payment..." : "Pay & Confirm Booking"}
                 </Button>
               </form>
             </CardContent>

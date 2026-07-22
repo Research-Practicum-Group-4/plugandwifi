@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Clock, MapPin, Calendar, CheckCircle, XCircle, CreditCard } from 'lucide-react-native';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { fetchVenueById } from '../../services/venues';
-import { createBooking } from '../../services/bookings';
+import { confirmMockPayment, createBooking } from '../../services/bookings';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
@@ -87,6 +87,10 @@ export function CheckoutScreen({ navigation, route }: RootStackScreenProps<'Chec
   const [loadingVenue, setLoadingVenue] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [step, setStep] = useState<'review' | 'payment'>('review');
+  const [cardNumber, setCardNumber] = useState('4242 4242 4242 4242');
+  const [expiry, setExpiry] = useState('12/30');
+  const [cvc, setCvc] = useState('123');
+  const [cardName, setCardName] = useState('');
 
   const dates = useMemo(() => Array.from({length:5},(_,i) => {const d = new Date(); d.setDate(d.getDate()+i); return d;}), []);
   const [selectedDate, setSelectedDate] = useState(dates[0]);
@@ -142,7 +146,14 @@ export function CheckoutScreen({ navigation, route }: RootStackScreenProps<'Chec
         end_time: `${String(endHour).padStart(2,'0')}:00:00`,
         seats_reserved: 1,
       }, token ?? undefined);
-      setResult({ success: true, message: `Order #${res.order_id} confirmed!` });
+      const payment = await confirmMockPayment({
+        booking_id: res.id,
+        card_number: cardNumber,
+      }, token ?? undefined);
+      if (payment.payment_status !== 'paid') {
+        throw new Error(payment.message || 'Payment failed.');
+      }
+      setResult({ success: true, message: `Order #${payment.order_id} confirmed!` });
     } catch (e: any) {
       setResult({ success: false, message: e.message || 'Booking failed.' });
     }
@@ -218,6 +229,41 @@ export function CheckoutScreen({ navigation, route }: RootStackScreenProps<'Chec
             <Text style={styles.paymentTitle}>Simulated Payment</Text>
             <Text style={styles.paymentDesc}>This is a demo payment. In production, Stripe or other gateway would process your card here.</Text>
             <View style={styles.paymentDivider} />
+            <TextInput
+              style={styles.paymentInput}
+              placeholder="Card number"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="number-pad"
+              value={cardNumber}
+              onChangeText={setCardNumber}
+            />
+            <View style={styles.paymentInputRow}>
+              <TextInput
+                style={[styles.paymentInput, styles.paymentHalfInput]}
+                placeholder="Expiry"
+                placeholderTextColor={colors.textMuted}
+                value={expiry}
+                onChangeText={setExpiry}
+              />
+              <TextInput
+                style={[styles.paymentInput, styles.paymentHalfInput]}
+                placeholder="CVC"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="number-pad"
+                value={cvc}
+                onChangeText={setCvc}
+              />
+            </View>
+            <TextInput
+              style={styles.paymentInput}
+              placeholder="Name on card"
+              placeholderTextColor={colors.textMuted}
+              value={cardName}
+              onChangeText={setCardName}
+            />
+            <Text style={styles.paymentHelp}>
+              Demo cards: 4242 4242 4242 4242 succeeds, 4000 0000 0000 0002 fails.
+            </Text>
             <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Total charge</Text><Text style={styles.totalValue}>${price+SERVICE_FEE}</Text></View>
           </View>
         </>)}
@@ -293,6 +339,10 @@ const styles = StyleSheet.create({
   paymentTitle: { fontSize: 16, fontWeight: '600', color: colors.text },
   paymentDesc: { fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   paymentDivider: { height: 1, backgroundColor: colors.border, width: '100%', marginVertical: spacing.xs },
+  paymentInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: colors.text, backgroundColor: colors.white, width: '100%' },
+  paymentInputRow: { flexDirection: 'row', gap: spacing.sm, width: '100%' },
+  paymentHalfInput: { flex: 1 },
+  paymentHelp: { fontSize: 12, color: colors.textMuted, textAlign: 'center', lineHeight: 18 },
   resultOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   resultCard: { width: '85%', backgroundColor: colors.white, borderRadius: 20, padding: spacing.xl, alignItems: 'center', gap: spacing.md },
   resultTitle: { fontSize: 20, fontWeight: '700' },

@@ -1074,6 +1074,8 @@ def test_create_booking_success():
     )
     assert response.status_code == 200
     assert response.json()["user_id"] == 1
+    assert response.json()["status"] == "pending_payment"
+    assert response.json()["payment_status"] == "pending"
 
 
 def test_create_booking_ignores_client_user_id():
@@ -1106,6 +1108,66 @@ def test_create_booking_ignores_client_user_id():
 
     assert response.status_code == 200
     assert response.json()["user_id"] == 1
+
+
+def test_mock_payment_confirm_success_marks_booking_paid():
+    booking_response = client.post(
+        "/api/bookings",
+        json={
+            "venue_id": "osm_296568074",
+            "booking_date": "2026-06-15",
+            "start_time": "09:00:00",
+            "end_time": "10:00:00",
+            "seats_reserved": 1
+        },
+        headers=get_test_user_headers()
+    )
+    booking_id = booking_response.json()["id"]
+
+    response = client.post(
+        "/api/payments/mock-confirm",
+        json={
+            "booking_id": booking_id,
+            "card_number": "4242 4242 4242 4242"
+        },
+        headers=get_test_user_headers()
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["booking_id"] == booking_id
+    assert data["status"] == "confirmed"
+    assert data["payment_status"] == "paid"
+
+
+def test_mock_payment_confirm_failure_marks_booking_failed():
+    booking_response = client.post(
+        "/api/bookings",
+        json={
+            "venue_id": "osm_296568074",
+            "booking_date": "2026-06-15",
+            "start_time": "09:00:00",
+            "end_time": "10:00:00",
+            "seats_reserved": 1
+        },
+        headers=get_test_user_headers()
+    )
+    booking_id = booking_response.json()["id"]
+
+    response = client.post(
+        "/api/payments/mock-confirm",
+        json={
+            "booking_id": booking_id,
+            "card_number": "4000 0000 0000 0002"
+        },
+        headers=get_test_user_headers()
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["booking_id"] == booking_id
+    assert data["status"] == "payment_failed"
+    assert data["payment_status"] == "failed"
 
 
 def test_register_flow():
