@@ -436,25 +436,9 @@ export function HomePage() {
                           >
                             {venue.suitabilityScore}/100
                           </span>
-                          </div>
-                          <div className="flex items-start justify-between">
-                            <h4>{venue.name}</h4>
-                            <div className="flex items-center gap-1">
-                              <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
-                              <span>{venue.rating}</span>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-muted-foreground">Suitability for you</span>
-                              <span
-                                className="font-semibold"
-                                style={{ color: getSuitabilityColor(suitability) }}
-                              >
-                                {suitability}/100
-                              </span>
-                            </div>
-                          </div>
+                        </div>
+                      )}
+                          </span>
                           <p className="text-muted-foreground text-sm">
                             {venue.cuisine_type} • {venue.distance_km}km away
                           </p>
