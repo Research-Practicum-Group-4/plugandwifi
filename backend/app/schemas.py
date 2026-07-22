@@ -51,8 +51,24 @@ class ChatbotRecommendRequest(BaseModel):
 
     message: str = Field(min_length=1)
 
+    chat_history: list["ChatbotHistoryMessage"] = Field(
+        default_factory=list
+    )
+
+
+class ChatbotHistoryMessage(BaseModel):
+
+    role: Literal["user", "assistant"]
+
+    message: str = Field(
+        min_length=1,
+        max_length=500
+    )
+
 
 class ChatbotSearchParameters(BaseModel):
+
+    venue_name: str | None = None
 
     location: str | None = None
 

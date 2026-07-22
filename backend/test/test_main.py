@@ -347,7 +347,7 @@ def test_chatbot_recommend_returns_real_venue_suggestions(monkeypatch):
     response = client.post(
         "/api/chatbot/recommend",
         json={
-            "message": "Find me a library with Wi-Fi near UCD that is not too busy now."
+            "message": "Find me a library with Wi-Fi and plug access near UCD that is not too busy now."
         }
     )
 
@@ -355,12 +355,15 @@ def test_chatbot_recommend_returns_real_venue_suggestions(monkeypatch):
     data = response.json()
     assert data["model"] == "gemini-test-model"
     assert data["search_parameters"]["location"] == "UCD"
+    assert data["search_parameters"]["venue_name"] is None
     assert data["search_parameters"]["venue_type"] == "library"
     assert data["search_parameters"]["wifi"] is True
+    assert data["search_parameters"]["plug_access"] == 1
     assert data["search_parameters"]["busyness"] == "low"
     assert data["search_parameters"]["time"] == "now"
     assert data["venues"][0]["venue_id"] == "osm_296568074"
     assert data["venues"][0]["busyness_label"] == "Low"
+    assert "Top matches:" in data["response"]
     assert data["follow_up_question"] is None
 
 
@@ -371,11 +374,11 @@ def test_chatbot_recommend_uses_extracted_radius_and_location(monkeypatch):
         lambda message: {
             "location": "UCD Library",
             "radius_km": 0.1,
-            "venue_type": None,
+            "venue_type": "library",
             "date": None,
             "start_time": None,
             "wifi": True,
-            "plug_access": None,
+            "plug_access": 1,
             "busyness": None,
             "time": "now"
         }
@@ -403,6 +406,34 @@ def test_chatbot_recommend_uses_extracted_radius_and_location(monkeypatch):
     ] == ["osm_296568074"]
 
 
+def test_chatbot_recommend_applies_default_radius_for_near_location(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message: {
+            "location": "Times Square",
+            "radius_km": None,
+            "venue_type": "cafe",
+            "date": None,
+            "start_time": None,
+            "wifi": True,
+            "plug_access": 1,
+            "busyness": None,
+            "time": None
+        }
+    )
+
+    search_parameters = main_module.infer_chatbot_search_parameters(
+        "I want something near Times Square with Wi-Fi"
+    )
+
+    assert search_parameters.location == "Times Square"
+    assert (
+        search_parameters.radius_km
+        == main_module.CHATBOT_DEFAULT_LOCATION_RADIUS_KM
+    )
+
+
 def test_chatbot_recommend_applies_advanced_filters(monkeypatch):
     monkeypatch.setattr(
         main_module,
@@ -410,7 +441,7 @@ def test_chatbot_recommend_applies_advanced_filters(monkeypatch):
         lambda message: {
             "location": None,
             "radius_km": None,
-            "venue_type": None,
+            "venue_type": "library",
             "date": "2026-07-24",
             "start_time": "14:30",
             "wifi": True,
@@ -466,11 +497,22 @@ def test_default_gemini_model_uses_flash_lite(monkeypatch):
     assert main_module.get_gemini_model() == "gemini-3.1-flash-lite"
 
 
-def test_chatbot_recommend_asks_follow_up_for_unclear_request(monkeypatch):
+def test_chatbot_recommend_returns_default_recommendations_without_preferences(monkeypatch):
     monkeypatch.setattr(
         main_module,
         "call_gemini_search_parameter_extraction",
         lambda message: None
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, hour=None, day_type=None, prediction_date=None, selected_date=None, selected_time=None: {
+            venue_id: {
+                "busyness_score": 20,
+                "busyness_label": "Low"
+            }
+            for venue_id in venue_ids
+        }
     )
 
     response = client.post(
@@ -482,9 +524,39 @@ def test_chatbot_recommend_asks_follow_up_for_unclear_request(monkeypatch):
 
     assert response.status_code == 200
     data = response.json()
+    assert 1 <= len(data["venues"]) <= 3
+    assert data["follow_up_question"] is None
+    assert data["response"] == (
+        "Here are three strong default picks based on suitability, lower busyness, and rating."
+    )
+
+
+def test_chatbot_recommend_asks_for_missing_core_preferences(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message: {
+            "location": "Times Square",
+            "radius_km": None,
+            "venue_type": "cafe",
+            "wifi": True,
+            "plug_access": None,
+            "time": None
+        }
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Find me a cafe near Times Square with Wi-Fi."
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
     assert data["venues"] == []
     assert data["follow_up_question"] == (
-        "Could you share the area, venue type, or workspace features you need?"
+        "Before I recommend venues, tell me your plug access. For venue type, examples are cafe, restaurant, hotel, library, or workspace."
     )
 
 
@@ -497,6 +569,7 @@ def test_chatbot_recommend_returns_useful_no_result(monkeypatch):
             "radius_km": None,
             "venue_type": "restaurant",
             "wifi": False,
+            "plug_access": 0,
             "busyness": None,
             "time": None
         }
@@ -516,6 +589,164 @@ def test_chatbot_recommend_returns_useful_no_result(monkeypatch):
     assert data["response"] == (
         "I could not find matching venues. Try increasing the radius or relaxing one of the filters."
     )
+
+
+def test_chatbot_recommend_treats_unanchored_location_as_venue_name(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message: {
+            "venue_name": None,
+            "location": "Blue Bottle",
+            "radius_km": None,
+            "venue_type": None,
+            "date": None,
+            "start_time": None,
+            "wifi": None,
+            "plug_access": None,
+            "busyness": None,
+            "time": None
+        }
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, hour=None, day_type=None, prediction_date=None, selected_date=None, selected_time=None: {
+            venue_id: {}
+            for venue_id in venue_ids
+        }
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Recommend a Blue Bottle venue."
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["search_parameters"]["venue_name"] == "Blue Bottle"
+    assert data["search_parameters"]["location"] is None
+
+
+def test_chatbot_recommend_returns_specific_venue_lookup_response(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message: {
+            "venue_name": "UCD Library",
+            "location": None,
+            "radius_km": None,
+            "venue_type": None,
+            "date": None,
+            "start_time": None,
+            "wifi": None,
+            "plug_access": None,
+            "busyness": None,
+            "time": None
+        }
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, hour=None, day_type=None, prediction_date=None, selected_date=None, selected_time=None: {
+            venue_id: {}
+            for venue_id in venue_ids
+        }
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Recommend UCD Library."
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["venues"][0]["venue_id"] == "osm_296568074"
+    assert data["response"].startswith("I found UCD Library")
+    assert "Top matches:" not in data["response"]
+
+
+def test_chatbot_recommend_passes_recent_history_to_extractor(monkeypatch):
+    captured = {}
+
+    def fake_extractor(message, chat_history=None):
+        captured["message"] = message
+        captured["chat_history"] = chat_history
+        return {
+            "venue_name": None,
+            "location": "UCD",
+            "radius_km": None,
+            "venue_type": "library",
+            "date": None,
+            "start_time": None,
+            "wifi": True,
+            "plug_access": 1,
+            "busyness": "low",
+            "time": "now"
+        }
+
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        fake_extractor
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, hour=None, day_type=None, prediction_date=None, selected_date=None, selected_time=None: {}
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "What about something quieter?",
+            "chat_history": [
+                {
+                    "role": "user",
+                    "message": "Find me a library near UCD."
+                },
+                {
+                    "role": "assistant",
+                    "message": "I found a few libraries near UCD."
+                }
+            ]
+        }
+    )
+
+    assert response.status_code == 200
+    assert captured["message"] == "What about something quieter?"
+    assert len(captured["chat_history"]) == 2
+    assert captured["chat_history"][0].message == "Find me a library near UCD."
+    assert captured["chat_history"][1].role == "assistant"
+
+
+def test_normalize_chatbot_history_enforces_window_limits():
+    oversized_message = "x" * 500
+    chat_history = [
+        main_module.ChatbotHistoryMessage(
+            role="user",
+            message=f"old-{index}"
+        )
+        for index in range(10)
+    ] + [
+        main_module.ChatbotHistoryMessage(
+            role="assistant",
+            message=oversized_message
+        )
+    ]
+
+    normalized_history = main_module.normalize_chatbot_history(
+        chat_history
+    )
+
+    assert len(normalized_history) <= main_module.CHATBOT_HISTORY_MAX_MESSAGES
+    assert normalized_history[-1].message == oversized_message[:main_module.CHATBOT_HISTORY_MAX_MESSAGE_CHARS]
+    assert sum(len(item.message) for item in normalized_history) <= main_module.CHATBOT_HISTORY_MAX_TOTAL_CHARS
+    assert normalized_history[0].message.startswith("old-")
 
 
 def test_chatbot_recommend_requires_message():
