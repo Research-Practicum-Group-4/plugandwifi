@@ -438,7 +438,6 @@ export function HomePage() {
                           </span>
                         </div>
                       )}
-                          </span>
                           <p className="text-muted-foreground text-sm">
                             {venue.cuisine_type} • {venue.distance_km}km away
                           </p>
