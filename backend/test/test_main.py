@@ -201,6 +201,118 @@ def test_get_busyness_predictions_uses_zone_model_contract(
     main_module.BUSYNESS_PREDICTION_CACHE.clear()
 
 
+def test_busyness_diagnostics_reports_ready_with_sample_prediction(
+    monkeypatch,
+    tmp_path
+):
+    main_module.BUSYNESS_PREDICTION_CACHE.clear()
+
+    model_path = tmp_path / "zone_busyness_model.joblib"
+    venues_csv_path = tmp_path / "nyc_venues.csv"
+    model_path.write_text("placeholder")
+    venues_csv_path.write_text("placeholder")
+
+    class FakeZonePredictor:
+        def predict_many(self, venues, date, hour):
+            return [
+                {
+                    "venue_id": venue["venue_id"],
+                    "busyness_score": 64,
+                    "busyness_label": "Medium"
+                }
+                for _, venue in venues.iterrows()
+            ]
+
+    pd = __import__("pandas")
+    venue_rows = pd.DataFrame(
+        [
+            {
+                "venue_id": "osm_296568074",
+                "zone_id": 101
+            }
+        ]
+    )
+
+    monkeypatch.setenv(
+        "BUSYNESS_MODEL_PATH",
+        str(model_path)
+    )
+    monkeypatch.setenv(
+        "BUSYNESS_VENUES_CSV",
+        str(venues_csv_path)
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_zone_busyness_predictor",
+        lambda: FakeZonePredictor()
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_venues_dataframe",
+        lambda: venue_rows
+    )
+
+    response = client.get(
+        "/api/diagnostics/busyness?sample_venue_id=osm_296568074"
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ready"
+    assert data["model_exists"] is True
+    assert data["venues_csv_exists"] is True
+    assert data["predictor_loaded"] is True
+    assert data["venues_csv_loaded"] is True
+    assert data["missing_columns"] == []
+    assert data["sample"]["zone_id"] == 101
+    assert data["sample"]["prediction_ready"] is True
+    assert data["sample"]["prediction"]["busyness_score"] == 64
+    assert data["sample"]["prediction"]["busyness_label"] == "Medium"
+
+    main_module.BUSYNESS_PREDICTION_CACHE.clear()
+
+
+def test_busyness_diagnostics_reports_not_ready_when_artifacts_missing(
+    monkeypatch,
+    tmp_path
+):
+    missing_model_path = tmp_path / "missing_model.joblib"
+    missing_venues_csv_path = tmp_path / "missing_venues.csv"
+
+    monkeypatch.setenv(
+        "BUSYNESS_MODEL_PATH",
+        str(missing_model_path)
+    )
+    monkeypatch.setenv(
+        "BUSYNESS_VENUES_CSV",
+        str(missing_venues_csv_path)
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_zone_busyness_predictor",
+        lambda: None
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_venues_dataframe",
+        lambda: None
+    )
+
+    response = client.get("/api/diagnostics/busyness")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["status"] == "not_ready"
+    assert data["model_exists"] is False
+    assert data["venues_csv_exists"] is False
+    assert data["predictor_loaded"] is False
+    assert data["venues_csv_loaded"] is False
+    assert data["missing_columns"] == [
+        "venue_id",
+        "zone_id"
+    ]
+
+
 def test_chatbot_recommend_returns_real_venue_suggestions(monkeypatch):
     def fake_get_busyness_predictions(
         venue_ids,

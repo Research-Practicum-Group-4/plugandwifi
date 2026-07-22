@@ -79,6 +79,21 @@ Visit `http://localhost:8080` (Swagger UI at `/docs`).
 - **Response**: Performs a `SELECT 1` via SQLAlchemy; returns 200 if DB is reachable, otherwise 500.
 - **Use**: Continuous health monitoring and CI/CD gatekeeping.
 
+### Busyness Readiness: `/api/diagnostics/busyness`
+- **Method**: GET
+- **Optional Query**: `sample_venue_id=<venue_id>`
+- **Response**: Checks whether the busyness model, venue-zone CSV, required columns, predictor, and optional sample prediction are available.
+- **Use**: Cloud Run diagnostics for model readiness. This endpoint is separate from `/api/health` because database connectivity does not prove busyness prediction is available.
+
+Production Cloud Run should set:
+
+```env
+BUSYNESS_MODEL_PATH=/mnt/busyness-models/busyness/zone_busyness_model.joblib
+BUSYNESS_VENUES_CSV=/mnt/busyness-models/busyness/nyc_venues.csv
+```
+
+The mounted CSV must include `venue_id` and `zone_id`. Venue detail requests emit a structured `busyness_prediction` log with the venue id, zone id, New York prediction datetime, cache key, final score, and final label.
+
 ---
 
 ## 🚀 CI/CD Pipeline Architecture
