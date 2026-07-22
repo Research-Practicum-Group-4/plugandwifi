@@ -5,6 +5,7 @@ import {
   VenueAvailability,
   BookingRequest,
   BookingResponse,
+  MockPaymentResponse,
   VenueListResponse,
   UserBookingItem,
   UserBookingsResponse,
@@ -723,16 +724,64 @@ export const api = {
 
       return {
         booking_id: newBookingId,
-        status: "confirmed",
-        message: "Booking created successfully"
+        status: "pending_payment",
+        message: "Booking created pending payment",
+        payment_status: "pending",
+        order_id: newBooking.order_id
       };
     } else {
       const response = await axiosInstance.post<any>("/bookings", booking);
       return {
         booking_id: response.data.id || response.data.booking_id,
         status: response.data.status,
-        message: "Booking created successfully"
+        message: "Booking created pending payment",
+        payment_status: response.data.payment_status,
+        order_id: response.data.order_id
       };
+    }
+  },
+
+  confirmMockPayment: async (payment: {
+    booking_id: number;
+    card_number: string;
+  }): Promise<MockPaymentResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(700);
+      const booking = mockBookings.find(b => b.booking_id === payment.booking_id);
+      if (!booking) {
+        throw new Error("Booking not found");
+      }
+
+      const normalizedCard = payment.card_number.replace(/\D/g, "");
+      if (normalizedCard === "4242424242424242") {
+        booking.payment_status = "paid";
+        booking.status = "upcoming";
+        return {
+          booking_id: booking.booking_id,
+          order_id: booking.order_id,
+          status: "confirmed",
+          payment_status: "paid",
+          message: "Mock payment approved"
+        };
+      }
+
+      if (normalizedCard === "4000000000000002") {
+        booking.payment_status = "failed";
+        booking.status = "payment_failed";
+        return {
+          booking_id: booking.booking_id,
+          order_id: booking.order_id,
+          status: "payment_failed",
+          payment_status: "failed",
+          message: "Mock payment declined"
+        };
+      }
+
+      throw new Error("Use 4242 4242 4242 4242 for success or 4000 0000 0000 0002 for failure.");
+    } else {
+      const response = await axiosInstance.post<MockPaymentResponse>("/payments/mock-confirm", payment);
+      return response.data;
     }
   },
 

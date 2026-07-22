@@ -399,6 +399,26 @@ class BookingResponse(BaseModel):
         from_attributes = True
 
 
+class MockPaymentConfirmRequest(BaseModel):
+
+    booking_id: int
+
+    card_number: str = Field(min_length=12)
+
+
+class MockPaymentResponse(BaseModel):
+
+    booking_id: int
+
+    order_id: str
+
+    status: str
+
+    payment_status: str
+
+    message: str
+
+
 class ReviewCreate(BaseModel):
 
     booking_id: int

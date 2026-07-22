@@ -34,6 +34,8 @@ from .schemas import (
     VenueAvailabilityResponse,
     BookingCreate,
     BookingResponse,
+    MockPaymentConfirmRequest,
+    MockPaymentResponse,
     ReviewCreate,
     ReviewResponse,
     UserBookingsResponse,
@@ -1443,7 +1445,7 @@ def get_booking_category(
 ):
     status = (booking.status or "").lower()
 
-    if status in {"cancelled", "canceled"}:
+    if status in {"cancelled", "canceled", "payment_failed"}:
         return "cancelled"
 
     booking_end = datetime.combine(
@@ -3112,7 +3114,7 @@ def create_booking(
             func.coalesce(
                 func.lower(Booking.status),
                 "confirmed"
-            ).notin_({"cancelled", "canceled"})
+            ).notin_({"cancelled", "canceled", "payment_failed"})
         )
         .scalar()
     )
@@ -3125,7 +3127,8 @@ def create_booking(
     
     booking = Booking(
         order_id=f"ORD-{uuid.uuid4().hex[:8]}",
-        payment_status="paid",
+        payment_status="pending",
+        status="pending_payment",
 
         user_id=current_user.id,
         venue_id=payload.venue_id,
@@ -3142,6 +3145,61 @@ def create_booking(
     db.refresh(booking)
 
     return booking
+
+
+@app.post(
+    "/api/payments/mock-confirm",
+    response_model=MockPaymentResponse
+)
+def confirm_mock_payment(
+    payload: MockPaymentConfirmRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    booking = (
+        db.query(Booking)
+        .filter(Booking.id == payload.booking_id)
+        .filter(Booking.user_id == current_user.id)
+        .with_for_update()
+        .first()
+    )
+
+    if booking is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Booking not found"
+        )
+
+    normalized_card = re.sub(
+        r"\D",
+        "",
+        payload.card_number
+    )
+
+    if normalized_card == "4242424242424242":
+        booking.payment_status = "paid"
+        booking.status = "confirmed"
+        message = "Mock payment approved"
+    elif normalized_card == "4000000000000002":
+        booking.payment_status = "failed"
+        booking.status = "payment_failed"
+        message = "Mock payment declined"
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Use mock card 4242 4242 4242 4242 for success or 4000 0000 0000 0002 for failure"
+        )
+
+    db.commit()
+    db.refresh(booking)
+
+    return {
+        "booking_id": booking.id,
+        "order_id": booking.order_id,
+        "status": booking.status,
+        "payment_status": booking.payment_status,
+        "message": message
+    }
 
 
 @app.patch(

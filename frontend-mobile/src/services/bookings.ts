@@ -1,4 +1,4 @@
-import { apiPost, apiGet } from './api';
+import { apiGet, apiPost } from './api';
 
 export interface BookingPayload {
   venue_id: string;
@@ -65,6 +65,13 @@ export async function fetchUserBookings(token?: string): Promise<UserBookingsRes
   return apiGet<UserBookingsResponse>('/api/users/me/bookings', token);
 }
 
-export async function cancelBooking(bookingId: number, token?: string): Promise<{ booking_id: number; status: string; message: string }> {
-  return apiPost<{ booking_id: number; status: string; message: string }>(`/api/bookings/${bookingId}/cancel`, {}, token);
+export async function cancelBooking(
+  bookingId: number,
+  token?: string,
+): Promise<{ booking_id: number; status: string; message: string }> {
+  return apiPost<{ booking_id: number; status: string; message: string }>(
+    `/api/bookings/${bookingId}/cancel`,
+    {},
+    token,
+  );
 }
