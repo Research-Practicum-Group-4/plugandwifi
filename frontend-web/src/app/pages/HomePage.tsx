@@ -398,7 +398,7 @@ export function HomePage() {
           <>
             <div className="grid md:grid-cols-3 gap-6">
               {visibleVenues.map((venue) => {
-                const busyness = busynessDisplay(venue.venue_id, venue.busyness_score);
+                const busyness = busynessDisplay(venue.venue_id, venue.busyness_score, venue.busyness_label);
                 const suitability = venue.suitability_score != null
                   ? Math.round(venue.suitability_score)
                   : Math.round(venue.rating * 20);
@@ -504,7 +504,7 @@ export function HomePage() {
 function VenuePhoto({ venue }: { venue: EnrichedVenue }) {
   return (
     <img
-      src={venueImage(venue.venue_id, venue.cuisine_type)}
+      src={venueImage(venue.venue_id, venue.osm_type ?? venue.cuisine_type)}
       alt={venue.name}
       className="w-full h-full object-cover"
     />

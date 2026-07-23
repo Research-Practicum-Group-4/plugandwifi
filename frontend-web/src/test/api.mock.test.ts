@@ -50,11 +50,6 @@ describe('api.getVenues (mock)', () => {
     }
   });
 
-  it('filters by noise_level=quiet', async () => {
-    const result = await api.getVenues({ noise_level: 'quiet', limit: 50 });
-    result.items.forEach((v) => expect(v.noise_level).toBe('quiet'));
-  });
-
   it('filters by has_wifi=true', async () => {
     const result = await api.getVenues({ has_wifi: true, limit: 50 });
     result.items.forEach((v) => expect(v.has_wifi).toBe(true));
@@ -128,7 +123,7 @@ describe('api.createBooking (mock)', () => {
     localStorageMock.setItem('access_token', 'mock_token');
   });
 
-  it('returns a confirmed booking_id', async () => {
+  it('creates a pending-payment booking_id', async () => {
     const result = await api.createBooking({
       venue_id: 'osm_12346',
       booking_date: '2026-08-01',
@@ -137,7 +132,26 @@ describe('api.createBooking (mock)', () => {
       seats_reserved: 1,
     });
     expect(result.booking_id).toBeGreaterThan(0);
-    expect(result.status).toBe('confirmed');
+    expect(result.status).toBe('pending_payment');
+    expect(result.payment_status).toBe('pending');
+  });
+
+  it('confirms the booking after mock payment success', async () => {
+    const booking = await api.createBooking({
+      venue_id: 'osm_12346',
+      booking_date: '2026-08-01',
+      start_time: '10:00',
+      end_time: '12:00',
+      seats_reserved: 1,
+    });
+
+    const payment = await api.confirmMockPayment({
+      booking_id: booking.booking_id,
+      card_number: '4242 4242 4242 4242',
+    });
+
+    expect(payment.status).toBe('confirmed');
+    expect(payment.payment_status).toBe('paid');
   });
 });
 

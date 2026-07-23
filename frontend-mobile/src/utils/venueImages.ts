@@ -6,7 +6,7 @@ const imageMap: Record<string, string> = {
   'business lounge': 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=400',
   restaurant: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400',
   bar: 'https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=400',
-  bakery: 'https://images.unsplash.com/photo-1555507036-ab1f4038024a?w=400',
+  bakery: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=400',
   co_working: 'https://images.unsplash.com/photo-1497215842964-222b430dc094?w=400',
 };
 

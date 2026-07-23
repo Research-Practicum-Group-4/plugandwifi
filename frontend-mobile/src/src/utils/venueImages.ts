@@ -8,7 +8,7 @@ const IMG_POOL = [
   'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=600',
   'https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=600',
   'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600',
-  'https://images.unsplash.com/photo-1550966871-3ed3cdb51f3a?w=600',
+  'https://images.unsplash.com/photo-1600508774634-4e11d34730e2?w=600',
   'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=600',
   'https://images.unsplash.com/photo-1559339352-11d035aa65de?w=600',
   'https://images.unsplash.com/photo-1507133750040-4a8f57021571?w=600',
@@ -17,8 +17,8 @@ const IMG_POOL = [
   'https://images.unsplash.com/photo-1544148103-0773bf10d330?w=600',
   'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=600',
   'https://images.unsplash.com/photo-1466978913421-dad2ebd01d17?w=600',
-  'https://images.unsplash.com/photo-1504718855392-0b0b1b8a3a1b?w=600',
-  'https://images.unsplash.com/photo-1537047902294-62a40c13b2e6?w=600',
+  'https://images.unsplash.com/photo-1424847651672-bf20a4b0982b?w=600',
+  'https://images.unsplash.com/photo-1537047902294-62a40c20a6ae?w=600',
 ];
 
 export function getVenueImage(venue: Venue): string {

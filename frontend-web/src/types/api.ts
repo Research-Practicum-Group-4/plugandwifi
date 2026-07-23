@@ -25,6 +25,7 @@ export interface Venue {
   [key: string]: unknown;
   venue_id: string;
   name: string;
+  osm_type?: string;
   cuisine_type: string;
   distance_km: number;
   has_wifi: boolean;

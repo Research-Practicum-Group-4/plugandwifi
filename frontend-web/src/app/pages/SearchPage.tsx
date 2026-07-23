@@ -60,11 +60,9 @@ const EDI_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
 };
 
 const SUPPORTED_VENUE_TYPES = [
-  "cafe",
-  "library",
+  "bakery",
   "restaurant",
-  "workspace",
-  "office",
+  "cafe",
   "hotel",
 ];
 
@@ -837,7 +835,7 @@ export function SearchPage() {
                     const suitability = venue.suitability_score != null
                       ? Math.round(venue.suitability_score)
                       : Math.round(venue.rating * 20);
-                    const busyness = busynessDisplay(venue.venue_id, venue.busyness_score);
+                    const busyness = busynessDisplay(venue.venue_id, venue.busyness_score, venue.busyness_label);
                     const amenities: string[] = [];
                     if (venue.has_wifi) amenities.push("WiFi");
                     if (venue.wifi_free) amenities.push("Free WiFi");
@@ -852,7 +850,7 @@ export function SearchPage() {
                         <div className="grid md:grid-cols-[250px_1fr] gap-4">
                           <div className="aspect-video md:aspect-square overflow-hidden">
                             <img
-                              src={venueImage(venue.venue_id, venue.cuisine_type)}
+                              src={venueImage(venue.venue_id, venue.osm_type ?? venue.cuisine_type)}
                               alt={venue.name}
                               className="w-full h-full object-cover"
                             />

@@ -15,7 +15,7 @@ import { api } from "../../services/api";
 // ** HARDCODED ** - default venue gallery images for checkout
 const DEFAULT_VENUE_GALLERY = [
   "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&h=400&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1519167758481-83f29da8c851?w=600&h=400&fit=crop&auto=format",
+  "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=600&h=400&fit=crop&auto=format",
   "https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=600&h=400&fit=crop&auto=format",
   "https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&h=400&fit=crop&auto=format",
 ];

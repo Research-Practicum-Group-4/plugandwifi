@@ -5,6 +5,20 @@ export interface BusynessDisplay {
   color: string;
 }
 
+const BUSYNESS_LABEL_LOOKUP: Record<string, BusynessDisplay> = {
+  quiet: { label: "You'll be the only one", color: "bg-emerald-100 text-emerald-700" },
+  very_quiet: { label: "You'll be the only one", color: "bg-emerald-100 text-emerald-700" },
+  tiny_group: { label: "It's a tiny group today", color: "bg-teal-100 text-teal-700" },
+  light: { label: "It's a tiny group today", color: "bg-teal-100 text-teal-700" },
+  moderate: { label: "It's a normal day", color: "bg-blue-100 text-blue-700" },
+  normal: { label: "It's a normal day", color: "bg-blue-100 text-blue-700" },
+  busy: { label: "It's a busy day", color: "bg-orange-100 text-orange-700" },
+  loud: { label: "It's a busy day", color: "bg-orange-100 text-orange-700" },
+  packed: { label: "It's a full house!", color: "bg-red-100 text-red-700" },
+  full: { label: "It's a full house!", color: "bg-red-100 text-red-700" },
+  full_house: { label: "It's a full house!", color: "bg-red-100 text-red-700" },
+};
+
 const BUSYNESS_LEVELS: BusynessDisplay[] = [
   { label: "You'll be the only one", color: "bg-emerald-100 text-emerald-700" },
   { label: "It's a tiny group today", color: "bg-teal-100 text-teal-700" },
@@ -21,7 +35,20 @@ function scoreToIndex(score: number): number {
   return 4;
 }
 
-export function busynessDisplay(venueId: string, busynessScore?: number | null): BusynessDisplay {
+function normalizeBusynessLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+export function busynessDisplay(
+  venueId: string,
+  busynessScore?: number | null,
+  busynessLabel?: string | null,
+): BusynessDisplay {
+  if (busynessLabel) {
+    const normalized = normalizeBusynessLabel(busynessLabel);
+    const mapped = BUSYNESS_LABEL_LOOKUP[normalized];
+    if (mapped) return mapped;
+  }
   if (busynessScore != null) {
     return BUSYNESS_LEVELS[scoreToIndex(busynessScore)];
   }
@@ -46,13 +73,13 @@ const PHOTO_POOLS: Record<string, string[]> = {
     "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=600&fit=crop&auto=format",
     "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=600&fit=crop&auto=format",
     "https://images.unsplash.com/photo-1568667256549-094345857637?w=600&fit=crop&auto=format",
-    "https://images.unsplash.com/photo-1574340849735-52d5c2e13a95?w=600&fit=crop&auto=format",
+    "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=600&fit=crop&auto=format",
     "https://images.unsplash.com/photo-1604580864964-0462f5d5b1a8?w=600&fit=crop&auto=format",
   ],
   hotel: [
     "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&fit=crop&auto=format",
     "https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=600&fit=crop&auto=format",
-    "https://images.unsplash.com/photo-1519167758481-83f29da8c851?w=600&fit=crop&auto=format",
+    "https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=600&fit=crop&auto=format",
     "https://images.unsplash.com/photo-1540304453527-62f979142a17?w=600&fit=crop&auto=format",
     "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=600&fit=crop&auto=format",
     "https://images.unsplash.com/photo-1578683010236-d716f9a3f461?w=600&fit=crop&auto=format",
@@ -83,23 +110,23 @@ const PHOTO_POOLS: Record<string, string[]> = {
 
 const PHOTO_POOL_DEFAULT = PHOTO_POOLS.cowork;
 
-function categoryPool(cuisineType: string): string[] {
-  const t = (cuisineType || "").toLowerCase();
-  if (t.includes("coffee") || t.includes("cafe") || t.includes("tea")) return PHOTO_POOLS.coffee;
+function categoryPool(osmType: string): string[] {
+  const t = (osmType || "").toLowerCase();
+  if (t.includes("cafe") || t.includes("coffee_shop")) return PHOTO_POOLS.coffee;
   if (t.includes("library") || t.includes("study")) return PHOTO_POOLS.library;
   if (t.includes("hotel") || t.includes("lounge")) return PHOTO_POOLS.hotel;
-  if (t.includes("restaurant") || t.includes("food") || t.includes("bar")) return PHOTO_POOLS.restaurant;
+  if (t.includes("restaurant") || t.includes("bakery") || t.includes("food") || t.includes("bar")) return PHOTO_POOLS.restaurant;
   if (t.includes("cowork") || t.includes("office") || t.includes("workspace")) return PHOTO_POOLS.cowork;
   return PHOTO_POOL_DEFAULT;
 }
 
-export function venueImage(venueId: string, cuisineType: string): string {
-  const pool = categoryPool(cuisineType);
+export function venueImage(venueId: string, osmType: string): string {
+  const pool = categoryPool(osmType);
   return pool[hashString(venueId) % pool.length];
 }
 
-export function venueImages(venueId: string, cuisineType: string, width = 800): string[] {
-  const pool = categoryPool(cuisineType);
+export function venueImages(venueId: string, osmType: string, width = 800): string[] {
+  const pool = categoryPool(osmType);
   const h = hashString(venueId);
   const primary = h % pool.length;
   const secondary = (h + 3) % pool.length;
@@ -155,11 +182,17 @@ export function enrichVenue(venue: Venue): EnrichedVenue {
   const enrichedPrice = pickPrice(rand);
 
   const certifications: string[] = [];
-  if (venue.wbe_certified) certifications.push("WBE-Certified");
-  if (venue.mbe_certified) certifications.push("MBE-Certified");
-  if (venue.lgbt_friendly) certifications.push("LGBT+ Friendly");
-  if (venue.bcorp_certified) certifications.push("B-Corp Certified");
-  if (venue.vbe_certified) certifications.push("VBE-Certified");
+  const wbeCertified = venue.wbe_certified ?? rand() < 0.2;
+  const mbeCertified = venue.mbe_certified ?? rand() < 0.15;
+  const lgbtFriendly = venue.lgbt_friendly ?? rand() < 0.25;
+  const bcorpCertified = venue.bcorp_certified ?? rand() < 0.1;
+  const vbeCertified = venue.vbe_certified ?? rand() < 0.08;
+
+  if (wbeCertified) certifications.push("WBE-Certified");
+  if (mbeCertified) certifications.push("MBE-Certified");
+  if (lgbtFriendly) certifications.push("LGBT+ Friendly");
+  if (bcorpCertified) certifications.push("B-Corp Certified");
+  if (vbeCertified) certifications.push("VBE-Certified");
 
   return {
     ...venue,
