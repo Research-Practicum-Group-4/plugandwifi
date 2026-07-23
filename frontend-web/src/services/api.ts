@@ -282,19 +282,19 @@ const generateMockVenues = (): VenueDetail[] => {
   for (let i = 5; i < MOCK_VENUE_NUM; i++) {
     const rng = lcg(i * 31337);
     const venue_id = `osm_123${50 + i}`;
-    const name = `${randomChoose(names)} ${i}`;
-    const osm_type = randomChoose(osmTypes);
-    const cuisine_type = randomChoose(cuisineTypes);
-    const cuisine_detail = randomChoose(cuisineDetails);
-    const street = randomChoose(streets);
-    const borough = randomChoose(boroughs);
-    const zipcode = randomChoose(zipcodes);
-    const hourly_profile_label = randomChoose(hourlyProfileLabels);
+    const name = `${rng.pick(names)} ${i}`;
+    const osm_type = rng.pick(osmTypes);
+    const cuisine_type = rng.pick(cuisineTypes);
+    const cuisine_detail = rng.pick(cuisineDetails);
+    const street = rng.pick(streets);
+    const borough = rng.pick(boroughs);
+    const zipcode = rng.pick(zipcodes);
+    const hourly_profile_label = rng.pick(hourlyProfileLabels);
     
     const hourly_profile_score = Math.round((hourly_profile_label === "quiet" ? Math.random() * 0.3 : hourly_profile_label === "moderate" ? 0.3 + Math.random() * 0.4 : 0.7 + Math.random() * 0.3) * 100) / 100;
     const rating = Math.round((3.8 + Math.random() * 1.2) * 10) / 10;
     const hourly_price = Math.round((1.5 + Math.random() * 8) * 2) / 2;
-    const total_seats = randomChoose([15, 20, 25, 30, 40, 50, 100]);
+    const total_seats = rng.pick([15, 20, 25, 30, 40, 50, 100]);
     const seats_avail = Math.floor(Math.random() * total_seats);
     
     const inDublin = Math.random() > 0.5;
@@ -527,6 +527,7 @@ export const api = {
     end_time?: string;
     duration_hours?: number;
     seats_required?: number;
+    sort?: "recommended" | "suitability";
   }): Promise<VenueListResponse> => {
     if (USE_MOCK) {
       await delay(400);
@@ -678,6 +679,7 @@ export const api = {
         setParam("end_time", filters.end_time);
         setParam("duration_hours", filters.duration_hours);
         setParam("seats_required", filters.seats_required);
+        setParam("sort", filters.sort);
       }
       const response = await axiosInstance.get<any>("/venues", { params });
       const raw = response.data;

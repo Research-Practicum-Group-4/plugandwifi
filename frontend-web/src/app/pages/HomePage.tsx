@@ -18,24 +18,21 @@ import {
   Navigation,
   Volume,
   Loader2,
-  MapPin,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { api } from "../../services/api";
 import { MapView } from "../components/MapView";
-import { ManhattanMap } from "../components/ManhattanMap";
-import { manhattanVenues } from "../data/manhattanVenues";
 import { enrichVenue, EnrichedVenue, venueImage, busynessDisplay } from "../utils/venueEnrichment";
 
 const PAGE_SIZE = 6;
 
 const EDI_BADGE_STYLES: Record<string, React.CSSProperties> = {
-  "WBE-Certified":    { background: "repeating-linear-gradient(90deg, transparent, transparent 25%, #9333ea 25%, #9333ea 50%, transparent 50%, transparent 75%, #9333ea 75%, #9333ea 100%)" },
-  "MBE-Certified":    { background: "repeating-linear-gradient(90deg, transparent, transparent 33%, #78350f 33%, #78350f 66%, #000000 66%, #000000 100%)" },
-  "LGBT+ Friendly":   { background: "linear-gradient(90deg, #e40303 0%, #e40303 16.67%, #ff8c00 16.67%, #ff8c00 33.33%, #ffed00 33.33%, #ffed00 50%, #008026 50%, #008026 66.67%, #24408e 66.67%, #24408e 83.33%, #732982 83.33%, #732982 100%)" },
+  "WBE-Certified": { background: "repeating-linear-gradient(90deg, transparent, transparent 25%, #9333ea 25%, #9333ea 50%, transparent 50%, transparent 75%, #9333ea 75%, #9333ea 100%)" },
+  "MBE-Certified": { background: "repeating-linear-gradient(90deg, transparent, transparent 33%, #78350f 33%, #78350f 66%, #000000 66%, #000000 100%)" },
+  "LGBT+ Friendly": { background: "linear-gradient(90deg, #e40303 0%, #e40303 16.67%, #ff8c00 16.67%, #ff8c00 33.33%, #ffed00 33.33%, #ffed00 50%, #008026 50%, #008026 66.67%, #24408e 66.67%, #24408e 83.33%, #732982 83.33%, #732982 100%)" },
   "B-Corp Certified": { backgroundColor: "#2d6a4f" },
-  "VBE-Certified":    { backgroundColor: "#1d4ed8" },
+  "VBE-Certified": { backgroundColor: "#1d4ed8" },
 };
 
 function getSuitabilityColor(score: number): string {
@@ -44,9 +41,6 @@ function getSuitabilityColor(score: number): string {
   return `rgb(${Math.round(40 + ((100 - s) / 50) * 160)}, 180, 0)`;
 }
 
-
-type GeoState = "idle" | "requesting" | "granted" | "denied";
-
 export function HomePage() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -54,19 +48,22 @@ export function HomePage() {
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
   const [showOwnedByFilters, setShowOwnedByFilters] = useState(false);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
+  const [filters, setFilters] = useState({
+    wifi: false,
+    callsAllowed: false,
+    fourPlusStars: false,
+    accessibilityFriendly: false,
+    wbeCertified: false,
+    mbeCertified: false,
+    lgbtFriendly: false,
+    bcorpCertified: false,
+    vbeCertified: false,
+  });
 
-  // Geolocation state machine
-  const [geoState, setGeoState] = useState<GeoState>("idle");
-  const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
-
-  // API venue state
   const [venues, setVenues] = useState<EnrichedVenue[]>([]);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
-
-  // Fallback show-more state (used when API fails)
-  const [fallbackVisible, setFallbackVisible] = useState(PAGE_SIZE);
 
   const locationSuggestions = [
     "Midtown Manhattan",
@@ -79,16 +76,31 @@ export function HomePage() {
     "Flatiron District",
   ].filter((loc) => loc.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  const fetchVenues = useCallback(async (coords?: { lat: number; lon: number }) => {
+  const fetchVenues = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
     try {
       const data = await api.getVenues({
         page: 1,
         limit: 200,
-        ...(coords ? { lat: coords.lat, lon: coords.lon, radius: 5 } : {}),
+        sort: "recommended",
+        wifi: filters.wifi ? true : undefined,
+        calls_allowed: filters.callsAllowed ? true : undefined,
+        accessibility_friendly: filters.accessibilityFriendly ? true : undefined,
+        wbe_certified: filters.wbeCertified ? true : undefined,
+        mbe_certified: filters.mbeCertified ? true : undefined,
+        lgbt_friendly: filters.lgbtFriendly ? true : undefined,
+        bcorp_certified: filters.bcorpCertified ? true : undefined,
+        vbe_certified: filters.vbeCertified ? true : undefined,
       });
-      const sorted = [...data.items].sort((a, b) => b.rating - a.rating);
+      const filteredItems = filters.fourPlusStars
+        ? data.items.filter((venue) => venue.rating >= 4)
+        : data.items;
+      const sorted = [...filteredItems].sort((a, b) => {
+        const suitabilityDiff = (b.suitability_score ?? -1) - (a.suitability_score ?? -1);
+        if (suitabilityDiff !== 0) return suitabilityDiff;
+        return b.rating - a.rating;
+      });
       setVenues(sorted.map(enrichVenue));
       setVisibleCount(PAGE_SIZE);
     } catch {
@@ -96,51 +108,22 @@ export function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filters]);
 
-  // Request browser geolocation on mount; fetch venues once we know coords (or skip)
   useEffect(() => {
-    if (!navigator.geolocation) {
-      fetchVenues();
-      return;
-    }
-    setGeoState("requesting");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-        setUserCoords(coords);
-        setGeoState("granted");
-        fetchVenues(coords);
-      },
-      () => {
-        setGeoState("denied");
-        fetchVenues(); // fall back — unfiltered venue list
-      },
-      { timeout: 8000 }
-    );
+    fetchVenues();
   }, [fetchVenues]);
 
-  const usingFallback = loadError || (!loading && venues.length === 0 && geoState !== "requesting");
-  const visibleVenues = usingFallback ? [] : venues.slice(0, visibleCount);
-  const hasMore = !usingFallback && visibleCount < venues.length;
-  const isLoadingOrGeo = loading || geoState === "requesting";
+  const visibleVenues = venues.slice(0, visibleCount);
+  const hasMore = visibleCount < venues.length;
 
   return (
     <div className="container mx-auto px-4 py-12">
-      {/* Hero Section */}
       <div className="max-w-3xl mx-auto text-center mb-12">
         <h1 className="mb-4">Because all you need is a Plug & Wifi</h1>
         <p className="text-muted-foreground mb-8">
           Book quality workspace with WiFi and power outlets in hotel lobbies, cafes, and lounges
         </p>
-
-        {/* Geo denied nudge */}
-        {geoState === "denied" && (
-          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mb-4">
-            <MapPin className="size-4" />
-            <span>Enable location for nearby results — showing all venues for now</span>
-          </div>
-        )}
 
         <div className="flex gap-2 mb-6">
           <div className="flex-1 relative">
@@ -199,21 +182,41 @@ export function HomePage() {
           </Button>
         </div>
 
-        {/* Filter chips */}
         <div className="flex flex-wrap gap-2 justify-center">
-          <Button variant="outline" size="sm">
+          <Button
+            variant={filters.wifi ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilters((current) => ({ ...current, wifi: !current.wifi }))}
+          >
             <Wifi className="size-4 mr-2" />
             WiFi Available
           </Button>
-          <Button variant="outline" size="sm">
+          <Button
+            variant={filters.callsAllowed ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilters((current) => ({ ...current, callsAllowed: !current.callsAllowed }))}
+          >
             <Phone className="size-4 mr-2" />
             Calls Allowed
           </Button>
-          <Button variant="outline" size="sm">
+          <Button
+            variant={filters.fourPlusStars ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilters((current) => ({ ...current, fourPlusStars: !current.fourPlusStars }))}
+          >
             <Star className="size-4 mr-2" />
             4+ Stars
           </Button>
-          <Button variant="outline" size="sm">
+          <Button
+            variant={filters.accessibilityFriendly ? "default" : "outline"}
+            size="sm"
+            onClick={() =>
+              setFilters((current) => ({
+                ...current,
+                accessibilityFriendly: !current.accessibilityFriendly,
+              }))
+            }
+          >
             <Accessibility className="size-4 mr-2" />
             Accessibility Friendly
           </Button>
@@ -229,23 +232,48 @@ export function HomePage() {
           </Button>
           {showOwnedByFilters && (
             <>
-              <Button variant="outline" size="sm" className="relative overflow-hidden">
+              <Button
+                variant={filters.wbeCertified ? "default" : "outline"}
+                size="sm"
+                className="relative overflow-hidden"
+                onClick={() => setFilters((current) => ({ ...current, wbeCertified: !current.wbeCertified }))}
+              >
                 <span className="absolute inset-0 opacity-20" style={EDI_BADGE_STYLES["WBE-Certified"]} />
                 <span className="relative z-10">WBE-Certified</span>
               </Button>
-              <Button variant="outline" size="sm" className="relative overflow-hidden">
+              <Button
+                variant={filters.mbeCertified ? "default" : "outline"}
+                size="sm"
+                className="relative overflow-hidden"
+                onClick={() => setFilters((current) => ({ ...current, mbeCertified: !current.mbeCertified }))}
+              >
                 <span className="absolute inset-0 opacity-20" style={EDI_BADGE_STYLES["MBE-Certified"]} />
                 <span className="relative z-10">MBE-Certified</span>
               </Button>
-              <Button variant="outline" size="sm" className="relative overflow-hidden">
+              <Button
+                variant={filters.lgbtFriendly ? "default" : "outline"}
+                size="sm"
+                className="relative overflow-hidden"
+                onClick={() => setFilters((current) => ({ ...current, lgbtFriendly: !current.lgbtFriendly }))}
+              >
                 <span className="absolute inset-0 opacity-25" style={EDI_BADGE_STYLES["LGBT+ Friendly"]} />
                 <span className="relative z-10">LGBT+ Friendly</span>
               </Button>
-              <Button variant="outline" size="sm" className="relative overflow-hidden">
+              <Button
+                variant={filters.bcorpCertified ? "default" : "outline"}
+                size="sm"
+                className="relative overflow-hidden"
+                onClick={() => setFilters((current) => ({ ...current, bcorpCertified: !current.bcorpCertified }))}
+              >
                 <span className="absolute inset-0 opacity-15 rounded" style={EDI_BADGE_STYLES["B-Corp Certified"]} />
                 <span className="relative z-10">B-Corp Certified</span>
               </Button>
-              <Button variant="outline" size="sm" className="relative overflow-hidden">
+              <Button
+                variant={filters.vbeCertified ? "default" : "outline"}
+                size="sm"
+                className="relative overflow-hidden"
+                onClick={() => setFilters((current) => ({ ...current, vbeCertified: !current.vbeCertified }))}
+              >
                 <span className="absolute inset-0 opacity-15 rounded" style={EDI_BADGE_STYLES["VBE-Certified"]} />
                 <span className="relative z-10">VBE-Certified</span>
               </Button>
@@ -254,7 +282,6 @@ export function HomePage() {
         </div>
       </div>
 
-      {/* View Mode Toggle */}
       <div className="flex justify-center mb-8">
         <Tabs
           value={viewMode}
@@ -274,34 +301,32 @@ export function HomePage() {
         </Tabs>
       </div>
 
-      {/* Venue listing */}
       <div className="mb-12">
-        <h2 className="mb-6">
-          {geoState === "granted" && userCoords ? "Available Near You" : "Available Workspaces"}
-        </h2>
+        <h2 className="mb-6">Venue Recommendations for You</h2>
 
-        {/* Loading / geo requesting */}
-        {isLoadingOrGeo && (
+        {loading && (
           <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
             <Loader2 className="size-5 animate-spin" />
-            <span>
-              {geoState === "requesting" ? "Getting your location…" : "Loading workspaces…"}
-            </span>
+            <span>Loading recommendations...</span>
           </div>
         )}
 
-        {/* Error state */}
-        {!isLoadingOrGeo && loadError && (
+        {!loading && loadError && (
           <div className="text-center py-16 text-muted-foreground">
-            <p className="mb-4">Couldn't load venues right now.</p>
-            <Button variant="outline" onClick={() => fetchVenues(userCoords ?? undefined)}>
+            <p className="mb-4">Couldn't load venue recommendations right now.</p>
+            <Button variant="outline" onClick={() => fetchVenues()}>
               Retry
             </Button>
           </div>
         )}
 
-        {/* Grid — API venues */}
-        {!isLoadingOrGeo && !usingFallback && viewMode === "grid" && (
+        {!loading && !loadError && venues.length === 0 && (
+          <div className="text-center py-16 text-muted-foreground">
+            No venue recommendations are available yet.
+          </div>
+        )}
+
+        {!loading && !loadError && venues.length > 0 && viewMode === "grid" && (
           <>
             <div className="grid md:grid-cols-3 gap-6">
               {visibleVenues.map((venue) => {
@@ -309,6 +334,7 @@ export function HomePage() {
                 const suitability = venue.suitability_score != null
                   ? Math.round(venue.suitability_score)
                   : Math.round(venue.rating * 20);
+
                 return (
                   <Card key={venue.venue_id} className="overflow-hidden hover:shadow-lg transition-shadow">
                     <div className="aspect-video relative overflow-hidden bg-muted">
@@ -338,22 +364,21 @@ export function HomePage() {
                       </div>
 
                       <p className="text-muted-foreground text-sm">
-                        {venue.cuisine_type} • {venue.distance_km.toFixed(1)}km away
+                        {venue.cuisine_type} • {venue.borough ?? "Workspace"}
                       </p>
 
                       <div className="flex items-center gap-3 text-muted-foreground">
-                        {venue.has_wifi && <Wifi className="size-4" title="WiFi Available" />}
-                        <Zap className="size-4" title="Power Outlets" />
-                        {venue.noise_level === "quiet" && (
-                          <Volume className="size-4" title="Quiet Environment" />
+                        {venue.has_wifi && <Wifi className="size-4" />}
+                        {(venue.plug_access ?? 0) > 0 && <Zap className="size-4" />}
+                        {venue.calls_allowed && <Volume className="size-4" />}
+                        {venue.distance_km > 0 && (
+                          <div className="flex items-center gap-1 text-sm ml-auto">
+                            <Navigation className="size-4" />
+                            {venue.distance_km.toFixed(1)}km
+                          </div>
                         )}
-                        <div className="flex items-center gap-1 text-sm ml-auto">
-                          <Navigation className="size-4" />
-                          {venue.distance_km.toFixed(1)}km
-                        </div>
                       </div>
 
-                      {/* EDI certification badges */}
                       {venue.certifications.length > 0 && (
                         <div className="flex flex-wrap gap-1">
                           {venue.certifications.map((cert) => (
@@ -398,102 +423,10 @@ export function HomePage() {
           </>
         )}
 
-        {/* Map — API venues (pass full sorted list, not just the visible slice) */}
-        {!isLoadingOrGeo && !usingFallback && viewMode === "map" && (
+        {!loading && !loadError && venues.length > 0 && viewMode === "map" && (
           <Card className="h-[600px] overflow-hidden border border-border shadow-sm">
             <MapView venues={venues} height="600px" />
           </Card>
-        )}
-
-        {/* Fallback grid — API failed or returned empty */}
-        {!isLoadingOrGeo && usingFallback && viewMode === "grid" && (
-          <>
-            <div className="grid md:grid-cols-3 gap-6">
-              {manhattanVenues.slice(0, fallbackVisible).map((venue) => {
-                const busyness = busynessDisplay(String(venue.id));
-                return (
-                  <Card key={venue.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                    <div className="aspect-video relative overflow-hidden">
-                      <img src={venue.image} alt={venue.name} className="w-full h-full object-cover" />
-                    </div>
-                    <CardContent className="pt-4 space-y-3">
-                      <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${busyness.color}`}>
-                        {busyness.label}
-                      </span>
-                      <div className="flex items-start justify-between">
-                        <h4>{venue.name}</h4>
-                        <div className="flex items-center gap-1">
-                          <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
-                          <span>{venue.rating}</span>
-                        </div>
-                      </div>
-                      {venue.suitabilityScore !== undefined && (
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">Suitability for you</span>
-                          <span
-                            className="font-semibold"
-                            style={{ color: getSuitabilityColor(venue.suitabilityScore) }}
-                          >
-                            {venue.suitabilityScore}/100
-                          </span>
-                        </div>
-                      )}
-                          <p className="text-muted-foreground text-sm">
-                            {venue.cuisine_type} • {venue.distance_km}km away
-                          </p>
-                          <div className="flex items-center gap-3 text-muted-foreground">
-                            {venue.has_wifi && (
-                              <div className="flex items-center gap-1" title="WiFi Available">
-                                <Wifi className="size-4" />
-                              </div>
-                            )}
-                            <div className="flex items-center gap-1" title="Power Outlets">
-                              <Zap className="size-4" />
-                            </div>
-                            {venue.calls_allowed && (
-                              <div className="flex items-center gap-1" title="Calls Allowed">
-                                <Volume className="size-4" />
-                              </div>
-                            )}
-                            <div className="flex items-center gap-1 text-sm">
-                              <Navigation className="size-4" />
-                              {venue.distance_km}km
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <p style={{ color: "#2f8a64" }}>${venue.hourly_price}/hour</p>
-                            <Button
-                              size="sm"
-                              style={{ backgroundColor: "#253c50" }}
-                              onClick={() => navigate(`/venue/${venue.venue_id}`)}
-                            >
-                              Book a Space
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-            </div>
-            {fallbackVisible < manhattanVenues.length && (
-              <div className="flex justify-center mt-8">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={() =>
-                    setFallbackVisible((v) => Math.min(v + PAGE_SIZE, manhattanVenues.length))
-                  }
-                >
-                  Show More Venues ({manhattanVenues.length - fallbackVisible} remaining)
-                </Button>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Fallback map */}
-        {!isLoadingOrGeo && usingFallback && viewMode === "map" && (
-          <ManhattanMap venues={manhattanVenues} height="600px" />
         )}
       </div>
     </div>
