@@ -12,7 +12,7 @@ import { Star, MapPin, Wifi, Zap, Clock, Heart, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../services/api";
 import { VenueDetail, AvailabilitySlot } from "../../types/api";
-import { enrichVenue, EnrichedVenue, venueImages } from "../utils/venueEnrichment";
+import { enrichVenue, EnrichedVenue } from "../utils/venueEnrichment";
 
 const EDI_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
   "WBE-Certified":    { bg: "bg-purple-100", text: "text-purple-700" },
@@ -46,7 +46,6 @@ export function VenueDetailPage() {
   // Duration radio (from Figma mockup)
   const [selectedDuration, setSelectedDuration] = useState("2");
 
-  const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
   const [venue, setVenue] = useState<(VenueDetail & EnrichedVenue) | null>(null);
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
@@ -113,7 +112,6 @@ export function VenueDetailPage() {
         duration: duration.toString(),
         price: totalPrice,
         seatsReserved,
-        venueImages: venueImages(venue.venue_id, venue.osm_type),
       },
     });
   };
@@ -222,34 +220,8 @@ export function VenueDetailPage() {
     );
   }
 
-  const images = venueImages(venue.venue_id, venue.osm_type);
-
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Image Gallery with thumbnail selector */}
-      <div className="mb-8">
-        <div className="aspect-video overflow-hidden rounded-lg mb-3">
-          <img
-            src={images[selectedImageIdx]}
-            alt={venue.name}
-            className="w-full h-full object-cover"
-          />
-        </div>
-        <div className="flex gap-2">
-          {images.map((img, idx) => (
-            <button
-              key={idx}
-              onClick={() => setSelectedImageIdx(idx)}
-              className={`flex-shrink-0 w-20 h-16 rounded-md overflow-hidden border-2 transition-colors ${
-                selectedImageIdx === idx ? "border-primary" : "border-transparent"
-              }`}
-            >
-              <img src={img} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="grid lg:grid-cols-[1fr_400px] gap-8">
         {/* Main Content */}
         <div>

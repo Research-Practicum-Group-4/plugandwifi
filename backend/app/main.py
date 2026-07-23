@@ -1087,6 +1087,99 @@ def normalize_chatbot_search_text(value):
     )
 
 
+def extract_chatbot_candidate_venue_names(
+    chat_history: list[ChatbotHistoryMessage] | None
+):
+    normalized_history = normalize_chatbot_history(
+        chat_history
+    )
+    candidate_names = []
+    seen_names = set()
+
+    for item in reversed(normalized_history):
+        if item.role != "assistant":
+            continue
+
+        for raw_line in item.message.splitlines():
+            line = raw_line.strip()
+
+            if not line.startswith("•"):
+                continue
+
+            venue_name = line.lstrip("•").strip()
+
+            if " (" in venue_name:
+                venue_name = venue_name.split(" (", 1)[0].strip()
+
+            if not venue_name:
+                continue
+
+            normalized_name = normalize_chatbot_search_text(
+                venue_name
+            )
+
+            if (
+                normalized_name
+                and normalized_name not in seen_names
+            ):
+                candidate_names.append(venue_name)
+                seen_names.add(normalized_name)
+
+        if candidate_names:
+            break
+
+    return candidate_names
+
+
+def extract_chatbot_follow_up_location(
+    message: str
+):
+    for pattern in (
+        r"\b(?:closer|closest|nearest)\s+to\s+(.+?)(?:\?|$)",
+        r"\bclosest\s+from\s+(.+?)(?:\?|$)"
+    ):
+        match = re.search(
+            pattern,
+            message,
+            re.IGNORECASE
+        )
+
+        if match:
+            return match.group(1).strip(" .,!?:;")
+
+    return None
+
+
+def is_chatbot_distance_comparison_follow_up(
+    message: str,
+    chat_history: list[ChatbotHistoryMessage] | None = None
+):
+    message_lower = message.lower()
+
+    if not any(
+        term in message_lower
+        for term in (
+            "which one",
+            "which venue",
+            "closest",
+            "closer",
+            "nearest"
+        )
+    ):
+        return False
+
+    if extract_chatbot_follow_up_location(
+        message
+    ) is None:
+        return False
+
+    return bool(
+        extract_chatbot_candidate_venue_names(
+            chat_history
+        )
+    )
+
+
 def infer_chatbot_search_parameters(
     message: str,
     chat_history: list[ChatbotHistoryMessage] | None = None
@@ -1246,8 +1339,28 @@ def infer_chatbot_search_parameters(
     ):
         radius_km = CHATBOT_DEFAULT_LOCATION_RADIUS_KM
 
+    candidate_venue_names = extract_chatbot_candidate_venue_names(
+        chat_history
+    )
+    sort_by_distance = False
+
+    if is_chatbot_distance_comparison_follow_up(
+        message,
+        chat_history
+    ):
+        follow_up_location = extract_chatbot_follow_up_location(
+            message
+        )
+
+        if follow_up_location:
+            venue_name = None
+            location = follow_up_location
+            radius_km = None
+            sort_by_distance = True
+
     return ChatbotSearchParameters(
         venue_name=venue_name,
+        candidate_venue_names=candidate_venue_names,
         location=location,
         radius_km=radius_km,
         venue_type=venue_type,
@@ -1263,7 +1376,8 @@ def infer_chatbot_search_parameters(
         bcorp_certified=bcorp_certified,
         lgbt_friendly=lgbt_friendly,
         busyness=busyness,
-        time=requested_time
+        time=requested_time,
+        sort_by_distance=sort_by_distance
     )
 
 
@@ -1357,6 +1471,12 @@ def should_ask_for_chatbot_preferences(
     if is_chatbot_specific_venue_lookup(search_parameters):
         return False
 
+    if (
+        search_parameters.sort_by_distance
+        and search_parameters.candidate_venue_names
+    ):
+        return False
+
     if not has_chatbot_search_signal(search_parameters):
         return False
 
@@ -1423,6 +1543,7 @@ def is_chatbot_specific_venue_lookup(
 ):
     return (
         search_parameters.venue_name is not None
+        and not search_parameters.candidate_venue_names
         and not has_chatbot_strict_recommendation_filters(
             search_parameters
         )
@@ -1575,6 +1696,29 @@ def search_venues_for_chatbot(
             func.lower(Venue.name).like(f"%{venue_name}%")
         )
 
+    if search_parameters.candidate_venue_names:
+        candidate_filters = [
+            func.lower(Venue.name).like(
+                f"%{candidate_name.strip().lower()}%"
+            )
+            for candidate_name in search_parameters.candidate_venue_names
+            if candidate_name.strip()
+        ]
+
+        if candidate_filters:
+            candidate_name_clause = candidate_filters[0]
+
+            for candidate_filter in candidate_filters[1:]:
+                candidate_name_clause = (
+                    candidate_name_clause
+                    |
+                    candidate_filter
+                )
+
+            query = query.filter(
+                candidate_name_clause
+            )
+
     if search_parameters.venue_type:
         venue_type = search_parameters.venue_type.lower()
         query = query.filter(
@@ -1685,17 +1829,26 @@ def search_venues_for_chatbot(
             )
         ]
 
-    venues_with_distance.sort(
-        key=lambda venue_with_distance: get_chatbot_sort_key(
-            venue_with_distance[0],
-            venue_with_distance[1],
-            busyness_predictions.get(
-                venue_with_distance[0].venue_id,
-                {}
-            ),
-            search_parameters
+    if search_parameters.sort_by_distance and resolved_location is not None:
+        venues_with_distance.sort(
+            key=lambda venue_with_distance: (
+                venue_with_distance[1]
+                if venue_with_distance[1] is not None
+                else float("inf")
+            )
         )
-    )
+    else:
+        venues_with_distance.sort(
+            key=lambda venue_with_distance: get_chatbot_sort_key(
+                venue_with_distance[0],
+                venue_with_distance[1],
+                busyness_predictions.get(
+                    venue_with_distance[0].venue_id,
+                    {}
+                ),
+                search_parameters
+            )
+        )
 
     selected_venues = venues_with_distance[:limit]
 

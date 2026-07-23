@@ -6,6 +6,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { MessageCircle, X, Send, Sparkles, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { api } from "../../services/api";
+import type { ChatbotHistoryMessage } from "../../types/api";
 
 interface Message {
   id: string;
@@ -13,6 +14,17 @@ interface Message {
   sender: "user" | "ai";
   timestamp: Date;
 }
+
+const normalizeMessageText = (text?: string | null) => text?.trim().replace(/\s+/g, " ") ?? "";
+const CHAT_HISTORY_WINDOW = 6;
+
+const buildChatHistory = (messages: Message[]): ChatbotHistoryMessage[] =>
+  messages
+    .slice(-CHAT_HISTORY_WINDOW)
+    .map((message) => ({
+      role: message.sender === "user" ? "user" : "assistant",
+      message: message.text,
+    }));
 
 export function ChatBot() {
   const [isOpen, setIsOpen] = useState(false);
@@ -43,11 +55,15 @@ export function ChatBot() {
     setIsTyping(true);
 
     try {
-      const data = await api.getChatbotReply(userText);
+      const chatHistory = buildChatHistory(messages);
+      const data = await api.getChatbotReply(userText, chatHistory);
 
       // Build response text: main response + follow-up + venue list if provided
       let text = data.response;
-      if (data.follow_up_question) {
+      const normalizedResponse = normalizeMessageText(data.response);
+      const normalizedFollowUp = normalizeMessageText(data.follow_up_question);
+
+      if (normalizedFollowUp && normalizedFollowUp !== normalizedResponse) {
         text += `\n\n${data.follow_up_question}`;
       }
       if (data.venues && data.venues.length > 0) {

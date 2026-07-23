@@ -7,18 +7,10 @@ import { Label } from "../components/ui/label";
 import { Separator } from "../components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { CheckCircle, Loader2, MapPin, Building2 } from "lucide-react";
+import { CheckCircle, Loader2, MapPin, Building2, CalendarDays, Clock3 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../../services/api";
-
-// ** HARDCODED ** - default venue gallery images for checkout
-const DEFAULT_VENUE_GALLERY = [
-  "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&h=400&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=600&h=400&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=600&h=400&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&h=400&fit=crop&auto=format",
-];
 
 function SignInModal({
   open,
@@ -107,13 +99,9 @@ export function CheckoutPage() {
     price: 10.5,
   };
 
-  // ** HARDCODED ** - venue images from VenueDetailPage state or default gallery
-  const venueImages: string[] = bookingData.venueImages || DEFAULT_VENUE_GALLERY;
-
   const [paymentMethod, setPaymentMethod] = useState("stripe");
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSignIn, setShowSignIn] = useState(false);
-  const [activeImage, setActiveImage] = useState(0);
 
   // Form states for contact info
   const [firstName, setFirstName] = useState("");
@@ -220,32 +208,45 @@ export function CheckoutPage() {
       <div className="grid lg:grid-cols-[1fr_400px] gap-8">
         {/* Left column */}
         <div className="space-y-6">
-          {/* Venue Photo Gallery */}
-          <Card className="overflow-hidden">
-            <div className="aspect-video overflow-hidden bg-muted">
-              <img
-                src={venueImages[activeImage]}
-                alt={`${bookingData.venueName} - photo ${activeImage + 1}`}
-                className="w-full h-full object-cover transition-all duration-300"
-              />
-            </div>
-            <CardContent className="pt-3 pb-3">
-              <div className="flex gap-2 overflow-x-auto">
-                {venueImages.map((img, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setActiveImage(idx)}
-                    className={`flex-shrink-0 w-16 h-16 rounded-md overflow-hidden border-2 transition-colors ${
-                      activeImage === idx ? "border-primary" : "border-transparent"
-                    }`}
-                  >
-                    <img
-                      src={img}
-                      alt={`Thumbnail ${idx + 1}`}
-                      className="w-full h-full object-cover"
-                    />
-                  </button>
-                ))}
+          <Card className="overflow-hidden border-border/70 bg-gradient-to-br from-slate-50 via-white to-emerald-50">
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
+                    <Building2 className="size-3.5" />
+                    <span>Workspace Summary</span>
+                  </div>
+                  <h2 className="text-2xl font-semibold">{bookingData.venueName}</h2>
+                </div>
+                <div className="rounded-full border border-emerald-200 bg-white/90 px-3 py-1 text-xs font-medium text-emerald-700">
+                  Ready to book
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border bg-background/80 p-4">
+                  <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+                    <CalendarDays className="size-4" />
+                    <span>Date</span>
+                  </div>
+                  <p className="font-semibold">{bookingData.bookingDate}</p>
+                </div>
+                <div className="rounded-xl border bg-background/80 p-4">
+                  <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+                    <Clock3 className="size-4" />
+                    <span>Time</span>
+                  </div>
+                  <p className="font-semibold">
+                    {bookingData.startTime} - {bookingData.endTime}
+                  </p>
+                </div>
+                <div className="rounded-xl border bg-background/80 p-4">
+                  <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+                    <MapPin className="size-4" />
+                    <span>Seats</span>
+                  </div>
+                  <p className="font-semibold">{bookingData.seatsReserved || 1} reserved</p>
+                </div>
               </div>
             </CardContent>
           </Card>

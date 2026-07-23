@@ -208,6 +208,16 @@ export interface VenueSuggestionsResponse {
   items: VenueSuggestion[];
 }
 
+export interface ChatbotHistoryMessage {
+  role: "user" | "assistant";
+  message: string;
+}
+
+export interface ChatbotRecommendRequest {
+  message: string;
+  chat_history?: ChatbotHistoryMessage[];
+}
+
 export interface ChatbotRecommendResponse {
   response: string;
   model: string;
@@ -269,4 +279,22 @@ export interface AdminStatsResponse {
   active_users: number;
   new_this_month: number;
   churn_rate: number;
+}
+
+export interface AdminDashboardOverviewResponse {
+  global_active_properties: number;
+  total_completed_checkout_revenues: number;
+  system_incident_counts: {
+    cancelled_bookings: number;
+    refund_pending_bookings: number;
+    unavailable_slots: number;
+  };
+}
+
+export interface VenueSuspensionResponse {
+  venue_id: string;
+  state: string;
+  cancelled_bookings: number;
+  released_seats: number;
+  message: string;
 }

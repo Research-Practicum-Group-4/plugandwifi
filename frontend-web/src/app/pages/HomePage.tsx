@@ -9,6 +9,7 @@ import {
   Search,
   LayoutGrid,
   Map,
+  MapPin,
   Wifi,
   Phone,
   Star,
@@ -23,7 +24,7 @@ import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { api } from "../../services/api";
 import { MapView } from "../components/MapView";
-import { enrichVenue, EnrichedVenue, venueImage, busynessDisplay } from "../utils/venueEnrichment";
+import { enrichVenue, EnrichedVenue, busynessDisplay } from "../utils/venueEnrichment";
 
 const PAGE_SIZE = 6;
 const HOME_VENUES_CACHE_PREFIX = "home-venues-cache:";
@@ -119,6 +120,7 @@ export function HomePage() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(() => readCachedHomeVenues(DEFAULT_HOME_FILTERS) === null);
   const [loadError, setLoadError] = useState(false);
+  const [locationEnabled, setLocationEnabled] = useState<boolean | null>(null);
 
   const locationSuggestions = [
     "Midtown Manhattan",
@@ -182,8 +184,21 @@ export function HomePage() {
     fetchVenues();
   }, [fetchVenues]);
 
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocationEnabled(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      () => setLocationEnabled(true),
+      () => setLocationEnabled(false),
+    );
+  }, []);
+
   const visibleVenues = venues.slice(0, visibleCount);
   const hasMore = visibleCount < venues.length;
+  const venueHeading = locationEnabled ? "Available Near You" : "Venue Recommendations for You";
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -370,7 +385,14 @@ export function HomePage() {
       </div>
 
       <div className="mb-12">
-        <h2 className="mb-6">Venue Recommendations for You</h2>
+        <div className="mb-6 space-y-2">
+          <h2>{venueHeading}</h2>
+          {locationEnabled === false && (
+            <p className="text-sm text-muted-foreground">
+              Enable location for nearby results.
+            </p>
+          )}
+        </div>
 
         {loading && (
           <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
@@ -405,16 +427,25 @@ export function HomePage() {
 
                 return (
                   <Card key={venue.venue_id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                    <div className="aspect-video relative overflow-hidden bg-muted">
-                      <VenuePhoto venue={venue} />
-                    </div>
                     <CardContent className="pt-4 space-y-3">
+                      <div className="rounded-2xl border border-border/70 bg-gradient-to-br from-slate-50 via-white to-emerald-50 p-4">
+                        <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
+                          {(venue.osm_type ?? venue.cuisine_type ?? "workspace").replace(/_/g, " ")}
+                        </p>
+                        <h4 className="mt-2 text-xl font-bold leading-tight text-foreground">
+                          {venue.name}
+                        </h4>
+                      </div>
+
                       <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${busyness.color}`}>
                         {busyness.label}
                       </span>
 
                       <div className="flex items-start justify-between">
-                        <h4 className="flex-1 pr-2">{venue.name}</h4>
+                        <div className="flex flex-1 items-center gap-2 pr-2 text-sm text-muted-foreground">
+                          <MapPin className="size-4" />
+                          <span>{venue.borough ?? "Manhattan"}</span>
+                        </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
                           <span>{venue.rating.toFixed(1)}</span>
@@ -435,10 +466,25 @@ export function HomePage() {
                         {venue.cuisine_type} • {venue.borough ?? "Workspace"}
                       </p>
 
-                      <div className="flex items-center gap-3 text-muted-foreground">
-                        {venue.has_wifi && <Wifi className="size-4" />}
-                        {(venue.plug_access ?? 0) > 0 && <Zap className="size-4" />}
-                        {venue.calls_allowed && <Volume className="size-4" />}
+                      <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                        {venue.has_wifi && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
+                            <Wifi className="size-3.5" />
+                            WiFi
+                          </span>
+                        )}
+                        {(venue.plug_access ?? 0) > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
+                            <Zap className="size-3.5" />
+                            Plug Access
+                          </span>
+                        )}
+                        {venue.calls_allowed && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
+                            <Volume className="size-3.5" />
+                            Calls Allowed
+                          </span>
+                        )}
                         {venue.distance_km > 0 && (
                           <div className="flex items-center gap-1 text-sm ml-auto">
                             <Navigation className="size-4" />
@@ -498,15 +544,5 @@ export function HomePage() {
         )}
       </div>
     </div>
-  );
-}
-
-function VenuePhoto({ venue }: { venue: EnrichedVenue }) {
-  return (
-    <img
-      src={venueImage(venue.venue_id, venue.osm_type ?? venue.cuisine_type)}
-      alt={venue.name}
-      className="w-full h-full object-cover"
-    />
   );
 }

@@ -15,26 +15,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "../components/ui/alert-dialog";
-import { Calendar, MapPin, Clock, Star, XCircle, Loader2 } from "lucide-react";
+import { Calendar, MapPin, Clock, Star, XCircle, Loader2, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../services/api";
 import { UserBookingItem } from "../../types/api";
-
-// ** HARDCODED ** - venue images are not included in the API booking response
-const VENUE_IMAGES: Record<string, string> = {
-  default: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400",
-  alt1: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400",
-  alt2: "https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=400",
-  alt3: "https://images.unsplash.com/photo-1445116572660-236099ec97a0?w=400",
-  alt4: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400",
-};
-
-const imageKeys = Object.values(VENUE_IMAGES);
-
-// ** HARDCODED ** - rotates through available images since API doesn't return venue images
-function getVenueImageForBooking(bookingId: number): string {
-  return imageKeys[bookingId % imageKeys.length];
-}
 
 function formatDate(dateStr: string): string {
   try {
@@ -132,13 +116,19 @@ export function BookingsPage() {
             upcomingBookings.map((booking) => (
               <Card key={booking.booking_id}>
                 <div className="grid md:grid-cols-[200px_1fr] gap-4">
-                  <div className="aspect-square overflow-hidden">
-                    {/* ** HARDCODED ** - venue image not in API response */}
-                    <img
-                      src={getVenueImageForBooking(booking.booking_id)}
-                      alt={booking.venue_name || "Venue"}
-                      className="w-full h-full object-cover"
-                    />
+                  <div className="flex min-h-[180px] flex-col justify-between rounded-l-xl border-b border-border/60 bg-gradient-to-br from-slate-50 via-white to-sky-50 p-5 md:border-b-0 md:border-r">
+                    <div>
+                      <div className="mb-2 inline-flex rounded-full border border-sky-200 bg-white/90 px-3 py-1 text-xs font-medium text-sky-700">
+                        Upcoming booking
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Building2 className="size-4" />
+                        <span>{booking.venue_name || "Workspace"}</span>
+                      </div>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Check-in code #{booking.booking_id}
+                    </div>
                   </div>
                   <CardContent className="pt-6">
                     <div className="flex justify-between items-start mb-4">
@@ -238,13 +228,19 @@ export function BookingsPage() {
             pastBookings.map((booking) => (
               <Card key={booking.booking_id}>
                 <div className="grid md:grid-cols-[200px_1fr] gap-4">
-                  <div className="aspect-square overflow-hidden">
-                    {/* ** HARDCODED ** - venue image not in API response */}
-                    <img
-                      src={getVenueImageForBooking(booking.booking_id)}
-                      alt={booking.venue_name || "Venue"}
-                      className="w-full h-full object-cover"
-                    />
+                  <div className="flex min-h-[180px] flex-col justify-between rounded-l-xl border-b border-border/60 bg-gradient-to-br from-slate-50 via-white to-slate-100 p-5 md:border-b-0 md:border-r">
+                    <div>
+                      <div className="mb-2 inline-flex rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-xs font-medium text-slate-700">
+                        Booking history
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Building2 className="size-4" />
+                        <span>{booking.venue_name || "Workspace"}</span>
+                      </div>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Booking ID #{booking.booking_id}
+                    </div>
                   </div>
                   <CardContent className="pt-6">
                     <div className="flex justify-between items-start mb-4">

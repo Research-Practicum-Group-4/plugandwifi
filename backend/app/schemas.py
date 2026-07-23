@@ -70,6 +70,10 @@ class ChatbotSearchParameters(BaseModel):
 
     venue_name: str | None = None
 
+    candidate_venue_names: list[str] = Field(
+        default_factory=list
+    )
+
     location: str | None = None
 
     radius_km: float | None = None
@@ -101,6 +105,8 @@ class ChatbotSearchParameters(BaseModel):
     busyness: str | None = None
 
     time: str | None = None
+
+    sort_by_distance: bool = False
 
 
 class ChatbotRecommendResponse(BaseModel):

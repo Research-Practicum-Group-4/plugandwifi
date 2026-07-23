@@ -8,7 +8,7 @@ import { Label } from "../components/ui/label";
 import { Slider } from "../components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Search, Star, Filter, Clock, MapPin, Sparkles, Phone, Accessibility, Plug, Wifi, Zap, Loader2 } from "lucide-react";
+import { Search, Star, Filter, Clock, MapPin, Sparkles, Phone, Accessibility, Plug, Wifi, Zap, Volume, Loader2 } from "lucide-react";
 import { api } from "../../services/api";
 import { enrichVenue, EnrichedVenue, venueImage, busynessDisplay } from "../utils/venueEnrichment";
 import { MapView } from "../components/MapView";
@@ -81,6 +81,39 @@ function normalizeLandmarkDistanceDisplay(venue: EnrichedVenue): EnrichedVenue {
     ...venue,
     distance_km: formattedDistance.replace(" km away", "") as unknown as number,
   };
+}
+
+function renderWorkspaceFeatureBadges({
+  hasWifi,
+  plugAccess,
+  callsAllowed,
+}: {
+  hasWifi: boolean;
+  plugAccess: number;
+  callsAllowed: boolean;
+}) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2 text-muted-foreground">
+      {hasWifi && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
+          <Wifi className="size-3.5" />
+          WiFi
+        </span>
+      )}
+      {plugAccess > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
+          <Zap className="size-3.5" />
+          Plug Access
+        </span>
+      )}
+      {callsAllowed && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
+          <Volume className="size-3.5" />
+          Calls Allowed
+        </span>
+      )}
+    </div>
+  );
 }
 
 
@@ -157,6 +190,7 @@ export function SearchPage() {
   const [selectedVenueTypes, setSelectedVenueTypes] = useState<string[]>([]);
   const [priceRange, setPriceRange] = useState([1, 10]);
   const [duration, setDuration] = useState("any");
+  const [sortBy, setSortBy] = useState<"default" | "suitability" | "price" | "rating">("default");
 
   const [allVenues, setAllVenues] = useState<EnrichedVenue[]>([]);
   const [fallbackVenues, setFallbackVenues] = useState<EnrichedVenue[]>([]);
@@ -181,7 +215,7 @@ export function SearchPage() {
 
   useEffect(() => {
     setVisibleCount(INITIAL_DISPLAY_COUNT);
-  }, [filters, selectedVenueTypes, debouncedSearchQuery, priceRange, searchDate, startTime, endTime, seatsRequired, duration]);
+  }, [filters, selectedVenueTypes, debouncedSearchQuery, priceRange, searchDate, startTime, endTime, seatsRequired, duration, sortBy]);
 
   // Handle Autocomplete List Filtering
   useEffect(() => {
@@ -471,13 +505,33 @@ export function SearchPage() {
     loadFallbackVenues();
   }, [allVenues.length, apiFailed, loading]);
 
+  const sortEnrichedVenues = (venues: EnrichedVenue[]) => {
+    const sortedVenues = [...venues];
+
+    if (sortBy === "suitability") {
+      sortedVenues.sort((a, b) => {
+        const left = a.suitability_score ?? (a.rating * 20);
+        const right = b.suitability_score ?? (b.rating * 20);
+        return right - left;
+      });
+    } else if (sortBy === "price") {
+      sortedVenues.sort((a, b) => a.enrichedPrice - b.enrichedPrice);
+    } else if (sortBy === "rating") {
+      sortedVenues.sort((a, b) => b.rating - a.rating);
+    }
+
+    return sortedVenues;
+  };
+
   const emptySearchState = !loading && !apiFailed && allVenues.length === 0;
-  const visibleFallbackVenues = fallbackVenues.slice(0, visibleCount);
+  const visibleFallbackVenues = sortEnrichedVenues(
+    fallbackVenues.slice(0, visibleCount)
+  );
   const displayVenues = apiFailed
     ? manhattanVenues.slice(0, visibleCount)
     : emptySearchState
       ? visibleFallbackVenues
-      : allVenues.slice(0, visibleCount);
+      : sortEnrichedVenues(allVenues.slice(0, visibleCount));
   const canLoadMore = apiFailed
     ? manhattanVenues.length > displayVenues.length
     : emptySearchState
@@ -518,11 +572,6 @@ export function SearchPage() {
       ? Math.round(venue.suitability_score)
       : Math.round(venue.rating * 20);
     const busyness = busynessDisplay(venue.venue_id, venue.busyness_score, venue.busyness_label);
-    const amenities: string[] = [];
-    if (venue.has_wifi) amenities.push("WiFi");
-    if (venue.wifi_free) amenities.push("Free WiFi");
-    if (venue.calls_allowed) amenities.push("Calls Allowed");
-    if (venue.seats_avail > 0) amenities.push(`${venue.seats_avail} seats left`);
 
     return (
       <Card
@@ -530,12 +579,15 @@ export function SearchPage() {
         className="overflow-hidden hover:shadow-lg transition-shadow"
       >
         <div className="grid md:grid-cols-[250px_1fr] gap-4">
-          <div className="aspect-video md:aspect-square overflow-hidden">
-            <img
-              src={venueImage(venue.venue_id, venue.osm_type ?? venue.cuisine_type)}
-              alt={venue.name}
-              className="w-full h-full object-cover"
-            />
+          <div className="flex min-h-[180px] flex-col justify-between rounded-l-xl border-b border-border/60 bg-gradient-to-br from-slate-50 via-white to-sky-50 p-5 md:border-b-0 md:border-r">
+            <div>
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
+                {(venue.osm_type ?? venue.cuisine_type ?? "workspace").replace(/_/g, " ")}
+              </p>
+              <h3 className="text-2xl font-bold leading-tight text-foreground">
+                {venue.name}
+              </h3>
+            </div>
           </div>
           <CardContent className="pt-4">
             <div className="flex justify-between items-start mb-2">
@@ -545,8 +597,12 @@ export function SearchPage() {
                 >
                   {busyness.label}
                 </span>
-                <h3 className="mb-1">{venue.name}</h3>
-                <p className="text-muted-foreground">
+                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                  <MapPin className="size-4" />
+                  <span>{formatDistance(venue.distance_km) ?? venue.borough ?? "Manhattan"}</span>
+                </div>
+                <h3 className="hidden">{venue.name}</h3>
+                <p className="hidden text-muted-foreground">
                   {venue.cuisine_type} • {formatDistance(venue.distance_km) ?? venue.borough}
                 </p>
               </div>
@@ -556,16 +612,19 @@ export function SearchPage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 mb-3">
-              {amenities.map((amenity) => (
-                <span
-                  key={amenity}
-                  className="px-2 py-1 bg-secondary text-secondary-foreground rounded text-sm"
-                >
-                  {amenity}
+            {renderWorkspaceFeatureBadges({
+              hasWifi: venue.has_wifi,
+              plugAccess: venue.plug_access ?? 0,
+              callsAllowed: venue.calls_allowed,
+            })}
+
+            {venue.seats_avail > 0 && (
+              <div className="mb-3">
+                <span className="inline-flex items-center rounded-full border border-border/80 px-2.5 py-1 text-xs text-muted-foreground">
+                  {venue.seats_avail} seats left
                 </span>
-              ))}
-            </div>
+              </div>
+            )}
 
             {venue.certifications.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-3">
@@ -1008,6 +1067,29 @@ export function SearchPage() {
               )}
             </div>
 
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-muted-foreground">{displayCount} spaces available</p>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="sortBy" className="text-sm text-muted-foreground">
+                  Sort by
+                </Label>
+                <select
+                  id="sortBy"
+                  value={sortBy}
+                  onChange={(e) => {
+                    setSortBy(e.target.value as typeof sortBy);
+                    setVisibleCount(INITIAL_DISPLAY_COUNT);
+                  }}
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="default">Recommended</option>
+                  <option value="suitability">Suitability</option>
+                  <option value="rating">Customer Rating</option>
+                  <option value="price">Price (Low to High)</option>
+                </select>
+              </div>
+            </div>
+
             <Tabs defaultValue="list" className="w-full">
               <TabsList className="mb-4">
                 <TabsTrigger value="list">List View</TabsTrigger>
@@ -1015,8 +1097,6 @@ export function SearchPage() {
               </TabsList>
 
               <TabsContent value="list" className="space-y-4">
-                <p className="text-muted-foreground">{displayCount} spaces available</p>
-
                 {loading && !apiFailed ? (
                   <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
                     <Loader2 className="size-5 animate-spin" />
@@ -1036,12 +1116,15 @@ export function SearchPage() {
                     return (
                       <Card key={venue.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                         <div className="grid md:grid-cols-[250px_1fr] gap-4">
-                          <div className="aspect-video md:aspect-square overflow-hidden">
-                            <img
-                              src={venue.image}
-                              alt={venue.name}
-                              className="w-full h-full object-cover"
-                            />
+                          <div className="flex min-h-[180px] flex-col justify-between rounded-l-xl border-b border-border/60 bg-gradient-to-br from-slate-50 via-white to-amber-50 p-5 md:border-b-0 md:border-r">
+                            <div>
+                              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
+                                {venue.type}
+                              </p>
+                              <h3 className="text-2xl font-bold leading-tight text-foreground">
+                                {venue.name}
+                              </h3>
+                            </div>
                           </div>
                           <CardContent className="pt-4">
                             <div className="flex justify-between items-start mb-2">
@@ -1051,8 +1134,12 @@ export function SearchPage() {
                                 >
                                   {busyness.label}
                                 </span>
-                                <h3 className="mb-1">{venue.name}</h3>
-                                <p className="text-muted-foreground">
+                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                  <MapPin className="size-4" />
+                  <span>{venue.distance} km away</span>
+                </div>
+                <h3 className="hidden">{venue.name}</h3>
+                                <p className="hidden text-muted-foreground">
                                   {venue.type} • {venue.distance} km away
                                 </p>
                               </div>
@@ -1063,16 +1150,11 @@ export function SearchPage() {
                               </div>
                             </div>
 
-                            <div className="flex flex-wrap gap-2 mb-3">
-                              {venue.amenities.map((amenity) => (
-                                <span
-                                  key={amenity}
-                                  className="px-2 py-1 bg-secondary text-secondary-foreground rounded text-sm"
-                                >
-                                  {amenity}
-                                </span>
-                              ))}
-                            </div>
+                            {renderWorkspaceFeatureBadges({
+                              hasWifi: venue.amenities.includes("WiFi"),
+                              plugAccess: venue.amenities.includes("Power Outlets") ? 1 : 0,
+                              callsAllowed: venue.amenities.includes("Calls Allowed"),
+                            })}
 
                             {venue.suitabilityScore !== undefined && (
                               <div className="mb-3">
@@ -1117,11 +1199,6 @@ export function SearchPage() {
                       ? Math.round(venue.suitability_score)
                       : Math.round(venue.rating * 20);
                     const busyness = busynessDisplay(venue.venue_id, venue.busyness_score, venue.busyness_label);
-                    const amenities: string[] = [];
-                    if (venue.has_wifi) amenities.push("WiFi");
-                    if (venue.wifi_free) amenities.push("Free WiFi");
-                    if (venue.calls_allowed) amenities.push("Calls Allowed");
-                    if (venue.seats_avail > 0) amenities.push(`${venue.seats_avail} seats left`);
 
                     return (
                       <Card
@@ -1129,12 +1206,15 @@ export function SearchPage() {
                         className="overflow-hidden hover:shadow-lg transition-shadow"
                       >
                         <div className="grid md:grid-cols-[250px_1fr] gap-4">
-                          <div className="aspect-video md:aspect-square overflow-hidden">
-                            <img
-                              src={venueImage(venue.venue_id, venue.osm_type ?? venue.cuisine_type)}
-                              alt={venue.name}
-                              className="w-full h-full object-cover"
-                            />
+                          <div className="flex min-h-[180px] flex-col justify-between rounded-l-xl border-b border-border/60 bg-gradient-to-br from-slate-50 via-white to-sky-50 p-5 md:border-b-0 md:border-r">
+                            <div>
+                              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
+                                {(venue.osm_type ?? venue.cuisine_type ?? "workspace").replace(/_/g, " ")}
+                              </p>
+                              <h3 className="text-2xl font-bold leading-tight text-foreground">
+                                {venue.name}
+                              </h3>
+                            </div>
                           </div>
                           <CardContent className="pt-4">
                             <div className="flex justify-between items-start mb-2">
@@ -1144,8 +1224,12 @@ export function SearchPage() {
                                 >
                                   {busyness.label}
                                 </span>
-                                <h3 className="mb-1">{venue.name}</h3>
-                                <p className="text-muted-foreground">
+                                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                                  <MapPin className="size-4" />
+                                  <span>{venue.distance_km ? `${venue.distance_km} km away` : venue.borough}</span>
+                                </div>
+                                <h3 className="hidden">{venue.name}</h3>
+                                <p className="hidden text-muted-foreground">
                                   {venue.cuisine_type} •{" "}
                                   {venue.distance_km ? `${venue.distance_km} km away` : venue.borough}
                                 </p>
@@ -1156,16 +1240,19 @@ export function SearchPage() {
                               </div>
                             </div>
 
-                            <div className="flex flex-wrap gap-2 mb-3">
-                              {amenities.map((amenity) => (
-                                <span
-                                  key={amenity}
-                                  className="px-2 py-1 bg-secondary text-secondary-foreground rounded text-sm"
-                                >
-                                  {amenity}
+                            {renderWorkspaceFeatureBadges({
+                              hasWifi: venue.has_wifi,
+                              plugAccess: venue.plug_access ?? 0,
+                              callsAllowed: venue.calls_allowed,
+                            })}
+
+                            {venue.seats_avail > 0 && (
+                              <div className="mb-3">
+                                <span className="inline-flex items-center rounded-full border border-border/80 px-2.5 py-1 text-xs text-muted-foreground">
+                                  {venue.seats_avail} seats left
                                 </span>
-                              ))}
-                            </div>
+                              </div>
+                            )}
 
                             {/* EDI certification badges */}
                             {venue.certifications.length > 0 && (

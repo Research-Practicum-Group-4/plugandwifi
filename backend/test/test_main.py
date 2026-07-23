@@ -724,6 +724,74 @@ def test_chatbot_recommend_passes_recent_history_to_extractor(monkeypatch):
     assert captured["chat_history"][1].role == "assistant"
 
 
+def test_chatbot_recommend_compares_previous_candidates_by_distance(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message, chat_history=None: {
+            "venue_name": "Times Square",
+            "location": None,
+            "radius_km": None,
+            "venue_type": None,
+            "date": None,
+            "start_time": None,
+            "wifi": None,
+            "plug_access": None,
+            "accessibility_friendly": None,
+            "calls_allowed": None,
+            "wbe_certified": None,
+            "mbe_certified": None,
+            "vbe_certified": None,
+            "bcorp_certified": None,
+            "lgbt_friendly": None,
+            "busyness": None,
+            "time": None
+        }
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, hour=None, day_type=None, prediction_date=None, selected_date=None, selected_time=None: {
+            venue_id: {}
+            for venue_id in venue_ids
+        }
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "which one is closer to UCD Library",
+            "chat_history": [
+                {
+                    "role": "assistant",
+                    "message": (
+                        "Here are three strong default picks based on suitability, lower busyness, and rating.\n\n"
+                        "• UCD Library Shared Space (Dublin South)\n"
+                        "• UCD Village Study Hub (Dublin South)"
+                    )
+                }
+            ]
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["search_parameters"]["location"] == "UCD Library"
+    assert data["search_parameters"]["venue_name"] is None
+    assert data["search_parameters"]["candidate_venue_names"] == [
+        "UCD Library Shared Space",
+        "UCD Village Study Hub"
+    ]
+    assert data["search_parameters"]["sort_by_distance"] is True
+    assert data["venues"][0]["name"] == "UCD Library Shared Space"
+    assert set(venue["name"] for venue in data["venues"]).issubset(
+        {
+            "UCD Library Shared Space",
+            "UCD Village Study Hub"
+        }
+    )
+
+
 def test_normalize_chatbot_history_enforces_window_limits():
     oversized_message = "x" * 500
     chat_history = [
