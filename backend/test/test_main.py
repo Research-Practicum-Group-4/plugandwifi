@@ -817,6 +817,7 @@ def setup_and_seed_database():
             venue_id="osm_296568074",
             name="UCD Library Shared Space",
             borough="Dublin South",
+            osm_type="bakery",
             cuisine_type="library",
             has_wifi=True,
             accessibility_friendly=True,
@@ -846,6 +847,7 @@ def setup_and_seed_database():
             venue_id="osm_296568075",
             name="UCD Village Study Hub",
             borough="Dublin South",
+            osm_type="cafe",
             cuisine_type="cafe",
             has_wifi=True,
             accessibility_friendly=False,
@@ -1079,7 +1081,7 @@ def test_get_venues_filters_by_advanced_filter_fields():
 
 def test_get_venues_filters_by_multiple_venue_types_with_or_behaviour():
     response = client.get(
-        "/api/venues?borough=Dublin South&venue_type=library&venue_type=cafe"
+        "/api/venues?borough=Dublin South&venue_type=bakery&venue_type=cafe"
     )
 
     assert response.status_code == 200
@@ -1092,14 +1094,14 @@ def test_get_venues_filters_by_multiple_venue_types_with_or_behaviour():
         "osm_296568075"
     }
 
-    library_response = client.get(
-        "/api/venues?borough=Dublin South&venue_type=library"
+    bakery_response = client.get(
+        "/api/venues?borough=Dublin South&venue_type=bakery"
     )
 
-    assert library_response.status_code == 200
+    assert bakery_response.status_code == 200
     assert [
         item["venue_id"]
-        for item in library_response.json()["items"]
+        for item in bakery_response.json()["items"]
     ] == ["osm_296568074"]
 
 

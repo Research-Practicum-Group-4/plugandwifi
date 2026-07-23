@@ -59,14 +59,10 @@ const EDI_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
   "VBE-Certified":    { bg: "bg-blue-100",   text: "text-blue-700"   },
 };
 
-type GeoState = "idle" | "requesting" | "granted" | "denied";
-
 const SUPPORTED_VENUE_TYPES = [
-  "cafe",
-  "library",
+  "bakery",
   "restaurant",
-  "workspace",
-  "office",
+  "cafe",
   "hotel",
 ];
 
@@ -108,26 +104,6 @@ export function SearchPage() {
   const [autocompleteItems, setAutocompleteItems] = useState<{ name: string; type: "landmark" | "venue"; id?: string; coords?: { lat: number; lon: number } }[]>([]);
 
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
-
-  const [geoState, setGeoState] = useState<GeoState>("idle");
-  const [geoCoords, setGeoCoords] = useState<{ lat: number; lon: number } | null>(null);
-
-  // Request browser geolocation on mount
-  useEffect(() => {
-    if (!navigator.geolocation) {
-      setGeoState("denied");
-      return;
-    }
-    setGeoState("requesting");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setGeoCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
-        setGeoState("granted");
-      },
-      () => setGeoState("denied"),
-      { timeout: 8000, maximumAge: 60000 }
-    );
-  }, []);
 
   // Debounce search input
   useEffect(() => {
@@ -194,9 +170,6 @@ export function SearchPage() {
 
   // Main Data Fetching Engine
   useEffect(() => {
-    // Wait until geolocation has resolved (granted or denied) before fetching
-    if (geoState === "requesting") return;
-
     const executeQuery = async () => {
       setLoading(true);
 
@@ -308,13 +281,9 @@ export function SearchPage() {
           setApiFailed(false);
         } else {
           // General browse — pass user coords when available for proximity sorting
-          const geoParams = geoState === "granted" && geoCoords
-            ? { lat: geoCoords.lat, lon: geoCoords.lon, radius: 5.0 }
-            : {};
-
           const [allData, pageData] = await Promise.all([
-            api.getVenues({ ...queryParams, ...geoParams, page: 1, limit: 1000 }),
-            api.getVenues({ ...queryParams, ...geoParams, page: currentPage, limit: limit }),
+            api.getVenues({ ...queryParams, page: 1, limit: 1000 }),
+            api.getVenues({ ...queryParams, page: currentPage, limit: limit }),
           ]);
 
           let finalAll: EnrichedVenue[] = allData.items.map(enrichVenue);
@@ -773,7 +742,7 @@ export function SearchPage() {
                 {loading && !apiFailed ? (
                   <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
                     <Loader2 className="size-5 animate-spin" />
-                    {geoState === "requesting" ? "Getting your location…" : "Loading workspaces…"}
+                    Loading workspaces...
                   </div>
                 ) : displayVenues.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
@@ -866,7 +835,7 @@ export function SearchPage() {
                     const suitability = venue.suitability_score != null
                       ? Math.round(venue.suitability_score)
                       : Math.round(venue.rating * 20);
-                    const busyness = busynessDisplay(venue.venue_id, venue.busyness_score);
+                    const busyness = busynessDisplay(venue.venue_id, venue.busyness_score, venue.busyness_label);
                     const amenities: string[] = [];
                     if (venue.has_wifi) amenities.push("WiFi");
                     if (venue.wifi_free) amenities.push("Free WiFi");
@@ -881,7 +850,7 @@ export function SearchPage() {
                         <div className="grid md:grid-cols-[250px_1fr] gap-4">
                           <div className="aspect-video md:aspect-square overflow-hidden">
                             <img
-                              src={venueImage(venue.venue_id, venue.cuisine_type)}
+                              src={venueImage(venue.venue_id, venue.osm_type ?? venue.cuisine_type)}
                               alt={venue.name}
                               className="w-full h-full object-cover"
                             />

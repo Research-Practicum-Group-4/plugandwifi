@@ -3105,7 +3105,7 @@ def get_venues(
 
         if normalized_types:
             query = query.filter(
-                func.lower(Venue.cuisine_type).in_(
+                func.lower(Venue.osm_type).in_(
                     normalized_types
                 )
             )

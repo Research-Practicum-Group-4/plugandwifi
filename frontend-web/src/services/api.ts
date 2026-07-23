@@ -120,19 +120,19 @@ const BASE_VENUES: VenueDetail[] = [
   },
   {
     venue_id: "osm_12346",
-    name: "UCD Library",
-    osm_type: "library",
-    cuisine_type: "Library",
-    cuisine_detail: "academic_library",
+    name: "Baker Street Oven",
+    osm_type: "bakery",
+    cuisine_type: "Bakery",
+    cuisine_detail: "artisan_bakery",
     phone: "+35317167777",
-    website: "https://www.ucd.ie/library",
-    building_number: "James Joyce",
-    street: "Belfield Campus",
+    website: "https://examplebakery.ie",
+    building_number: "18",
+    street: "Baker Street",
     zipcode: "D04V1W8",
     borough: "Dublin South",
     lat: 53.3078,
     lon: -6.2230,
-    opening_hours: "Mo-Su 08:00-22:00",
+    opening_hours: "Mo-Su 07:00-19:00",
     opening_now: true,
     has_wifi: true,
     wifi_free: true,
@@ -219,12 +219,12 @@ const BASE_VENUES: VenueDetail[] = [
   },
   {
     venue_id: "osm_12349",
-    name: "Downtown Business Lounge",
-    osm_type: "office",
-    cuisine_type: "Co-working/Lounge",
-    cuisine_detail: "business_lounge",
+    name: "Union Square Kitchen",
+    osm_type: "restaurant",
+    cuisine_type: "Restaurant",
+    cuisine_detail: "casual_restaurant",
     phone: "+12125550177",
-    website: "https://downtownlounge.com",
+    website: "https://unionsquarekitchen.com",
     building_number: "45",
     street: "Wall Street",
     zipcode: "10005",
@@ -271,9 +271,9 @@ const generateMockVenues = (): VenueDetail[] => {
     "Corner Co-working Cafe", "Central Park Lounge"
   ];
 
-  const osmTypes = ["cafe", "library", "hotel", "office"];
-  const cuisineTypes = ["Coffee/Tea", "Library", "Hotel/Lounge", "Co-working/Lounge"];
-  const cuisineDetails = ["coffee_shop", "academic_library", "hotel_lobby", "modern_cafe", "business_lounge"];
+  const osmTypes = ["bakery", "restaurant", "hotel", "cafe"];
+  const cuisineTypes = ["Bakery", "Restaurant", "Hotel/Lounge", "Coffee/Tea"];
+  const cuisineDetails = ["artisan_bakery", "casual_restaurant", "hotel_lobby", "modern_cafe", "coffee_shop"];
   const streets = ["Dame Street", "Grand Canal Dock", "Broadway", "Wall Street", "5th Avenue", "O'Connell Street"];
   const boroughs = ["Manhattan", "Brooklyn", "Dublin South", "Dublin North", "Dublin Center"];
   const zipcodes = ["D02XY23", "D06ABC1", "10001", "10005", "10016", "D04V1W8"];
@@ -578,7 +578,7 @@ export const api = {
         }
         if (filters.venue_type !== undefined) {
           const types = Array.isArray(filters.venue_type) ? filters.venue_type : [filters.venue_type];
-          filtered = filtered.filter(v => types.some(type => v.cuisine_type.toLowerCase() === type.toLowerCase()));
+          filtered = filtered.filter(v => types.some(type => v.osm_type.toLowerCase() === type.toLowerCase()));
         }
         if (filters.name) {
           filtered = filtered.filter(v => v.name.toLowerCase().includes(filters.name!.toLowerCase()));
@@ -768,9 +768,9 @@ export const api = {
         start_time: booking.start_time.includes(":") ? booking.start_time : `${booking.start_time}:00`,
         end_time: booking.end_time.includes(":") ? booking.end_time : `${booking.end_time}:00`,
         seats_reserved: booking.seats_reserved,
-        status: "upcoming",
+        status: "pending_payment",
         order_id: `ORD-20260625-${newBookingId}`,
-        payment_status: "paid",
+        payment_status: "pending",
         lat: venue?.lat || null,
         lon: venue?.lon || null
       };

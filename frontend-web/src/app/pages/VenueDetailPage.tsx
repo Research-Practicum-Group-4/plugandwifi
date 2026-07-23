@@ -113,7 +113,7 @@ export function VenueDetailPage() {
         duration: duration.toString(),
         price: totalPrice,
         seatsReserved,
-        venueImages: venueImages(venue.venue_id, venue.cuisine_type),
+        venueImages: venueImages(venue.venue_id, venue.osm_type),
       },
     });
   };
@@ -222,7 +222,7 @@ export function VenueDetailPage() {
     );
   }
 
-  const images = venueImages(venue.venue_id, venue.cuisine_type);
+  const images = venueImages(venue.venue_id, venue.osm_type);
 
   return (
     <div className="container mx-auto px-4 py-8">
