@@ -8,7 +8,7 @@ import { Label } from "../components/ui/label";
 import { Slider } from "../components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Search, Star, Filter, Clock, MapPin, Sparkles, Phone, Accessibility, Plug, Wifi } from "lucide-react";
+import { Search, Star, Filter, Clock, MapPin, Sparkles, Phone, Accessibility, Plug, Wifi, Zap, Loader2 } from "lucide-react";
 import { api } from "../../services/api";
 import { enrichVenue, EnrichedVenue, venueImage, busynessDisplay } from "../utils/venueEnrichment";
 import { MapView } from "../components/MapView";
@@ -84,7 +84,6 @@ export function SearchPage() {
     fourPlusStars: false,
     callsAllowed: false,
     accessibilityFriendly: false,
-    plugAccess: false,
     wbeOwned: false,
     mbeOwned: false,
     lgbtFriendly: false,
@@ -364,7 +363,6 @@ export function SearchPage() {
       fourPlusStars: false,
       callsAllowed: false,
       accessibilityFriendly: false,
-      plugAccess: false,
       wbeOwned: false,
       mbeOwned: false,
       lgbtFriendly: false,

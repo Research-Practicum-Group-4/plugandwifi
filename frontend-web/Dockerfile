@@ -15,10 +15,12 @@ RUN npm ci --legacy-peer-deps
 COPY . .
 
 # Build-time variables for the Vite frontend
+ARG VITE_USE_MOCK=false
 ARG VITE_GOOGLE_MAPS_API_KEY
 ARG VITE_API_BASE_URL=https://api.plugandwifi.xyz/api
 
 # Make the variables available during npm run build
+ENV VITE_USE_MOCK=${VITE_USE_MOCK}
 ENV VITE_GOOGLE_MAPS_API_KEY=${VITE_GOOGLE_MAPS_API_KEY}
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
