@@ -12,8 +12,8 @@ import { Search, Star, Filter, Clock, MapPin, Sparkles, Phone, Accessibility, Pl
 import { api } from "../../services/api";
 import { enrichVenue, EnrichedVenue, venueImage, busynessDisplay } from "../utils/venueEnrichment";
 import { MapView } from "../components/MapView";
-import { ManhattanMap } from "../components/ManhattanMap";
 import { manhattanVenues } from "../data/manhattanVenues";
+import { Venue, VenueSuggestion } from "../../types/api";
 
 const LANDMARKS: Record<string, { lat: number; lon: number }> = {
   "Times Square": { lat: 40.7580, lon: -73.9855 },
@@ -49,6 +49,40 @@ function getSuitabilityColor(score: number): string {
   }
 }
 
+function formatDistance(distanceKm?: number | null): string | null {
+  if (typeof distanceKm !== "number" || !Number.isFinite(distanceKm) || distanceKm < 0) {
+    return null;
+  }
+
+  if (distanceKm < 1) {
+    return `${Math.round(distanceKm * 1000)} m away`;
+  }
+
+  return `${distanceKm.toFixed(1)} km away`;
+}
+
+function normalizeSearchText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeLandmarkDistanceDisplay(venue: EnrichedVenue): EnrichedVenue {
+  const formattedDistance = formatDistance(venue.distance_km);
+  if (!formattedDistance) return venue;
+
+  if (venue.distance_km < 1) {
+    return {
+      ...venue,
+      distance_km: 0,
+      borough: formattedDistance,
+    };
+  }
+
+  return {
+    ...venue,
+    distance_km: formattedDistance.replace(" km away", "") as unknown as number,
+  };
+}
+
 
 
 const EDI_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
@@ -65,6 +99,40 @@ const SUPPORTED_VENUE_TYPES = [
   "cafe",
   "hotel",
 ];
+
+const fallbackMapVenues: Venue[] = manhattanVenues.map((venue) => ({
+  venue_id: String(venue.id),
+  name: venue.name,
+  osm_type: venue.type.toLowerCase().replace(/\s+/g, "_"),
+  cuisine_type: venue.type,
+  distance_km: venue.distance,
+  has_wifi: venue.amenities.includes("WiFi"),
+  wifi_free: venue.amenities.includes("WiFi"),
+  opening_now: true,
+  seats_avail: 1,
+  total_seats: 1,
+  hourly_price: venue.price,
+  rating: venue.rating,
+  lat: venue.lat,
+  lon: venue.lng,
+  borough: "Manhattan",
+  state: "NY",
+  plug_access: venue.amenities.includes("Power Outlets") ? 1 : 0,
+  availability_window: venue.availability,
+  opening_hours_summary: venue.availability,
+  busyness_score: null,
+  busyness_label: null,
+  suitability_score: venue.suitabilityScore,
+  accessibility_friendly: false,
+  calls_allowed: false,
+  wbe_certified: false,
+  mbe_certified: false,
+  vbe_certified: false,
+  bcorp_certified: false,
+  lgbt_friendly: false,
+}));
+
+const INITIAL_DISPLAY_COUNT = 10;
 
 export function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -90,18 +158,16 @@ export function SearchPage() {
   const [priceRange, setPriceRange] = useState([1, 10]);
   const [duration, setDuration] = useState("any");
 
-  const [paginatedVenues, setPaginatedVenues] = useState<EnrichedVenue[]>([]);
   const [allVenues, setAllVenues] = useState<EnrichedVenue[]>([]);
+  const [fallbackVenues, setFallbackVenues] = useState<EnrichedVenue[]>([]);
   const [apiFailed, setApiFailed] = useState(false);
 
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [limit] = useState(6);
-  const [hasMore, setHasMore] = useState(false);
-  const [totalPages, setTotalPages] = useState(1);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_DISPLAY_COUNT);
 
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [autocompleteItems, setAutocompleteItems] = useState<{ name: string; type: "landmark" | "venue"; id?: string; coords?: { lat: number; lon: number } }[]>([]);
+  const [selectedVenueSuggestionId, setSelectedVenueSuggestionId] = useState<string | null>(null);
 
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
 
@@ -113,10 +179,15 @@ export function SearchPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  useEffect(() => {
+    setVisibleCount(INITIAL_DISPLAY_COUNT);
+  }, [filters, selectedVenueTypes, debouncedSearchQuery, priceRange, searchDate, startTime, endTime, seatsRequired, duration]);
+
   // Handle Autocomplete List Filtering
   useEffect(() => {
     if (!searchQuery.trim()) {
       setAutocompleteItems([]);
+      setSelectedVenueSuggestionId(null);
       return;
     }
 
@@ -176,22 +247,45 @@ export function SearchPage() {
       let lat: number | undefined = undefined;
       let lon: number | undefined = undefined;
       let nameFilter: string | undefined = undefined;
+      let selectedVenueId: string | undefined = undefined;
       let isLandmarkSearch = false;
 
       if (debouncedSearchQuery) {
         const clean = debouncedSearchQuery.trim().toLowerCase();
+        const normalizedQuery = normalizeSearchText(debouncedSearchQuery);
 
-        for (const [name, coords] of Object.entries(LANDMARKS)) {
-          if (clean.includes(name.toLowerCase()) || name.toLowerCase().includes(clean)) {
-            lat = coords.lat;
-            lon = coords.lon;
-            isLandmarkSearch = true;
-            break;
+        if (selectedVenueSuggestionId) {
+          nameFilter = debouncedSearchQuery;
+          selectedVenueId = selectedVenueSuggestionId;
+        } else {
+          try {
+            const suggestionRes = await api.getSuggestions(debouncedSearchQuery, 10);
+            const exactSuggestion = suggestionRes.items.find(
+              (item: VenueSuggestion) => normalizeSearchText(item.name) === normalizedQuery
+            );
+
+            if (exactSuggestion) {
+              nameFilter = debouncedSearchQuery;
+              selectedVenueId = exactSuggestion.venue_id;
+            }
+          } catch (err) {
+            console.warn("Pre-search exact venue suggestion lookup failed:", err);
           }
         }
 
-        if (!isLandmarkSearch) {
-          nameFilter = debouncedSearchQuery;
+        if (!selectedVenueId) {
+          for (const [name, coords] of Object.entries(LANDMARKS)) {
+            if (clean.includes(name.toLowerCase()) || name.toLowerCase().includes(clean)) {
+              lat = coords.lat;
+              lon = coords.lon;
+              isLandmarkSearch = true;
+              break;
+            }
+          }
+
+          if (!isLandmarkSearch) {
+            nameFilter = debouncedSearchQuery;
+          }
         }
       }
 
@@ -250,22 +344,69 @@ export function SearchPage() {
             (v) => v.enrichedPrice >= priceRange[0] && v.enrichedPrice <= priceRange[1]
           );
           matched = applyEdiFilters(matched);
+          matched = matched.map(normalizeLandmarkDistanceDisplay);
 
           setAllVenues(matched);
-          setTotalPages(Math.ceil(matched.length / limit) || 1);
-          setPaginatedVenues(matched.slice((currentPage - 1) * limit, currentPage * limit));
-          setHasMore(matched.length > currentPage * limit);
           setApiFailed(false);
         } else if (nameFilter) {
+          const normalizedNameFilter = normalizeSearchText(nameFilter);
+          let suggestionItems: VenueSuggestion[] = [];
+
+          try {
+            const suggestionRes = await api.getSuggestions(nameFilter, 10);
+            suggestionItems = suggestionRes.items;
+          } catch (err) {
+            console.warn("Venue suggestion lookup failed:", err);
+          }
+
+          const prioritizedIds: string[] = [];
+          const pushId = (venueId?: string | null) => {
+            if (!venueId || prioritizedIds.includes(venueId)) return;
+            prioritizedIds.push(venueId);
+          };
+
+          pushId(selectedVenueId);
+
+          const exactSuggestion = suggestionItems.find(
+            (item) => normalizeSearchText(item.name) === normalizedNameFilter
+          );
+          pushId(exactSuggestion?.venue_id);
+          suggestionItems.forEach((item) => pushId(item.venue_id));
+
           const allData = await api.getVenues({
             ...queryParams,
             page: 1,
             limit: 1000,
           });
 
-          let matched: EnrichedVenue[] = allData.items
-            .filter((v) => v.name.toLowerCase().includes(nameFilter!.toLowerCase()))
-            .map(enrichVenue);
+          let matched: EnrichedVenue[];
+
+          if (prioritizedIds.length > 0) {
+            const rank = new Map(prioritizedIds.map((id, index) => [id, index]));
+            matched = allData.items
+              .filter((v) => rank.has(v.venue_id))
+              .sort((a, b) => (rank.get(a.venue_id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.venue_id) ?? Number.MAX_SAFE_INTEGER))
+              .map(enrichVenue);
+          } else {
+            matched = allData.items
+              .filter((v) => normalizeSearchText(v.name).includes(normalizedNameFilter))
+              .map(enrichVenue);
+          }
+
+          if (matched.length === 0 && prioritizedIds.length > 0) {
+            try {
+              const fallbackDetails = await Promise.all(
+                prioritizedIds.slice(0, 10).map((venueId) => api.getVenueDetail(venueId).catch(() => null))
+              );
+
+              matched = fallbackDetails
+                .filter((venue): venue is NonNullable<typeof venue> => venue !== null)
+                .map(enrichVenue);
+            } catch (err) {
+              console.warn("Venue detail fallback lookup failed:", err);
+            }
+          }
+
           if (filters.fourPlusStars) {
             matched = matched.filter((v) => v.rating >= 4.0);
           }
@@ -275,55 +416,78 @@ export function SearchPage() {
           matched = applyEdiFilters(matched);
 
           setAllVenues(matched);
-          setTotalPages(Math.ceil(matched.length / limit) || 1);
-          setPaginatedVenues(matched.slice((currentPage - 1) * limit, currentPage * limit));
-          setHasMore(matched.length > currentPage * limit);
           setApiFailed(false);
         } else {
           // General browse — pass user coords when available for proximity sorting
-          const [allData, pageData] = await Promise.all([
-            api.getVenues({ ...queryParams, page: 1, limit: 1000 }),
-            api.getVenues({ ...queryParams, page: currentPage, limit: limit }),
-          ]);
+          const allData = await api.getVenues({ ...queryParams, page: 1, limit: 1000 });
 
           let finalAll: EnrichedVenue[] = allData.items.map(enrichVenue);
-          let finalPage: EnrichedVenue[] = pageData.items.map(enrichVenue);
 
           if (filters.fourPlusStars) {
             finalAll = finalAll.filter((v) => v.rating >= 4.0);
-            finalPage = finalPage.filter((v) => v.rating >= 4.0);
           }
           finalAll = finalAll.filter(
             (v) => v.enrichedPrice >= priceRange[0] && v.enrichedPrice <= priceRange[1]
           );
-          finalPage = finalPage.filter(
-            (v) => v.enrichedPrice >= priceRange[0] && v.enrichedPrice <= priceRange[1]
-          );
-          finalAll  = applyEdiFilters(finalAll);
-          finalPage = applyEdiFilters(finalPage);
+          finalAll = applyEdiFilters(finalAll);
 
           setAllVenues(finalAll);
-          setPaginatedVenues(finalPage);
-          setTotalPages(pageData.total_pages || 1);
-          setHasMore(pageData.has_more);
           setApiFailed(false);
         }
       } catch (err) {
         console.error("Failed to load search data, using fallback data:", err);
         setApiFailed(true);
         setAllVenues([]);
-        setPaginatedVenues([]);
       } finally {
         setLoading(false);
       }
     };
 
     executeQuery();
-  }, [filters, selectedVenueTypes, debouncedSearchQuery, priceRange, currentPage, limit, searchDate, startTime, endTime, seatsRequired, duration]);
+  }, [filters, selectedVenueTypes, debouncedSearchQuery, priceRange, searchDate, startTime, endTime, seatsRequired, duration]);
 
-  // When API fails, use manhattanVenues as fallback
-  const displayVenues = apiFailed ? manhattanVenues : paginatedVenues;
-  const displayCount = apiFailed ? manhattanVenues.length : allVenues.length;
+  useEffect(() => {
+    const shouldShowFallback = !loading && !apiFailed && allVenues.length === 0;
+
+    if (!shouldShowFallback) {
+      setFallbackVenues([]);
+      return;
+    }
+
+    const loadFallbackVenues = async () => {
+      try {
+        const data = await api.getVenues({
+          page: 1,
+          limit: 1000,
+          sort: "recommended",
+        });
+        setFallbackVenues(data.items.map(enrichVenue));
+      } catch (err) {
+        console.warn("Failed to load fallback venues:", err);
+        setFallbackVenues([]);
+      }
+    };
+
+    loadFallbackVenues();
+  }, [allVenues.length, apiFailed, loading]);
+
+  const emptySearchState = !loading && !apiFailed && allVenues.length === 0;
+  const visibleFallbackVenues = fallbackVenues.slice(0, visibleCount);
+  const displayVenues = apiFailed
+    ? manhattanVenues.slice(0, visibleCount)
+    : emptySearchState
+      ? visibleFallbackVenues
+      : allVenues.slice(0, visibleCount);
+  const canLoadMore = apiFailed
+    ? manhattanVenues.length > displayVenues.length
+    : emptySearchState
+      ? fallbackVenues.length > visibleFallbackVenues.length
+      : allVenues.length > displayVenues.length;
+  const displayCount = apiFailed
+    ? manhattanVenues.length
+    : emptySearchState && fallbackVenues.length > 0
+      ? fallbackVenues.length
+      : allVenues.length;
 
   const clearAllFilters = () => {
     setFilters({
@@ -346,7 +510,119 @@ export function SearchPage() {
     setStartTime("");
     setEndTime("");
     setSeatsRequired(1);
-    setCurrentPage(1);
+    setVisibleCount(INITIAL_DISPLAY_COUNT);
+  };
+
+  const renderApiVenueCard = (venue: EnrichedVenue) => {
+    const suitability = venue.suitability_score != null
+      ? Math.round(venue.suitability_score)
+      : Math.round(venue.rating * 20);
+    const busyness = busynessDisplay(venue.venue_id, venue.busyness_score, venue.busyness_label);
+    const amenities: string[] = [];
+    if (venue.has_wifi) amenities.push("WiFi");
+    if (venue.wifi_free) amenities.push("Free WiFi");
+    if (venue.calls_allowed) amenities.push("Calls Allowed");
+    if (venue.seats_avail > 0) amenities.push(`${venue.seats_avail} seats left`);
+
+    return (
+      <Card
+        key={venue.venue_id}
+        className="overflow-hidden hover:shadow-lg transition-shadow"
+      >
+        <div className="grid md:grid-cols-[250px_1fr] gap-4">
+          <div className="aspect-video md:aspect-square overflow-hidden">
+            <img
+              src={venueImage(venue.venue_id, venue.osm_type ?? venue.cuisine_type)}
+              alt={venue.name}
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <CardContent className="pt-4">
+            <div className="flex justify-between items-start mb-2">
+              <div>
+                <span
+                  className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full mb-1 ${busyness.color}`}
+                >
+                  {busyness.label}
+                </span>
+                <h3 className="mb-1">{venue.name}</h3>
+                <p className="text-muted-foreground">
+                  {venue.cuisine_type} • {formatDistance(venue.distance_km) ?? venue.borough}
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
+                <span>{venue.rating}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 mb-3">
+              {amenities.map((amenity) => (
+                <span
+                  key={amenity}
+                  className="px-2 py-1 bg-secondary text-secondary-foreground rounded text-sm"
+                >
+                  {amenity}
+                </span>
+              ))}
+            </div>
+
+            {venue.certifications.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {venue.certifications.map((cert) => {
+                  const style = EDI_BADGE_STYLES[cert] ?? { bg: "bg-gray-100", text: "text-gray-700" };
+                  return (
+                    <span
+                      key={cert}
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${style.bg} ${style.text}`}
+                    >
+                      {cert}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="mb-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Suitability for you</span>
+                <span
+                  className="font-semibold"
+                  style={{ color: getSuitabilityColor(suitability) }}
+                >
+                  {suitability}/100
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-muted-foreground">Status</p>
+                <p className={venue.opening_now ? "text-green-600" : "text-red-500"}>
+                  {venue.opening_now ? "Open Now" : "Closed"}
+                </p>
+              </div>
+              <div className="flex items-center gap-4">
+                <p className="text-2xl" style={{ color: "#2f8a64" }}>
+                  ${venue.enrichedPrice}/hr
+                </p>
+                <Link
+                  to={`/venue/${venue.venue_id}`}
+                  state={{ searchDate, startTime, endTime, seatsRequired }}
+                >
+                  <Button
+                    style={{ backgroundColor: "#253c50" }}
+                    className="cursor-pointer"
+                  >
+                    Book a Space
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </CardContent>
+        </div>
+      </Card>
+    );
   };
 
   return (
@@ -364,7 +640,7 @@ export function SearchPage() {
               {/* Duration select */}
               <div>
                 <Label htmlFor="duration" className="mb-2 block">Duration</Label>
-                <Select value={duration} onValueChange={(val) => { setDuration(val); setCurrentPage(1); }}>
+                <Select value={duration} onValueChange={(val) => { setDuration(val); setVisibleCount(INITIAL_DISPLAY_COUNT); }}>
                   <SelectTrigger id="duration">
                     <SelectValue placeholder="Select duration" />
                   </SelectTrigger>
@@ -384,7 +660,7 @@ export function SearchPage() {
                   checked={filters.freeWifi}
                   onCheckedChange={(checked) => {
                     setFilters({ ...filters, freeWifi: checked as boolean });
-                    setCurrentPage(1);
+                    setVisibleCount(INITIAL_DISPLAY_COUNT);
                   }}
                 />
                 <Label htmlFor="freeWifi" className="flex items-center gap-2 cursor-pointer">
@@ -399,7 +675,7 @@ export function SearchPage() {
                   checked={filters.plugAccess}
                   onCheckedChange={(checked) => {
                     setFilters({ ...filters, plugAccess: checked as boolean });
-                    setCurrentPage(1);
+                    setVisibleCount(INITIAL_DISPLAY_COUNT);
                   }}
                 />
                 <Label htmlFor="plugAccess" className="flex items-center gap-2 cursor-pointer">
@@ -422,7 +698,7 @@ export function SearchPage() {
                               ? [...current, type]
                               : current.filter((item) => item !== type)
                           );
-                          setCurrentPage(1);
+                          setVisibleCount(INITIAL_DISPLAY_COUNT);
                         }}
                       />
                       <Label htmlFor={`venueType-${type}`} className="cursor-pointer capitalize">
@@ -439,7 +715,7 @@ export function SearchPage() {
                   checked={filters.callsAllowed}
                   onCheckedChange={(checked) => {
                     setFilters({ ...filters, callsAllowed: checked as boolean });
-                    setCurrentPage(1);
+                    setVisibleCount(INITIAL_DISPLAY_COUNT);
                   }}
                 />
                 <Label htmlFor="callsAllowed" className="flex items-center gap-2 cursor-pointer">
@@ -454,7 +730,7 @@ export function SearchPage() {
                   checked={filters.fourPlusStars}
                   onCheckedChange={(checked) => {
                     setFilters({ ...filters, fourPlusStars: checked as boolean });
-                    setCurrentPage(1);
+                    setVisibleCount(INITIAL_DISPLAY_COUNT);
                   }}
                 />
                 <Label htmlFor="fourPlusStars" className="flex items-center gap-2 cursor-pointer">
@@ -469,7 +745,7 @@ export function SearchPage() {
                   checked={filters.accessibilityFriendly}
                   onCheckedChange={(checked) => {
                     setFilters({ ...filters, accessibilityFriendly: checked as boolean });
-                    setCurrentPage(1);
+                    setVisibleCount(INITIAL_DISPLAY_COUNT);
                   }}
                 />
                 <Label htmlFor="accessibilityFriendly" className="flex items-center gap-2 cursor-pointer">
@@ -484,7 +760,7 @@ export function SearchPage() {
                   checked={filters.plugAccess}
                   onCheckedChange={(checked) => {
                     setFilters({ ...filters, plugAccess: checked as boolean });
-                    setCurrentPage(1);
+                    setVisibleCount(INITIAL_DISPLAY_COUNT);
                   }}
                 />
                 <Label htmlFor="plugAccess" className="flex items-center gap-2 cursor-pointer">
@@ -503,7 +779,7 @@ export function SearchPage() {
                 <Checkbox
                   id="wbeOwned"
                   checked={filters.wbeOwned}
-                  onCheckedChange={(checked) => { setFilters({ ...filters, wbeOwned: checked as boolean }); setCurrentPage(1); }}
+                  onCheckedChange={(checked) => { setFilters({ ...filters, wbeOwned: checked as boolean }); setVisibleCount(INITIAL_DISPLAY_COUNT); }}
                 />
                 <Label htmlFor="wbeOwned" className="cursor-pointer relative inline-block px-3 py-1 rounded">
                   <span
@@ -517,7 +793,7 @@ export function SearchPage() {
                 <Checkbox
                   id="mbeOwned"
                   checked={filters.mbeOwned}
-                  onCheckedChange={(checked) => { setFilters({ ...filters, mbeOwned: checked as boolean }); setCurrentPage(1); }}
+                  onCheckedChange={(checked) => { setFilters({ ...filters, mbeOwned: checked as boolean }); setVisibleCount(INITIAL_DISPLAY_COUNT); }}
                 />
                 <Label htmlFor="mbeOwned" className="cursor-pointer relative inline-block px-3 py-1 rounded">
                   <span
@@ -531,7 +807,7 @@ export function SearchPage() {
                 <Checkbox
                   id="lgbtFriendly"
                   checked={filters.lgbtFriendly}
-                  onCheckedChange={(checked) => { setFilters({ ...filters, lgbtFriendly: checked as boolean }); setCurrentPage(1); }}
+                  onCheckedChange={(checked) => { setFilters({ ...filters, lgbtFriendly: checked as boolean }); setVisibleCount(INITIAL_DISPLAY_COUNT); }}
                 />
                 <Label htmlFor="lgbtFriendly" className="cursor-pointer relative inline-block px-3 py-1 rounded">
                   <span
@@ -545,7 +821,7 @@ export function SearchPage() {
                 <Checkbox
                   id="bCorpCertified"
                   checked={filters.bCorpCertified}
-                  onCheckedChange={(checked) => { setFilters({ ...filters, bCorpCertified: checked as boolean }); setCurrentPage(1); }}
+                  onCheckedChange={(checked) => { setFilters({ ...filters, bCorpCertified: checked as boolean }); setVisibleCount(INITIAL_DISPLAY_COUNT); }}
                 />
                 <Label htmlFor="bCorpCertified" className="cursor-pointer relative inline-block px-3 py-1 rounded">
                   <span className="absolute inset-0 opacity-15 rounded" style={{ backgroundColor: "#2d6a4f" }} />
@@ -556,7 +832,7 @@ export function SearchPage() {
                 <Checkbox
                   id="vbeOwned"
                   checked={filters.vbeOwned}
-                  onCheckedChange={(checked) => { setFilters({ ...filters, vbeOwned: checked as boolean }); setCurrentPage(1); }}
+                  onCheckedChange={(checked) => { setFilters({ ...filters, vbeOwned: checked as boolean }); setVisibleCount(INITIAL_DISPLAY_COUNT); }}
                 />
                 <Label htmlFor="vbeOwned" className="cursor-pointer relative inline-block px-3 py-1 rounded">
                   <span className="absolute inset-0 opacity-15 rounded" style={{ backgroundColor: "#1d4ed8" }} />
@@ -572,7 +848,7 @@ export function SearchPage() {
               value={priceRange}
               onValueChange={(val) => {
                 setPriceRange(val);
-                setCurrentPage(1);
+                setVisibleCount(INITIAL_DISPLAY_COUNT);
               }}
               min={3}
               max={10}
@@ -601,7 +877,7 @@ export function SearchPage() {
                   value={searchDate}
                   onChange={(e) => {
                     setSearchDate(e.target.value);
-                    setCurrentPage(1);
+                    setVisibleCount(INITIAL_DISPLAY_COUNT);
                   }}
                   className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
@@ -615,7 +891,7 @@ export function SearchPage() {
                     value={startTime}
                     onChange={(e) => {
                       setStartTime(e.target.value);
-                      setCurrentPage(1);
+                      setVisibleCount(INITIAL_DISPLAY_COUNT);
                     }}
                     className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
@@ -639,7 +915,7 @@ export function SearchPage() {
                     value={endTime}
                     onChange={(e) => {
                       setEndTime(e.target.value);
-                      setCurrentPage(1);
+                      setVisibleCount(INITIAL_DISPLAY_COUNT);
                     }}
                     className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
@@ -664,7 +940,7 @@ export function SearchPage() {
                   value={seatsRequired}
                   onChange={(e) => {
                     setSeatsRequired(parseInt(e.target.value));
-                    setCurrentPage(1);
+                    setVisibleCount(INITIAL_DISPLAY_COUNT);
                   }}
                   className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
@@ -693,7 +969,8 @@ export function SearchPage() {
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
-                  setCurrentPage(1);
+                  setSelectedVenueSuggestionId(null);
+                  setVisibleCount(INITIAL_DISPLAY_COUNT);
                   setShowSuggestions(true);
                 }}
                 onFocus={() => setShowSuggestions(true)}
@@ -710,8 +987,9 @@ export function SearchPage() {
                       type="button"
                       onClick={() => {
                         setSearchQuery(item.name);
+                        setSelectedVenueSuggestionId(item.type === "venue" ? item.id ?? null : null);
                         setShowSuggestions(false);
-                        setCurrentPage(1);
+                        setVisibleCount(INITIAL_DISPLAY_COUNT);
                       }}
                       className="w-full text-left px-4 py-2.5 hover:bg-accent hover:text-accent-foreground text-sm flex items-center justify-between border-b border-border last:border-0 cursor-pointer"
                     >
@@ -744,13 +1022,16 @@ export function SearchPage() {
                     <Loader2 className="size-5 animate-spin" />
                     Loading workspaces...
                   </div>
-                ) : displayVenues.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    No spaces found matching filters.
+                ) : emptySearchState ? (
+                  <div className="space-y-6">
+                    <div className="text-center py-6 text-muted-foreground">
+                      No matching venues found. Here are some recommended venues for you.
+                    </div>
+                    {displayVenues.map((venue) => renderApiVenueCard(venue))}
                   </div>
                 ) : apiFailed ? (
                   // Fallback: render manhattanVenues with Figma card UI
-                  manhattanVenues.map((venue) => {
+                  displayVenues.map((venue) => {
                     const busyness = busynessDisplay(String(venue.id));
                     return (
                       <Card key={venue.id} className="overflow-hidden hover:shadow-lg transition-shadow">
@@ -830,7 +1111,7 @@ export function SearchPage() {
                   })
                 ) : (
                   // API data with enriched card UI
-                  paginatedVenues.map((venue) => {
+                  displayVenues.map((venue) => {
                     // Use ML suitability_score from backend when available, fall back to rating proxy
                     const suitability = venue.suitability_score != null
                       ? Math.round(venue.suitability_score)
@@ -946,52 +1227,33 @@ export function SearchPage() {
                   })
                 )}
 
-                {/* Pagination UI (API data only) */}
-                {!loading && !apiFailed && paginatedVenues.length > 0 && (
-                  <div className="flex items-center justify-center gap-4 mt-8">
+                {!loading && canLoadMore && (
+                  <div className="flex items-center justify-center mt-8">
                     <Button
-                      variant="outline"
                       onClick={() => {
-                        setCurrentPage((prev) => Math.max(prev - 1, 1));
-                        window.scrollTo({ top: 0, behavior: "smooth" });
+                        setVisibleCount((prev) => prev + INITIAL_DISPLAY_COUNT);
                       }}
-                      disabled={currentPage === 1}
-                      className="px-4 py-2 cursor-pointer"
+                      className="px-6 py-2 cursor-pointer"
                     >
-                      Previous
-                    </Button>
-                    <span className="text-sm font-semibold text-foreground bg-muted px-3 py-1.5 rounded-md">
-                      Page {currentPage} of {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setCurrentPage((prev) => prev + 1);
-                        window.scrollTo({ top: 0, behavior: "smooth" });
-                      }}
-                      disabled={!hasMore}
-                      className="px-4 py-2 cursor-pointer"
-                    >
-                      Next
+                      Load more
                     </Button>
                   </div>
                 )}
               </TabsContent>
 
               <TabsContent value="map">
-                {apiFailed ? (
-                  <ManhattanMap venues={manhattanVenues} height="600px" />
-                ) : (
-                  <Card className="h-[600px] overflow-hidden border border-border shadow-sm">
-                    {loading ? (
-                      <div className="h-full w-full flex items-center justify-center text-muted-foreground bg-muted bg-opacity-80">
-                        Loading map and active venues...
-                      </div>
-                    ) : (
-                      <MapView venues={allVenues} height="600px" />
-                    )}
-                  </Card>
-                )}
+                <Card className="h-[600px] overflow-hidden border border-border shadow-sm">
+                  {loading && !apiFailed ? (
+                    <div className="h-full w-full flex items-center justify-center text-muted-foreground bg-muted bg-opacity-80">
+                      Loading map and active venues...
+                    </div>
+                  ) : (
+                    <MapView
+                      venues={apiFailed ? fallbackMapVenues : allVenues}
+                      height="600px"
+                    />
+                  )}
+                </Card>
               </TabsContent>
             </Tabs>
           </div>
