@@ -1,27 +1,23 @@
 import { Venue } from "../../types/api";
 
-// ── Busyness label mapping ────────────────────────────────────────────────
-// Maps the ML busyness_score (0–100) to a user-facing label + Tailwind colour.
-// Falls back to a deterministic hash of venue_id when no score is available.
-
 export interface BusynessDisplay {
   label: string;
   color: string;
 }
 
 const BUSYNESS_LEVELS: BusynessDisplay[] = [
-  { label: "You'll be the only one",  color: "bg-emerald-100 text-emerald-700" },
-  { label: "It's a tiny group today", color: "bg-teal-100 text-teal-700"      },
-  { label: "It's a normal day",       color: "bg-blue-100 text-blue-700"      },
-  { label: "It's a busy day",         color: "bg-orange-100 text-orange-700"  },
-  { label: "It's a full house!",      color: "bg-red-100 text-red-700"        },
+  { label: "You'll be the only one", color: "bg-emerald-100 text-emerald-700" },
+  { label: "It's a tiny group today", color: "bg-teal-100 text-teal-700" },
+  { label: "It's a normal day", color: "bg-blue-100 text-blue-700" },
+  { label: "It's a busy day", color: "bg-orange-100 text-orange-700" },
+  { label: "It's a full house!", color: "bg-red-100 text-red-700" },
 ];
 
 function scoreToIndex(score: number): number {
-  if (score <= 20)  return 0;
-  if (score <= 30)  return 1;
-  if (score <= 60)  return 2;
-  if (score <= 90)  return 3;
+  if (score <= 20) return 0;
+  if (score <= 30) return 1;
+  if (score <= 60) return 2;
+  if (score <= 90) return 3;
   return 4;
 }
 
@@ -29,14 +25,8 @@ export function busynessDisplay(venueId: string, busynessScore?: number | null):
   if (busynessScore != null) {
     return BUSYNESS_LEVELS[scoreToIndex(busynessScore)];
   }
-  // Deterministic fallback when ML score is absent
   return BUSYNESS_LEVELS[hashString(venueId) % BUSYNESS_LEVELS.length];
 }
-
-// ── Venue photo pools ─────────────────────────────────────────────────────
-// Each pool has 8 curated Unsplash direct URLs for that venue category.
-// venueImage() picks one deterministically by hashing venue_id → stable per venue.
-// venueImages() returns a gallery of 3 for detail pages (primary + 2 extras).
 
 const PHOTO_POOLS: Record<string, string[]> = {
   coffee: [
@@ -96,8 +86,8 @@ const PHOTO_POOL_DEFAULT = PHOTO_POOLS.cowork;
 function categoryPool(cuisineType: string): string[] {
   const t = (cuisineType || "").toLowerCase();
   if (t.includes("coffee") || t.includes("cafe") || t.includes("tea")) return PHOTO_POOLS.coffee;
-  if (t.includes("library") || t.includes("study"))                     return PHOTO_POOLS.library;
-  if (t.includes("hotel") || t.includes("lounge"))                      return PHOTO_POOLS.hotel;
+  if (t.includes("library") || t.includes("study")) return PHOTO_POOLS.library;
+  if (t.includes("hotel") || t.includes("lounge")) return PHOTO_POOLS.hotel;
   if (t.includes("restaurant") || t.includes("food") || t.includes("bar")) return PHOTO_POOLS.restaurant;
   if (t.includes("cowork") || t.includes("office") || t.includes("workspace")) return PHOTO_POOLS.cowork;
   return PHOTO_POOL_DEFAULT;
@@ -111,24 +101,23 @@ export function venueImage(venueId: string, cuisineType: string): string {
 export function venueImages(venueId: string, cuisineType: string, width = 800): string[] {
   const pool = categoryPool(cuisineType);
   const h = hashString(venueId);
-  const primary   = h % pool.length;
+  const primary = h % pool.length;
   const secondary = (h + 3) % pool.length;
-  const tertiary  = (h + 6) % pool.length;
+  const tertiary = (h + 6) % pool.length;
   const imgs = [pool[primary]];
   if (pool[secondary] !== pool[primary]) imgs.push(pool[secondary]);
   else imgs.push(pool[(primary + 1) % pool.length]);
   if (pool[tertiary] !== imgs[0] && pool[tertiary] !== imgs[1]) imgs.push(pool[tertiary]);
   else imgs.push(pool[(primary + 2) % pool.length]);
-  return imgs.map(url => url.replace("w=600", `w=${width}`));
+  return imgs.map((url) => url.replace("w=600", `w=${width}`));
 }
 
 export interface EnrichedVenue extends Venue {
-  enrichedPrice: number;        // $3–$7, $1 increments, deterministic per venue_id
-  certifications: string[];     // deterministic EDI flags per venue_id
-  isAccessible: boolean;        // deterministic ADA accessibility flag per venue_id
+  enrichedPrice: number;
+  certifications: string[];
+  isAccessible: boolean;
 }
 
-// djb2 hash — deterministic unsigned 32-bit integer from a string
 function hashString(s: string): number {
   let h = 5381;
   for (let i = 0; i < s.length; i++) {
@@ -138,7 +127,6 @@ function hashString(s: string): number {
   return h;
 }
 
-// Linear congruential generator seeded by hash — produces floats in [0, 1)
 function seededRandom(seed: number): () => number {
   let s = seed >>> 0;
   return () => {
@@ -148,8 +136,6 @@ function seededRandom(seed: number): () => number {
   };
 }
 
-// Prices: $3–$7 at $1 increments with triangular distribution peaked at $5
-// Weights: [1, 2, 3, 2, 1] → $3 and $7 least likely, $5 most likely
 const PRICES = [3, 4, 5, 6, 7];
 const PRICE_WEIGHTS = [1, 2, 3, 2, 1];
 const PRICE_WEIGHT_TOTAL = 9;
@@ -164,47 +150,21 @@ function pickPrice(rand: () => number): number {
   return 5;
 }
 
-// EDI certification flags with realistic self-certification probabilities
-const EDI_FLAGS: { label: string; probability: number }[] = [
-  { label: "WBE-Certified",    probability: 0.20 },
-  { label: "MBE-Certified",    probability: 0.15 },
-  { label: "LGBT+ Friendly",   probability: 0.25 },
-  { label: "B-Corp Certified", probability: 0.10 },
-  { label: "VBE-Certified",    probability: 0.08 },
-];
-
-// ~68% of NYC commercial spaces are ADA-compliant per NYC Mayor's Office for
-// People with Disabilities surveys. Hotels skew higher (~90%), libraries near
-// universal (~95%), cafes/restaurants lower (~60%), co-working mid (~75%).
-const ACCESSIBILITY_RATE_BY_TYPE: Record<string, number> = {
-  coffee:     0.60,
-  library:    0.95,
-  hotel:      0.90,
-  restaurant: 0.60,
-  cowork:     0.75,
-};
-
-function accessibilityRate(cuisineType: string): number {
-  const t = (cuisineType || "").toLowerCase();
-  if (t.includes("coffee") || t.includes("cafe") || t.includes("tea") || t.includes("bakery")) return ACCESSIBILITY_RATE_BY_TYPE.coffee;
-  if (t.includes("library") || t.includes("study"))                                             return ACCESSIBILITY_RATE_BY_TYPE.library;
-  if (t.includes("hotel") || t.includes("lounge"))                                              return ACCESSIBILITY_RATE_BY_TYPE.hotel;
-  if (t.includes("restaurant") || t.includes("food") || t.includes("bar"))                     return ACCESSIBILITY_RATE_BY_TYPE.restaurant;
-  if (t.includes("cowork") || t.includes("office") || t.includes("workspace"))                 return ACCESSIBILITY_RATE_BY_TYPE.cowork;
-  return 0.68; // NYC-wide default
-}
-
 export function enrichVenue(venue: Venue): EnrichedVenue {
   const rand = seededRandom(hashString(venue.venue_id));
-
   const enrichedPrice = pickPrice(rand);
 
   const certifications: string[] = [];
-  for (const flag of EDI_FLAGS) {
-    if (rand() < flag.probability) certifications.push(flag.label);
-  }
+  if (venue.wbe_certified) certifications.push("WBE-Certified");
+  if (venue.mbe_certified) certifications.push("MBE-Certified");
+  if (venue.lgbt_friendly) certifications.push("LGBT+ Friendly");
+  if (venue.bcorp_certified) certifications.push("B-Corp Certified");
+  if (venue.vbe_certified) certifications.push("VBE-Certified");
 
-  const isAccessible = rand() < accessibilityRate(venue.cuisine_type);
-
-  return { ...venue, enrichedPrice, certifications, isAccessible };
+  return {
+    ...venue,
+    enrichedPrice,
+    certifications,
+    isAccessible: Boolean(venue.accessibility_friendly),
+  };
 }

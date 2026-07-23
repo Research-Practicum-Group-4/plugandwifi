@@ -527,6 +527,7 @@ export const api = {
     end_time?: string;
     duration_hours?: number;
     seats_required?: number;
+    sort?: "recommended" | "suitability";
   }): Promise<VenueListResponse> => {
     if (USE_MOCK) {
       await delay(400);
@@ -678,6 +679,7 @@ export const api = {
         setParam("end_time", filters.end_time);
         setParam("duration_hours", filters.duration_hours);
         setParam("seats_required", filters.seats_required);
+        setParam("sort", filters.sort);
       }
       const response = await axiosInstance.get<any>("/venues", { params });
       const raw = response.data;
