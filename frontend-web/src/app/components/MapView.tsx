@@ -1,11 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
-import {
-  APIProvider,
-  InfoWindow,
-  Map,
-  Marker,
-  useMap,
-} from "@vis.gl/react-google-maps";
+import React, { useEffect, useRef } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { Venue } from "../../types/api";
 
 interface MapViewProps {
@@ -15,142 +10,35 @@ interface MapViewProps {
   zoom?: number;
 }
 
-type LatLng = {
-  lat: number;
-  lng: number;
-};
-
-type MarkerVenue = Venue & {
-  position: LatLng;
-};
-
 const DEFAULT_CENTER: [number, number] = [40.7589, -73.9851];
-const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? "";
 
-function fitMapToVenues(
-  venues: MarkerVenue[],
-  map: {
-    panTo: (position: LatLng) => void;
-    setCenter: (position: LatLng) => void;
-    setZoom: (value: number) => void;
-    fitBounds: (bounds: unknown, padding?: number) => void;
-  },
-  zoom: number
-) {
-  if (venues.length === 0) return;
-
-  if (venues.length === 1) {
-    map.setCenter(venues[0].position);
-    map.setZoom(zoom);
-    return;
-  }
-
-  const bounds = {
-    north: Math.max(...venues.map((venue) => venue.position.lat)),
-    south: Math.min(...venues.map((venue) => venue.position.lat)),
-    east: Math.max(...venues.map((venue) => venue.position.lng)),
-    west: Math.min(...venues.map((venue) => venue.position.lng)),
-  };
-
-  map.fitBounds(bounds, 50);
-}
-
-function MapMarkers({ venues, zoom }: { venues: MarkerVenue[]; zoom: number }) {
-  const map = useMap();
-  const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!map) return;
-    fitMapToVenues(venues, map, zoom);
-  }, [map, venues, zoom]);
-
-  useEffect(() => {
-    if (!selectedVenueId || venues.some((venue) => venue.venue_id === selectedVenueId)) return;
-    setSelectedVenueId(null);
-  }, [selectedVenueId, venues]);
-
-  const selectedVenue = venues.find((venue) => venue.venue_id === selectedVenueId) ?? null;
-
-  return (
-    <>
-      {venues.map((venue) => (
-        <Marker
-          key={venue.venue_id}
-          position={venue.position}
-          title={venue.name}
-          onClick={() => {
-            setSelectedVenueId(venue.venue_id);
-            map?.panTo(venue.position);
-          }}
-        />
-      ))}
-
-      {selectedVenue && (
-        <InfoWindow
-          position={selectedVenue.position}
-          onCloseClick={() => setSelectedVenueId(null)}
-          shouldFocus={false}
-        >
-          <div
-            style={{
-              fontFamily: "system-ui, -apple-system, sans-serif",
-              padding: "4px",
-              minWidth: "170px",
-            }}
-          >
-            <h4
-              style={{
-                margin: "0 0 4px 0",
-                fontSize: "13px",
-                fontWeight: 600,
-                color: "#253c50",
-              }}
-            >
-              {selectedVenue.name}
-            </h4>
-            <p
-              style={{
-                margin: "0 0 4px 0",
-                fontSize: "11px",
-                color: "#eab308",
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-              }}
-            >
-              <span style={{ fontWeight: 600 }}>
-                Rating: {selectedVenue.rating.toFixed(1)}
-              </span>
-            </p>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "12px",
-                fontWeight: 600,
-                color: "#2f8a64",
-              }}
-            >
-              ${selectedVenue.hourly_price.toFixed(2)}/hr
-            </p>
-            <a
-              href={`/venue/${selectedVenue.venue_id}`}
-              style={{
-                display: "inline-block",
-                marginTop: "6px",
-                fontSize: "11px",
-                color: "#253c50",
-                fontWeight: 600,
-                textDecoration: "underline",
-              }}
-            >
-              View Details
-            </a>
-          </div>
-        </InfoWindow>
-      )}
-    </>
-  );
-}
+// Custom pin icon for Leaflet markers
+const createCustomIcon = () => {
+  return L.divIcon({
+    className: "custom-map-marker",
+    html: `
+      <div style="
+        background-color: #253c50;
+        color: white;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 12px;
+        border: 2px solid white;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      ">
+        📍
+      </div>
+    `,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -14],
+  });
+};
 
 export const MapView: React.FC<MapViewProps> = ({
   venues,
@@ -158,54 +46,98 @@ export const MapView: React.FC<MapViewProps> = ({
   center = DEFAULT_CENTER,
   zoom = 13,
 }) => {
-  const validVenues = useMemo<MarkerVenue[]>(
-    () =>
-      venues
-        .filter(
-          (venue) =>
-            typeof venue.lat === "number" &&
-            typeof venue.lon === "number" &&
-            Number.isFinite(venue.lat) &&
-            Number.isFinite(venue.lon)
-        )
-        .map((venue) => ({
-          ...venue,
-          position: { lat: venue.lat, lng: venue.lon },
-        })),
-    [venues]
-  );
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const markersLayerRef = useRef<L.LayerGroup | null>(null);
 
-  if (!GOOGLE_MAPS_KEY) {
-    return (
-      <div
-        style={{ height, width: "100%", borderRadius: "8px" }}
-        className="flex items-center justify-center border border-border bg-muted px-4 text-center text-sm text-muted-foreground shadow-sm"
-      >
-        Google Maps API key is missing. Set `VITE_GOOGLE_MAPS_API_KEY` to render the map.
-      </div>
+  // Initialize Leaflet Map
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+
+    if (!mapInstanceRef.current) {
+      const map = L.map(mapContainerRef.current, {
+        center: [center[0], center[1]],
+        zoom,
+        zoomControl: true,
+      });
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
+      }).addTo(map);
+
+      markersLayerRef.current = L.layerGroup().addTo(map);
+      mapInstanceRef.current = map;
+    }
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  // Update Markers when venues list changes
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const markersLayer = markersLayerRef.current;
+    if (!map || !markersLayer) return;
+
+    markersLayer.clearLayers();
+
+    const validVenues = venues.filter(
+      (v) =>
+        typeof v.lat === "number" &&
+        typeof v.lon === "number" &&
+        Number.isFinite(v.lat) &&
+        Number.isFinite(v.lon)
     );
-  }
+
+    const customIcon = createCustomIcon();
+
+    validVenues.forEach((venue) => {
+      const suitability = (venue as any).suitability_score || Math.round(75 + venue.rating * 4);
+      const busyness = (venue as any).busyness_label || "Moderate";
+
+      const popupContent = `
+        <div style="font-family: system-ui, sans-serif; min-width: 180px; padding: 4px;">
+          <h4 style="margin: 0 0 4px 0; font-weight: 700; font-size: 14px; color: #111827;">${venue.name}</h4>
+          <p style="margin: 0 0 6px 0; font-size: 12px; color: #6b7280;">${venue.cuisine_type || "Workspace"} • ${venue.borough || "Manhattan"}</p>
+          
+          <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 8px;">
+            <span style="background: #ecfdf5; color: #047857; font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px;">
+              Suitability: ${suitability}%
+            </span>
+            <span style="background: #f3f4f6; color: #374151; font-size: 11px; padding: 2px 6px; border-radius: 4px;">
+              Busyness: ${busyness}
+            </span>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e5e7eb; pt: 6px; margin-top: 6px;">
+            <span style="font-size: 14px; font-weight: 700; color: #2f8a64;">$${venue.hourly_price}/hr</span>
+            <a href="/venue/${venue.venue_id}" style="font-size: 12px; font-weight: 600; color: #253c50; text-decoration: underline;">
+              View Details &rarr;
+            </a>
+          </div>
+        </div>
+      `;
+
+      const marker = L.marker([venue.lat, venue.lon], { icon: customIcon }).bindPopup(popupContent);
+      markersLayer.addLayer(marker);
+    });
+
+    if (validVenues.length > 0) {
+      const bounds = L.latLngBounds(validVenues.map((v) => [v.lat, v.lon]));
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+    }
+  }, [venues]);
 
   return (
     <div
+      ref={mapContainerRef}
       style={{ height, width: "100%", borderRadius: "8px" }}
-      className="overflow-hidden border border-border bg-muted shadow-sm"
-    >
-      <APIProvider apiKey={GOOGLE_MAPS_KEY}>
-        <Map
-          defaultCenter={{ lat: center[0], lng: center[1] }}
-          defaultZoom={zoom}
-          gestureHandling="greedy"
-          disableDefaultUI={false}
-          mapTypeControl={false}
-          streetViewControl={false}
-          fullscreenControl={false}
-          clickableIcons={false}
-          style={{ width: "100%", height: "100%" }}
-        >
-          <MapMarkers venues={validVenues} zoom={zoom} />
-        </Map>
-      </APIProvider>
-    </div>
+      className="overflow-hidden border border-border shadow-sm z-0 relative"
+    />
   );
 };

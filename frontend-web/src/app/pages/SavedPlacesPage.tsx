@@ -69,15 +69,6 @@ export function SavedPlacesPage() {
     fetchSavedVenues();
   }, []);
 
-  const getVenueImage = (venueId: string) => {
-    const images: Record<string, string> = {
-      "osm_12345": "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400",
-      "osm_12346": "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400",
-      "osm_12347": "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400",
-    };
-    return images[venueId] || "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400";
-  };
-
   const alerts = [
     {
       id: 1,
@@ -130,41 +121,36 @@ export function SavedPlacesPage() {
               {venues.map((venue) => (
                 <Link key={venue.venue_id} to={`/venue/${venue.venue_id}`}>
                   <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer">
-                    <div className="aspect-video relative overflow-hidden">
-                      <img
-                        src={getVenueImage(venue.venue_id)}
-                        alt={venue.name}
-                        className="w-full h-full object-cover"
-                      />
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="absolute top-2 right-2"
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          try {
-                            await api.removeFavorite(venue.venue_id);
-                            const favsStr = localStorage.getItem("plugandwifi_favorites");
-                            let favs: string[] = favsStr ? JSON.parse(favsStr) : [];
-                            favs = favs.filter(fid => fid !== venue.venue_id);
-                            localStorage.setItem("plugandwifi_favorites", JSON.stringify(favs));
-                            setVenues(prev => prev.filter(v => v.venue_id !== venue.venue_id));
-                          } catch (err) {
-                            console.error("Failed to remove favorite:", err);
-                          }
-                        }}
-                      >
-                        <Heart className="size-4 fill-red-500 stroke-red-500" />
-                      </Button>
-                    </div>
-                    <CardContent className="pt-4">
+                    <CardContent className="p-5">
                       <div className="flex items-start justify-between mb-2">
-                        <h4>{venue.name}</h4>
-                        <div className="flex items-center gap-1">
-                          <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
-                          <span>{venue.rating}</span>
+                        <div>
+                          <h4 className="font-semibold text-base">{venue.name}</h4>
+                          <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                            <Star className="size-3.5 fill-yellow-400 stroke-yellow-400" />
+                            <span className="font-medium text-foreground">{venue.rating}</span>
+                          </div>
                         </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 cursor-pointer"
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            try {
+                              await api.removeFavorite(venue.venue_id);
+                              const favsStr = localStorage.getItem("plugandwifi_favorites");
+                              let favs: string[] = favsStr ? JSON.parse(favsStr) : [];
+                              favs = favs.filter(fid => fid !== venue.venue_id);
+                              localStorage.setItem("plugandwifi_favorites", JSON.stringify(favs));
+                              setVenues(prev => prev.filter(v => v.venue_id !== venue.venue_id));
+                            } catch (err) {
+                              console.error("Failed to remove favorite:", err);
+                            }
+                          }}
+                        >
+                          <Heart className="size-4 fill-red-500 stroke-red-500" />
+                        </Button>
                       </div>
                       <p className="text-muted-foreground mb-2">
                         {venue.cuisine_type} • {venue.distance_km} km away

@@ -9,36 +9,87 @@ import { Checkbox } from "../../components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Separator } from "../../components/ui/separator";
 import { Alert, AlertDescription } from "../../components/ui/alert";
-import { Info } from "lucide-react";
+import { Info, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "../../../services/api";
 
 export function OfferSpacePage() {
   const navigate = useNavigate();
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [name, setName] = useState("");
+  const [spaceType, setSpaceType] = useState("");
+  const [description, setDescription] = useState("");
+  const [capacity, setCapacity] = useState("8");
+  const [price, setPrice] = useState("12");
+  const [address, setAddress] = useState("");
+  const [borough, setBorough] = useState("Midtown");
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("18:00");
+
   const [amenities, setAmenities] = useState({
-    wifi: false,
-    powerOutlets: false,
-    water: false,
+    wifi: true,
+    powerOutlets: true,
+    water: true,
     coffee: false,
     tea: false,
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!acceptedTerms) {
-      toast.error("Please accept the terms and conditions");
+      toast.error("Please agree to the Terms & Conditions before publishing.");
       return;
     }
-    toast.success("Space listing created successfully!");
-    navigate("/provider/dashboard");
+
+    if (!name.trim()) {
+      toast.error("Space Name is required.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const activeAmenities: string[] = [];
+      if (amenities.wifi) activeAmenities.push("WiFi");
+      if (amenities.powerOutlets) activeAmenities.push("Power Outlets");
+      if (amenities.water) activeAmenities.push("Complimentary Water");
+      if (amenities.coffee) activeAmenities.push("Coffee Available");
+      if (amenities.tea) activeAmenities.push("Tea Available");
+
+      await api.createVenue({
+        name: name.trim(),
+        lat: 40.7580,
+        lon: -73.9855,
+        borough: borough || "Manhattan",
+        opening_hours: `${startTime} - ${endTime}`,
+        seat_capacity: parseInt(capacity) || 5,
+        amenity_tags: activeAmenities,
+        rules_text: description.trim() || `${spaceType} workspace in ${borough}`,
+        has_wifi: amenities.wifi,
+        plug_access: amenities.powerOutlets ? 1 : 0,
+        hourly_price: parseFloat(price) || 10,
+      });
+
+      toast.success("Space listing created successfully and submitted for approval!");
+      navigate("/provider/dashboard");
+    } catch (err: any) {
+      console.error("Failed to create venue:", err);
+      const errMsg = err.response?.data?.detail || "Failed to create space listing.";
+      toast.error(errMsg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
       <div className="mb-8">
-        <h1 className="mb-2">List Your Space</h1>
+        <h1 className="text-2xl font-bold mb-2">List Your Space</h1>
         <p className="text-muted-foreground">
-          Share your venue with professionals looking for workspace
+          Offer your venue to professionals looking for work & study spaces
         </p>
       </div>
 
@@ -52,14 +103,16 @@ export function OfferSpacePage() {
               <Label htmlFor="spaceName">Space Name</Label>
               <Input
                 id="spaceName"
-                placeholder="e.g., Grand Hotel Lobby"
+                placeholder="e.g., Grand Hotel Workspace Lounge"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
                 required
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="spaceType">Space Type</Label>
-              <Select required>
+              <Select value={spaceType} onValueChange={setSpaceType} required>
                 <SelectTrigger id="spaceType">
                   <SelectValue placeholder="Select space type" />
                 </SelectTrigger>
@@ -68,40 +121,44 @@ export function OfferSpacePage() {
                   <SelectItem value="cafe">Cafe</SelectItem>
                   <SelectItem value="restaurant">Restaurant</SelectItem>
                   <SelectItem value="business-lounge">Business Lounge</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  <SelectItem value="other">Other Workspace</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">Rules & Description</Label>
               <Textarea
                 id="description"
-                placeholder="Describe your space, atmosphere, and what makes it great for work..."
-                rows={4}
+                placeholder="Describe your space, quiet atmosphere, rules, and work environment..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
                 required
               />
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="capacity">Capacity (number of tables/desks)</Label>
+                <Label htmlFor="capacity">Total Seat Capacity</Label>
                 <Input
                   id="capacity"
                   type="number"
                   min="1"
-                  placeholder="e.g., 8"
+                  value={capacity}
+                  onChange={(e) => setCapacity(e.target.value)}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="price">Price per Hour ($)</Label>
+                <Label htmlFor="price">Hourly Price ($)</Label>
                 <Input
                   id="price"
                   type="number"
                   min="0"
                   step="0.5"
-                  placeholder="e.g., 12"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
                   required
                 />
               </div>
@@ -118,22 +175,26 @@ export function OfferSpacePage() {
               <Label htmlFor="address">Street Address</Label>
               <Input
                 id="address"
-                placeholder="123 Main Street"
+                placeholder="e.g., 350 5th Ave"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
                 required
               />
             </div>
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="city">City</Label>
-                <Input id="city" placeholder="New York" required />
+                <Label htmlFor="borough">Neighborhood / Borough</Label>
+                <Input
+                  id="borough"
+                  placeholder="e.g., Midtown / Chelsea"
+                  value={borough}
+                  onChange={(e) => setBorough(e.target.value)}
+                  required
+                />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="state">State</Label>
-                <Input id="state" placeholder="NY" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="zip">ZIP Code</Label>
-                <Input id="zip" placeholder="10001" required />
+                <Label>City</Label>
+                <Input value="New York, NY" disabled className="bg-muted" />
               </div>
             </div>
           </CardContent>
@@ -141,23 +202,35 @@ export function OfferSpacePage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Availability</CardTitle>
+            <CardTitle>Availability Hours</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="startTime">Available From</Label>
-                <Input id="startTime" type="time" defaultValue="14:00" required />
+                <Input
+                  id="startTime"
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  required
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="endTime">Available Until</Label>
-                <Input id="endTime" type="time" defaultValue="17:00" required />
+                <Input
+                  id="endTime"
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  required
+                />
               </div>
             </div>
             <Alert>
               <Info className="size-4" />
               <AlertDescription>
-                Specify when your space is available for workspace bookings
+                Set the daily hours during which your workspace accepts guest bookings.
               </AlertDescription>
             </Alert>
           </CardContent>
@@ -165,7 +238,7 @@ export function OfferSpacePage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Amenities & Services</CardTitle>
+            <CardTitle>Amenities & Facilities</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
@@ -178,7 +251,7 @@ export function OfferSpacePage() {
                   }
                 />
                 <Label htmlFor="wifi" className="cursor-pointer">
-                  WiFi Available
+                  High-Speed Wi-Fi
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
@@ -190,7 +263,7 @@ export function OfferSpacePage() {
                   }
                 />
                 <Label htmlFor="powerOutlets" className="cursor-pointer">
-                  Power Outlets
+                  Power Outlets Available
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
@@ -214,19 +287,7 @@ export function OfferSpacePage() {
                   }
                 />
                 <Label htmlFor="coffee" className="cursor-pointer">
-                  Complimentary Coffee
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="tea"
-                  checked={amenities.tea}
-                  onCheckedChange={(checked) =>
-                    setAmenities({ ...amenities, tea: checked as boolean })
-                  }
-                />
-                <Label htmlFor="tea" className="cursor-pointer">
-                  Complimentary Tea
+                  Coffee Available
                 </Label>
               </div>
             </div>
@@ -235,38 +296,15 @@ export function OfferSpacePage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Booking Extensions</CardTitle>
+            <CardTitle>Terms &amp; Conditions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <Checkbox id="allowExtensions" defaultChecked />
-              <Label htmlFor="allowExtensions" className="cursor-pointer">
-                Allow guests to extend their booking
-              </Label>
-            </div>
-            <Alert>
-              <Info className="size-4" />
-              <AlertDescription>
-                Enable guests to extend their workspace booking for dining or additional work time
-              </AlertDescription>
-            </Alert>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Terms & Conditions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="p-4 bg-muted rounded-lg space-y-3 text-sm">
-              <p>By listing your space, you agree to:</p>
-              <ul className="space-y-2 ml-4 list-disc">
-                <li>Not ask guests to leave during their booked time slot</li>
-                <li>Allow guests to use laptops and work equipment</li>
-                <li>Provide the amenities listed in your space description</li>
-                <li>Maintain a professional and quiet environment</li>
-                <li>Honor all confirmed bookings</li>
-                <li>Process refunds according to cancellation policy</li>
+            <div className="p-4 bg-muted rounded-lg space-y-2 text-sm">
+              <p className="font-semibold">Provider Commitment:</p>
+              <ul className="space-y-1 ml-4 list-disc text-muted-foreground">
+                <li>Honor all confirmed guest reservations</li>
+                <li>Provide dedicated workspace seating and listed amenities</li>
+                <li>Maintain a quiet environment suitable for laptop work</li>
               </ul>
             </div>
 
@@ -279,8 +317,8 @@ export function OfferSpacePage() {
                 onCheckedChange={(checked) => setAcceptedTerms(checked as boolean)}
                 required
               />
-              <Label htmlFor="terms" className="cursor-pointer">
-                I have read and agree to the Terms & Conditions and Provider Guidelines
+              <Label htmlFor="terms" className="cursor-pointer text-sm font-medium">
+                I have read and agree to the Provider Guidelines and Terms &amp; Conditions
               </Label>
             </div>
           </CardContent>
@@ -292,11 +330,25 @@ export function OfferSpacePage() {
             variant="outline"
             className="flex-1"
             onClick={() => navigate("/provider/dashboard")}
+            disabled={isSubmitting}
           >
             Cancel
           </Button>
-          <Button type="submit" className="flex-1" size="lg" style={{ backgroundColor: '#2f8a64' }}>
-            Create Space Listing
+          <Button
+            type="submit"
+            className="flex-1 cursor-pointer"
+            size="lg"
+            style={{ backgroundColor: '#2f8a64' }}
+            disabled={!acceptedTerms || isSubmitting}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="animate-spin size-4 mr-2" />
+                Submitting Space...
+              </>
+            ) : (
+              "Publish Space Listing"
+            )}
           </Button>
         </div>
       </form>

@@ -1045,7 +1045,64 @@ export const api = {
     }
   },
 
-  // 14. Admin — Get platform stats
+  // 14. Provider — Create venue (Offer Space)
+  createVenue: async (data: {
+    name: string;
+    lat: number;
+    lon: number;
+    borough: string;
+    opening_hours?: string;
+    seat_capacity: number;
+    amenity_tags?: string[];
+    rules_text?: string;
+    has_wifi?: boolean;
+    plug_access?: number;
+    hourly_price?: number;
+  }): Promise<any> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(300);
+      return { venue_id: "provider-mock123", name: data.name, message: "Venue created successfully" };
+    } else {
+      const response = await axiosInstance.post("/venues", data);
+      return response.data;
+    }
+  },
+
+  // 15. Admin — Suspend venue
+  suspendVenue: async (venueId: string, state: "Suspended" | "Active" = "Suspended"): Promise<any> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(300);
+      return { venue_id: venueId, state, message: `Venue ${state.toLowerCase()} successfully` };
+    } else {
+      const response = await axiosInstance.patch(`/admin/venues/${venueId}/suspension`, { state });
+      return response.data;
+    }
+  },
+
+  // 16. Admin — Get overview
+  getAdminOverview: async (): Promise<any> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(300);
+      return {
+        global_active_properties: 98,
+        total_completed_checkout_revenues: 45670,
+        system_incident_counts: {
+          pending_incident_reports: 5,
+          active_warnings_issued: 2,
+          refund_pending_bookings: 3,
+          unavailable_slots: 4
+        }
+      };
+    } else {
+      const response = await axiosInstance.get("/admin/dashboard/overview");
+      return response.data;
+    }
+  },
+
+  // 17. Admin — Get platform stats
   getAdminStats: async (): Promise<AdminStatsResponse> => {
     checkAuth();
     if (USE_MOCK) {
