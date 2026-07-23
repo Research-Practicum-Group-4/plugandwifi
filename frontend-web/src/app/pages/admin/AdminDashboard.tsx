@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
+import { Input } from "../../components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import {
   Dialog,
@@ -10,11 +11,13 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "../../components/ui/dialog";
 import {
-  DollarSign, TrendingUp, Building2, Users, ClipboardList, Flag, Tags,
-  AlertTriangle, Loader2, ShieldAlert,
+  Building2, ClipboardList, Flag, Tags,
+  AlertTriangle, Loader2, ShieldAlert, Search, Ban
 } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "../../../services/api";
 import type {
   AdminStatsResponse,
@@ -22,6 +25,7 @@ import type {
   AdminVenueIssue,
   AdminActionType,
   AdminIssueStatus,
+  Venue,
 } from "../../../types/api";
 
 function SeverityBadge({ severity }: { severity: string }) {
@@ -60,26 +64,15 @@ export function AdminDashboard() {
   const [stats, setStats] = useState<AdminStatsResponse | null>(null);
   const [customerIssues, setCustomerIssues] = useState<AdminCustomerIssue[]>([]);
   const [venueIssues, setVenueIssues] = useState<AdminVenueIssue[]>([]);
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [venueSearch, setVenueSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [actionTarget, setActionTarget] = useState<ActionTarget | null>(null);
   const [actionPending, setActionPending] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [s, ci, vi] = await Promise.all([
-          api.getAdminStats(),
-          api.getAdminCustomerIssues(),
-          api.getAdminVenueIssues(),
-        ]);
-        setStats(s);
-        setCustomerIssues(ci);
-        setVenueIssues(vi);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  // Suspend Venue Intercept Modal state
+  const [suspendingVenue, setSuspendingVenue] = useState<Venue | null>(null);
+  const [isSuspending, setIsSuspending] = useState(false);
 
   const handleAction = async (action: AdminActionType) => {
     if (!actionTarget || actionPending) return;
@@ -102,6 +95,45 @@ export function AdminDashboard() {
     }
   };
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const [s, ci, vi, vList] = await Promise.all([
+          api.getAdminStats(),
+          api.getAdminCustomerIssues(),
+          api.getAdminVenueIssues(),
+          api.getVenues({ limit: 100 }).catch(() => ({ items: [] })),
+        ]);
+        setStats(s);
+        setCustomerIssues(ci);
+        setVenueIssues(vi);
+        setVenues(vList.items);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const handleConfirmSuspend = async () => {
+    if (!suspendingVenue || isSuspending) return;
+    setIsSuspending(true);
+    try {
+      await api.suspendVenue(suspendingVenue.venue_id, "Suspended");
+      toast.success(`Venue "${suspendingVenue.name}" has been suspended successfully.`);
+      setVenues((prev) =>
+        prev.map((v) =>
+          v.venue_id === suspendingVenue.venue_id ? { ...v, opening_now: false } : v
+        )
+      );
+    } catch (err: any) {
+      console.error("Failed to suspend venue:", err);
+      toast.error("Failed to suspend venue.");
+    } finally {
+      setIsSuspending(false);
+      setSuspendingVenue(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -113,21 +145,26 @@ export function AdminDashboard() {
   const pendingCustomer = customerIssues.filter((i) => i.status === "pending").length;
   const pendingVenue    = venueIssues.filter((i) => i.status === "pending").length;
 
+  const filteredVenues = venues.filter((v) =>
+    v.name.toLowerCase().includes(venueSearch.toLowerCase()) ||
+    (v.borough && v.borough.toLowerCase().includes(venueSearch.toLowerCase()))
+  );
+
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
+    <div className="container mx-auto px-4 py-8 max-w-6xl space-y-8">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-8">
+      <div className="flex items-center gap-4">
         <div className="size-12 rounded-full bg-emerald-700 flex items-center justify-center">
           <ShieldAlert className="size-6 text-white" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-          <p className="text-muted-foreground text-sm">Platform management and oversight</p>
+          <h1 className="text-2xl font-bold">Admin Operations Dashboard</h1>
+          <p className="text-muted-foreground text-sm">System administration and venue oversight</p>
         </div>
       </div>
 
       {/* Quick-nav cards */}
-      <div className="grid sm:grid-cols-3 gap-4 mb-10">
+      <div className="grid sm:grid-cols-3 gap-4">
         <Link to="/admin/applications">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="pt-5 pb-5 flex items-center gap-3">
@@ -171,241 +208,232 @@ export function AdminDashboard() {
         </Link>
       </div>
 
-      {/* Financial Overview */}
-      <h2 className="text-lg font-semibold mb-4">Financial Overview</h2>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-        {[
-          {
-            label: "Total Revenue",
-            value: stats ? `$${stats.total_revenue.toLocaleString()}` : "—",
-            change: "+18.5%",
-            icon: DollarSign,
-            changeColor: "text-green-600",
-          },
-          {
-            label: "Total Bookings",
-            value: stats ? stats.total_bookings.toLocaleString() : "—",
-            icon: TrendingUp,
-          },
-          {
-            label: "Avg Booking Value",
-            value: stats ? `$${stats.avg_booking_value}` : "—",
-            icon: DollarSign,
-          },
-          {
-            label: "Median Venue Revenue",
-            value: stats ? `$${stats.median_venue_revenue.toLocaleString()}` : "—",
-            icon: ClipboardList,
-          },
-        ].map((kpi) => {
-          const Icon = kpi.icon;
-          return (
-            <Card key={kpi.label}>
-              <CardContent className="pt-5">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-muted-foreground">{kpi.label}</span>
-                  <Icon className="size-4 text-muted-foreground" />
-                </div>
-                <div className="flex items-end gap-2">
-                  <span className="text-2xl font-bold">{kpi.value}</span>
-                  {kpi.change && (
-                    <span className={`text-xs font-medium mb-0.5 ${kpi.changeColor ?? ""}`}>
-                      {kpi.change}
-                    </span>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Venue & User Stats */}
-      <div className="grid lg:grid-cols-2 gap-6 mb-10">
-        <Card>
-          <CardContent className="pt-5 pb-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Building2 className="size-5 text-muted-foreground" />
-              <span className="font-semibold">Venue Statistics</span>
+      {/* Operational Venues Table (G4PW-219 & G4PW-220) */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <CardTitle className="text-lg font-bold flex items-center gap-2">
+                <Building2 className="size-5 text-emerald-700" />
+                Operational Venues Management
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Inspect active venues, monitor ratings, and manage space suspensions.
+              </p>
             </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Total Venues</span>
-                <span className="font-bold text-base">{stats?.total_venues ?? "—"}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Active Venues</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-base text-emerald-600">{stats?.active_venues ?? "—"}</span>
-                  <Badge className="bg-black text-white text-xs">Active</Badge>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Pending Approval</span>
-                <span className="font-bold text-base">{stats?.pending_approval ?? "—"}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Suspended</span>
-                <Badge className="bg-red-600 text-white text-xs">{stats?.suspended_venues ?? "—"}</Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Top Performer</span>
-                <span className="font-medium">{stats?.top_performer ?? "—"}</span>
-              </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Search venues..."
+                value={venueSearch}
+                onChange={(e) => setVenueSearch(e.target.value)}
+                className="pl-9 h-9 text-sm"
+              />
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-5 pb-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Users className="size-5 text-muted-foreground" />
-              <span className="font-semibold">User Statistics</span>
-            </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Total Users</span>
-                <span className="font-bold text-base">{stats?.total_users?.toLocaleString() ?? "—"}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Active Users</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-base text-emerald-600">
-                    {stats?.active_users?.toLocaleString() ?? "—"}
-                  </span>
-                  <Badge className="bg-black text-white text-xs">Active</Badge>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">New This Month</span>
-                <span className="font-bold text-base">+{stats?.new_this_month ?? "—"}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Churn Rate</span>
-                <span className="font-bold text-base text-red-600">{stats?.churn_rate ?? "—"}%</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-muted text-muted-foreground text-xs uppercase border-b">
+                <tr>
+                  <th className="py-3 px-4">Venue Name</th>
+                  <th className="py-3 px-4">Location</th>
+                  <th className="py-3 px-4">Rating</th>
+                  <th className="py-3 px-4">Hourly Price</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filteredVenues.map((v) => (
+                  <tr key={v.venue_id} className="hover:bg-muted/50 transition-colors">
+                    <td className="py-3 px-4 font-medium">{v.name}</td>
+                    <td className="py-3 px-4 text-muted-foreground">{v.borough || "Manhattan"}</td>
+                    <td className="py-3 px-4 font-semibold text-amber-600">★ {v.rating}</td>
+                    <td className="py-3 px-4 font-semibold">${v.hourly_price}/hr</td>
+                    <td className="py-3 px-4">
+                      {v.opening_now ? (
+                        <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-200">Active</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">Inactive / Suspended</Badge>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs text-red-600 border-red-200 hover:bg-red-50 cursor-pointer"
+                        onClick={() => setSuspendingVenue(v)}
+                      >
+                        <Ban className="size-3.5 mr-1" />
+                        Suspend Space
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredVenues.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="text-center py-6 text-muted-foreground">
+                      No operational venues found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Critical Actions */}
-      <div className="flex items-center gap-2 mb-4">
-        <AlertTriangle className="size-5 text-amber-500" />
-        <h2 className="text-lg font-semibold">Critical Actions Required</h2>
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <AlertTriangle className="size-5 text-amber-500" />
+          <h2 className="text-lg font-semibold">Critical Incident Reports</h2>
+        </div>
+
+        <Tabs defaultValue="customer">
+          <TabsList className="mb-4">
+            <TabsTrigger value="customer">
+              Customer Issues ({pendingCustomer})
+            </TabsTrigger>
+            <TabsTrigger value="venue">
+              Venue Issues ({pendingVenue})
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="customer">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm text-muted-foreground font-normal grid grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4">
+                  <span>Customer</span>
+                  <span>Issue</span>
+                  <span>Severity</span>
+                  <span>Date</span>
+                  <span>Status</span>
+                  <span>Actions</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-0">
+                {customerIssues.map((row) => (
+                  <div
+                    key={row.id}
+                    className="grid grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 items-center border-t pt-3 text-sm"
+                  >
+                    <div>
+                      <p className="font-medium">{row.user_name}</p>
+                      <p className="text-xs text-muted-foreground">{row.user_id}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium leading-tight">{row.issue}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-1">{row.description}</p>
+                    </div>
+                    <SeverityBadge severity={row.severity} />
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">{row.reported_at}</span>
+                    <StatusBadge status={row.status} />
+                    {row.status === "pending" ? (
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs bg-red-700 hover:bg-red-800 text-white"
+                        onClick={() => setActionTarget({ kind: "customer", issue: row })}
+                      >
+                        Take Action
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground capitalize w-[88px]" />
+                    )}
+                  </div>
+                ))}
+                {customerIssues.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">No customer issues.</p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="venue">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm text-muted-foreground font-normal grid grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4">
+                  <span>Venue</span>
+                  <span>Issue</span>
+                  <span>Severity</span>
+                  <span>Date</span>
+                  <span>Status</span>
+                  <span>Actions</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-0">
+                {venueIssues.map((row) => (
+                  <div
+                    key={row.id}
+                    className="grid grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 items-center border-t pt-3 text-sm"
+                  >
+                    <div>
+                      <p className="font-medium">{row.venue_name}</p>
+                      <p className="text-xs text-muted-foreground">{row.venue_id}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium leading-tight">{row.issue}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-1">{row.description}</p>
+                    </div>
+                    <SeverityBadge severity={row.severity} />
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">{row.reported_at}</span>
+                    <StatusBadge status={row.status} />
+                    {row.status === "pending" ? (
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs bg-red-700 hover:bg-red-800 text-white"
+                        onClick={() => setActionTarget({ kind: "venue", issue: row })}
+                      >
+                        Take Action
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground capitalize w-[88px]" />
+                    )}
+                  </div>
+                ))}
+                {venueIssues.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">No venue issues.</p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
 
-      <Tabs defaultValue="customer">
-        <TabsList className="mb-4">
-          <TabsTrigger value="customer">
-            Customer Issues ({pendingCustomer})
-          </TabsTrigger>
-          <TabsTrigger value="venue">
-            Venue Issues ({pendingVenue})
-          </TabsTrigger>
-        </TabsList>
+      {/* Administrative Intercept Modal for Venue Suspension (G4PW-220) */}
+      <Dialog open={suspendingVenue !== null} onOpenChange={(open) => { if (!open) setSuspendingVenue(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="size-5" />
+              Confirm Venue Suspension
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-foreground font-medium">
+              Are you sure you want to suspend <span className="font-bold">{suspendingVenue?.name}</span>?
+            </DialogDescription>
+          </DialogHeader>
 
-        {/* Customer Issues tab */}
-        <TabsContent value="customer">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm text-muted-foreground font-normal grid grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4">
-                <span>Customer</span>
-                <span>Issue</span>
-                <span>Severity</span>
-                <span>Date</span>
-                <span>Status</span>
-                <span>Actions</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-0">
-              {customerIssues.map((row) => (
-                <div
-                  key={row.id}
-                  className="grid grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 items-center border-t pt-3 text-sm"
-                >
-                  <div>
-                    <p className="font-medium">{row.user_name}</p>
-                    <p className="text-xs text-muted-foreground">{row.user_id}</p>
-                  </div>
-                  <div>
-                    <p className="font-medium leading-tight">{row.issue}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-1">{row.description}</p>
-                  </div>
-                  <SeverityBadge severity={row.severity} />
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{row.reported_at}</span>
-                  <StatusBadge status={row.status} />
-                  {row.status === "pending" ? (
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs bg-red-700 hover:bg-red-800 text-white"
-                      onClick={() => setActionTarget({ kind: "customer", issue: row })}
-                    >
-                      Take Action
-                    </Button>
-                  ) : (
-                    <span className="text-xs text-muted-foreground capitalize w-[88px]" />
-                  )}
-                </div>
-              ))}
-              {customerIssues.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">No customer issues.</p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+          <div className="py-2 text-sm text-muted-foreground space-y-2">
+            <p>This action will hide the listing from all user discovery screens and automatically cancel pending active bookings.</p>
+          </div>
 
-        {/* Venue Issues tab */}
-        <TabsContent value="venue">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm text-muted-foreground font-normal grid grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4">
-                <span>Venue</span>
-                <span>Issue</span>
-                <span>Severity</span>
-                <span>Date</span>
-                <span>Status</span>
-                <span>Actions</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-0">
-              {venueIssues.map((row) => (
-                <div
-                  key={row.id}
-                  className="grid grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 items-center border-t pt-3 text-sm"
-                >
-                  <div>
-                    <p className="font-medium">{row.venue_name}</p>
-                    <p className="text-xs text-muted-foreground">{row.venue_id}</p>
-                  </div>
-                  <div>
-                    <p className="font-medium leading-tight">{row.issue}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-1">{row.description}</p>
-                  </div>
-                  <SeverityBadge severity={row.severity} />
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{row.reported_at}</span>
-                  <StatusBadge status={row.status} />
-                  {row.status === "pending" ? (
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs bg-red-700 hover:bg-red-800 text-white"
-                      onClick={() => setActionTarget({ kind: "venue", issue: row })}
-                    >
-                      Take Action
-                    </Button>
-                  ) : (
-                    <span className="text-xs text-muted-foreground capitalize w-[88px]" />
-                  )}
-                </div>
-              ))}
-              {venueIssues.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">No venue issues.</p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setSuspendingVenue(null)} disabled={isSuspending}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white cursor-pointer"
+              onClick={handleConfirmSuspend}
+              disabled={isSuspending}
+            >
+              {isSuspending ? <Loader2 className="animate-spin size-4 mr-2" /> : <Ban className="size-4 mr-2" />}
+              Confirm Suspension
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Take Action Modal */}
       <Dialog open={actionTarget !== null} onOpenChange={(open) => { if (!open) setActionTarget(null); }}>
         <DialogContent className="sm:max-w-md">
@@ -444,7 +472,7 @@ export function AdminDashboard() {
                   Cancel
                 </Button>
                 <Button
-                  className="bg-amber-500 hover:bg-amber-600 text-white"
+                  className="bg-amber-500 hover:bg-amber-600 text-white cursor-pointer"
                   onClick={() => handleAction("warn")}
                   disabled={actionPending}
                 >
@@ -452,7 +480,7 @@ export function AdminDashboard() {
                   Send Warning
                 </Button>
                 <Button
-                  className="bg-orange-500 hover:bg-orange-600 text-white"
+                  className="bg-orange-500 hover:bg-orange-600 text-white cursor-pointer"
                   onClick={() => handleAction("suspend")}
                   disabled={actionPending}
                 >
@@ -460,7 +488,7 @@ export function AdminDashboard() {
                   Suspend Account
                 </Button>
                 <Button
-                  className="bg-red-600 hover:bg-red-700 text-white"
+                  className="bg-red-600 hover:bg-red-700 text-white cursor-pointer"
                   onClick={() => handleAction("ban")}
                   disabled={actionPending}
                 >

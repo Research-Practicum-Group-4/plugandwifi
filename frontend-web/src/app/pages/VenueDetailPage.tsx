@@ -46,7 +46,6 @@ export function VenueDetailPage() {
   // Duration radio (from Figma mockup)
   const [selectedDuration, setSelectedDuration] = useState("2");
 
-  const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
   const [venue, setVenue] = useState<(VenueDetail & EnrichedVenue) | null>(null);
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
@@ -222,33 +221,8 @@ export function VenueDetailPage() {
     );
   }
 
-  const images = venueImages(venue.venue_id, venue.osm_type);
-
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Image Gallery with thumbnail selector */}
-      <div className="mb-8">
-        <div className="aspect-video overflow-hidden rounded-lg mb-3">
-          <img
-            src={images[selectedImageIdx]}
-            alt={venue.name}
-            className="w-full h-full object-cover"
-          />
-        </div>
-        <div className="flex gap-2">
-          {images.map((img, idx) => (
-            <button
-              key={idx}
-              onClick={() => setSelectedImageIdx(idx)}
-              className={`flex-shrink-0 w-20 h-16 rounded-md overflow-hidden border-2 transition-colors ${
-                selectedImageIdx === idx ? "border-primary" : "border-transparent"
-              }`}
-            >
-              <img src={img} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
-            </button>
-          ))}
-        </div>
-      </div>
 
       <div className="grid lg:grid-cols-[1fr_400px] gap-8">
         {/* Main Content */}

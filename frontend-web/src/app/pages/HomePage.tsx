@@ -23,7 +23,7 @@ import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { api } from "../../services/api";
 import { MapView } from "../components/MapView";
-import { enrichVenue, EnrichedVenue, venueImage, busynessDisplay } from "../utils/venueEnrichment";
+import { enrichVenue, EnrichedVenue, busynessDisplay } from "../utils/venueEnrichment";
 
 const PAGE_SIZE = 6;
 const HOME_VENUES_CACHE_PREFIX = "home-venues-cache:";
@@ -405,10 +405,7 @@ export function HomePage() {
 
                 return (
                   <Card key={venue.venue_id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                    <div className="aspect-video relative overflow-hidden bg-muted">
-                      <VenuePhoto venue={venue} />
-                    </div>
-                    <CardContent className="pt-4 space-y-3">
+                    <CardContent className="p-5 space-y-3">
                       <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${busyness.color}`}>
                         {busyness.label}
                       </span>
@@ -498,15 +495,5 @@ export function HomePage() {
         )}
       </div>
     </div>
-  );
-}
-
-function VenuePhoto({ venue }: { venue: EnrichedVenue }) {
-  return (
-    <img
-      src={venueImage(venue.venue_id, venue.osm_type ?? venue.cuisine_type)}
-      alt={venue.name}
-      className="w-full h-full object-cover"
-    />
   );
 }
