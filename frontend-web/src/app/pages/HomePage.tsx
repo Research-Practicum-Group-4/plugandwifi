@@ -26,6 +26,37 @@ import { MapView } from "../components/MapView";
 import { enrichVenue, EnrichedVenue, venueImage, busynessDisplay } from "../utils/venueEnrichment";
 
 const PAGE_SIZE = 6;
+const HOME_VENUES_CACHE_PREFIX = "home-venues-cache:";
+const HOME_VENUES_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type HomeVenueFilters = {
+  wifi: boolean;
+  callsAllowed: boolean;
+  fourPlusStars: boolean;
+  accessibilityFriendly: boolean;
+  wbeCertified: boolean;
+  mbeCertified: boolean;
+  lgbtFriendly: boolean;
+  bcorpCertified: boolean;
+  vbeCertified: boolean;
+};
+
+type HomeVenueCacheEntry = {
+  timestamp: number;
+  venues: EnrichedVenue[];
+};
+
+const DEFAULT_HOME_FILTERS: HomeVenueFilters = {
+  wifi: false,
+  callsAllowed: false,
+  fourPlusStars: false,
+  accessibilityFriendly: false,
+  wbeCertified: false,
+  mbeCertified: false,
+  lgbtFriendly: false,
+  bcorpCertified: false,
+  vbeCertified: false,
+};
 
 const EDI_BADGE_STYLES: Record<string, React.CSSProperties> = {
   "WBE-Certified": { background: "repeating-linear-gradient(90deg, transparent, transparent 25%, #9333ea 25%, #9333ea 50%, transparent 50%, transparent 75%, #9333ea 75%, #9333ea 100%)" },
@@ -41,6 +72,41 @@ function getSuitabilityColor(score: number): string {
   return `rgb(${Math.round(40 + ((100 - s) / 50) * 160)}, 180, 0)`;
 }
 
+function buildHomeVenueCacheKey(filters: HomeVenueFilters): string {
+  return `${HOME_VENUES_CACHE_PREFIX}${JSON.stringify(filters)}`;
+}
+
+function readCachedHomeVenues(filters: HomeVenueFilters): EnrichedVenue[] | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(buildHomeVenueCacheKey(filters));
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as HomeVenueCacheEntry;
+    if (!parsed?.timestamp || !Array.isArray(parsed.venues)) return null;
+    if (Date.now() - parsed.timestamp > HOME_VENUES_CACHE_TTL_MS) return null;
+
+    return parsed.venues;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedHomeVenues(filters: HomeVenueFilters, venues: EnrichedVenue[]) {
+  if (typeof window === "undefined") return;
+
+  try {
+    const entry: HomeVenueCacheEntry = {
+      timestamp: Date.now(),
+      venues,
+    };
+    window.localStorage.setItem(buildHomeVenueCacheKey(filters), JSON.stringify(entry));
+  } catch {
+    // Ignore quota and serialization failures.
+  }
+}
+
 export function HomePage() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -48,21 +114,10 @@ export function HomePage() {
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
   const [showOwnedByFilters, setShowOwnedByFilters] = useState(false);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
-  const [filters, setFilters] = useState({
-    wifi: false,
-    callsAllowed: false,
-    fourPlusStars: false,
-    accessibilityFriendly: false,
-    wbeCertified: false,
-    mbeCertified: false,
-    lgbtFriendly: false,
-    bcorpCertified: false,
-    vbeCertified: false,
-  });
-
-  const [venues, setVenues] = useState<EnrichedVenue[]>([]);
+  const [filters, setFilters] = useState<HomeVenueFilters>(DEFAULT_HOME_FILTERS);
+  const [venues, setVenues] = useState<EnrichedVenue[]>(() => readCachedHomeVenues(DEFAULT_HOME_FILTERS) ?? []);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => readCachedHomeVenues(DEFAULT_HOME_FILTERS) === null);
   const [loadError, setLoadError] = useState(false);
 
   const locationSuggestions = [
@@ -77,8 +132,16 @@ export function HomePage() {
   ].filter((loc) => loc.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const fetchVenues = useCallback(async () => {
-    setLoading(true);
+    const cachedVenues = readCachedHomeVenues(filters);
+    if (cachedVenues) {
+      setVenues(cachedVenues);
+      setVisibleCount(PAGE_SIZE);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setLoadError(false);
+
     try {
       const data = await api.getVenues({
         page: 1,
@@ -101,9 +164,14 @@ export function HomePage() {
         if (suitabilityDiff !== 0) return suitabilityDiff;
         return b.rating - a.rating;
       });
-      setVenues(sorted.map(enrichVenue));
+      const enrichedVenues = sorted.map(enrichVenue);
+      setVenues(enrichedVenues);
+      writeCachedHomeVenues(filters, enrichedVenues);
       setVisibleCount(PAGE_SIZE);
     } catch {
+      if (!cachedVenues) {
+        setVenues([]);
+      }
       setLoadError(true);
     } finally {
       setLoading(false);
