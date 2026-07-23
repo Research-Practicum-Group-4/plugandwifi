@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Separator } from "../../components/ui/separator";
-import { MapPin, Loader2, Building2 } from "lucide-react";
+import { MapPin, Loader2, Building2, ShieldAlert, User } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -17,9 +17,11 @@ export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const isAdminPortal = searchParams.get("portal") === "admin";
 
   // Redirect back to original path if specified, else home page
-  const fromPath = (location.state as any)?.from || "/";
+  const fromPath = (location.state as any)?.from || (isAdminPortal ? "/admin/dashboard" : "/");
   const bookingData = (location.state as any)?.bookingData;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,7 +57,7 @@ export function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center relative">
           {/* Register/Login as a Space Provider button */}
-          <div className="absolute top-4 right-4">
+          <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
             <Link
               to="/provider/register"
               className="text-xs inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-primary/60 text-primary hover:bg-primary/10 transition-colors whitespace-nowrap"
@@ -63,14 +65,30 @@ export function LoginPage() {
               <Building2 className="size-3" />
               Register/Login as a Space Provider
             </Link>
+            <Link
+              to={isAdminPortal ? "/login" : "/login?portal=admin"}
+              state={location.state}
+              className="text-xs inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-emerald-700/60 text-emerald-700 hover:bg-emerald-700/10 transition-colors whitespace-nowrap"
+            >
+              {isAdminPortal ? <User className="size-3" /> : <ShieldAlert className="size-3" />}
+              {isAdminPortal ? "Back to User Login" : "Admin Login"}
+            </Link>
           </div>
           <div className="flex justify-center mb-4">
             <div className="size-12 rounded-full flex items-center justify-center" style={{ backgroundColor: '#2f8a64' }}>
-              <MapPin className="size-6 text-white" />
+              {isAdminPortal ? (
+                <ShieldAlert className="size-6 text-white" />
+              ) : (
+                <MapPin className="size-6 text-white" />
+              )}
             </div>
           </div>
-          <CardTitle>Welcome Back</CardTitle>
-          <CardDescription>Sign in to your Plug & Wifi account</CardDescription>
+          <CardTitle>{isAdminPortal ? "Admin Sign In" : "Welcome Back"}</CardTitle>
+          <CardDescription>
+            {isAdminPortal
+              ? "Sign in with your admin account to access the admin dashboard"
+              : "Sign in to your Plug & Wifi account"}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <form onSubmit={handleSubmit} className="space-y-4">

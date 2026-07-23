@@ -25,7 +25,7 @@ type MarkerVenue = Venue & {
 };
 
 const DEFAULT_CENTER: [number, number] = [40.7589, -73.9851];
-const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY?.trim() ?? "";
+const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? "";
 
 function fitMapToVenues(
   venues: MarkerVenue[],
@@ -181,7 +181,7 @@ export const MapView: React.FC<MapViewProps> = ({
         style={{ height, width: "100%", borderRadius: "8px" }}
         className="flex items-center justify-center border border-border bg-muted px-4 text-center text-sm text-muted-foreground shadow-sm"
       >
-        Google Maps API key is missing. Set `VITE_GOOGLE_MAPS_KEY` to render the map.
+        Google Maps API key is missing. Set `VITE_GOOGLE_MAPS_API_KEY` to render the map.
       </div>
     );
   }
