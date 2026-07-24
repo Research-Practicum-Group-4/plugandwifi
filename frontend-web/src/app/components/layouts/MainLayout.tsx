@@ -55,30 +55,20 @@ export function MainLayout() {
               </>
             )}
 
-            {isAuthenticated && user?.role === "admin" && (
-              <Link to="/admin/dashboard">
-                <Button variant="ghost" className="text-amber-600 hover:text-amber-700 hover:bg-amber-50/50 font-medium flex items-center gap-1.5">
-                  <Shield className="size-4" />
-                  Admin
-                </Button>
-              </Link>
-            )}
+            <Link to="/admin/dashboard">
+              <Button variant="ghost" className="text-amber-600 hover:text-amber-700 hover:bg-amber-50/50 font-medium flex items-center gap-1.5">
+                <Shield className="size-4" />
+                Admin
+              </Button>
+            </Link>
 
             {/* Provider Navigation conditional CTA */}
-            {isAuthenticated && user?.role === "provider" ? (
-              <Link to="/provider/dashboard">
-                <Button variant="ghost" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50/50 font-medium flex items-center gap-1.5">
-                  <Building2 className="size-4" />
-                  Dashboard
-                </Button>
-              </Link>
-            ) : (
-              <Link to="/provider/register">
-                <Button variant="default" className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-medium text-xs md:text-sm px-4">
-                  Register as a Space Provider
-                </Button>
-              </Link>
-            )}
+            <Link to="/provider/dashboard">
+              <Button variant="ghost" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50/50 font-medium flex items-center gap-1.5">
+                <Building2 className="size-4" />
+                Provider
+              </Button>
+            </Link>
 
             {isAuthenticated ? (
               <DropdownMenu>

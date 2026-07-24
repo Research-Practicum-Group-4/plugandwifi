@@ -8,7 +8,14 @@ import { Separator } from "../components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Label } from "../components/ui/label";
-import { Star, MapPin, Wifi, Zap, Clock, Heart, Share2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "../components/ui/dialog";
+import { Star, MapPin, Wifi, Zap, Clock, Heart, Share2, LogIn } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../services/api";
 import { VenueDetail, AvailabilitySlot } from "../../types/api";
@@ -30,6 +37,7 @@ export function VenueDetailPage() {
   const location = useLocation();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const { isFavorite, addFavorite, removeFavorite, loading: favoritesLoading } = useFavorites();
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const stateParams = location.state || {};
 
   const todayStr = new Date().toISOString().split("T")[0];
@@ -102,6 +110,11 @@ export function VenueDetailPage() {
     }
     if (duration <= 0) {
       toast.error("End time must be after start time.");
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setShowLoginPrompt(true);
       return;
     }
 
@@ -537,5 +550,46 @@ export function VenueDetailPage() {
         </div>
       </div>
     </div>
+
+    <Dialog open={showLoginPrompt} onOpenChange={setShowLoginPrompt}>
+      <DialogContent className="sm:max-w-sm text-center">
+        <DialogHeader>
+          <div className="flex justify-center mb-2">
+            <div className="size-12 rounded-full flex items-center justify-center bg-[#253c50]">
+              <LogIn className="size-6 text-white" />
+            </div>
+          </div>
+          <DialogTitle className="text-center">Sign in to continue</DialogTitle>
+          <DialogDescription className="text-center">
+            Create a free account or sign in to complete your booking at{" "}
+            <span className="font-medium text-foreground">{venue?.name}</span>.
+            Your selection will be waiting for you.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2 mt-2">
+          <Button
+            className="w-full"
+            style={{ backgroundColor: "#253c50" }}
+            onClick={() => navigate("/login", { state: { from: location.pathname } })}
+          >
+            Sign in
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => navigate("/signup", { state: { from: location.pathname } })}
+          >
+            Create account
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full text-muted-foreground"
+            onClick={() => setShowLoginPrompt(false)}
+          >
+            Continue browsing
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
