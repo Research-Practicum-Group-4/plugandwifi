@@ -40,6 +40,7 @@ from .schemas import (
     ChatbotRecommendRequest,
     ChatbotRecommendResponse,
     ChatbotSearchParameters,
+    FavoriteListResponse,
     FavoriteResponse,
     LogoutRequest,
     MockPaymentConfirmRequest,
@@ -2987,6 +2988,24 @@ def create_favorite(
         "venue_id": venue_id,
         "message": "Favorite created successfully",
     }
+
+
+@app.get("/api/favorites/me", response_model=FavoriteListResponse)
+def get_my_favorites(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    venue_ids = [
+        favorite.venue_id
+        for favorite in (
+            db.query(Favorite)
+            .filter(Favorite.user_id == current_user.id)
+            .order_by(Favorite.id.asc())
+            .all()
+        )
+    ]
+
+    return {"venue_ids": venue_ids}
 
 
 @app.delete("/api/favorites/{venue_id}")

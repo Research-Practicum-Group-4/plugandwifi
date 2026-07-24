@@ -231,6 +231,10 @@ export interface FavoriteResponse {
   message: string;
 }
 
+export interface FavoriteListResponse {
+  venue_ids: string[];
+}
+
 // ── Admin types ───────────────────────────────────────────────────────────────
 
 export type AdminActionType = "warn" | "suspend" | "ban";
