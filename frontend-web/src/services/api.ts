@@ -15,6 +15,7 @@ import {
   VenueSuggestionsResponse,
   ChatbotRecommendRequest,
   ChatbotRecommendResponse,
+  FavoriteListResponse,
   FavoriteResponse,
   AdminActionType,
   AdminActionResponse,
@@ -389,6 +390,11 @@ const mockBookings: UserBookingItem[] = [
   }
 ];
 
+const mockFavoritesByUserId: Record<number, string[]> = {
+  1: [],
+  2: [],
+};
+
 const generateMockAvailability = (venues: VenueDetail[]): Record<string, VenueAvailability> => {
   const availability: Record<string, VenueAvailability> = {};
   
@@ -453,6 +459,20 @@ const generateMockAvailability = (venues: VenueDetail[]): Record<string, VenueAv
 };
 
 const mockAvailability: Record<string, VenueAvailability> = generateMockAvailability(mockVenues);
+
+const getMockCurrentUserId = (): number => {
+  const userProfile = localStorage.getItem("user_profile");
+  if (!userProfile) {
+    throw new Error("Authentication required: Please log in first.");
+  }
+
+  try {
+    const parsed = JSON.parse(userProfile);
+    return parsed.user_id || parsed.id || 1;
+  } catch {
+    throw new Error("Authentication required: Please log in first.");
+  }
+};
 
 // ==========================================
 // API Implementation
@@ -1031,11 +1051,31 @@ export const api = {
   },
 
   // 12. Add Venue to Favorites
+  getMyFavorites: async (): Promise<FavoriteListResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(200);
+      const userId = getMockCurrentUserId();
+      return { venue_ids: [...(mockFavoritesByUserId[userId] ?? [])] };
+    } else {
+      const response = await axiosInstance.get<FavoriteListResponse>("/favorites/me");
+      return response.data;
+    }
+  },
+
   addFavorite: async (venueId: string): Promise<FavoriteResponse> => {
     checkAuth();
     if (USE_MOCK) {
       await delay(200);
-      return { user_id: 1, venue_id: venueId, message: "Favorite created successfully" };
+      const userId = getMockCurrentUserId();
+      const favorites = mockFavoritesByUserId[userId] ?? [];
+      if (favorites.includes(venueId)) {
+        const err: any = new Error("Favorite already exists");
+        err.response = { status: 409, data: { detail: "Favorite already exists" } };
+        throw err;
+      }
+      mockFavoritesByUserId[userId] = [...favorites, venueId];
+      return { user_id: userId, venue_id: venueId, message: "Favorite created successfully" };
     } else {
       const response = await axiosInstance.post<FavoriteResponse>(`/favorites/${venueId}`);
       return response.data;
@@ -1047,6 +1087,14 @@ export const api = {
     checkAuth();
     if (USE_MOCK) {
       await delay(200);
+      const userId = getMockCurrentUserId();
+      const favorites = mockFavoritesByUserId[userId] ?? [];
+      if (!favorites.includes(venueId)) {
+        const err: any = new Error("Favorite not found");
+        err.response = { status: 404, data: { detail: "Favorite not found" } };
+        throw err;
+      }
+      mockFavoritesByUserId[userId] = favorites.filter((favoriteId) => favoriteId !== venueId);
       return { message: "Favorite removed successfully" };
     } else {
       const response = await axiosInstance.delete<{ message: string }>(`/favorites/${venueId}`);

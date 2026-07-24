@@ -13,6 +13,8 @@ import { toast } from "sonner";
 import { api } from "../../services/api";
 import { VenueDetail, AvailabilitySlot } from "../../types/api";
 import { enrichVenue, EnrichedVenue } from "../utils/venueEnrichment";
+import { useAuth } from "../contexts/AuthContext";
+import { useFavorites } from "../contexts/FavoritesContext";
 
 const EDI_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
   "WBE-Certified":    { bg: "bg-purple-100", text: "text-purple-700" },
@@ -26,6 +28,8 @@ export function VenueDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isFavorite, addFavorite, removeFavorite, loading: favoritesLoading } = useFavorites();
   const stateParams = location.state || {};
 
   const todayStr = new Date().toISOString().split("T")[0];
@@ -46,7 +50,6 @@ export function VenueDetailPage() {
   // Duration radio (from Figma mockup)
   const [selectedDuration, setSelectedDuration] = useState("2");
 
-  const [isSaved, setIsSaved] = useState(false);
   const [venue, setVenue] = useState<(VenueDetail & EnrichedVenue) | null>(null);
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -116,38 +119,30 @@ export function VenueDetailPage() {
     });
   };
 
-  useEffect(() => {
-    if (!id) return;
-    const favsStr = localStorage.getItem("plugandwifi_favorites");
-    const favs = favsStr ? JSON.parse(favsStr) : [];
-    setIsSaved(favs.includes(id));
-  }, [id]);
+  const isSaved = id ? isFavorite(id) : false;
 
   const handleSave = async () => {
     if (!venue) return;
-    try {
-      const favsStr = localStorage.getItem("plugandwifi_favorites");
-      let favs: string[] = favsStr ? JSON.parse(favsStr) : [];
+    if (!isAuthenticated) {
+      toast.error("Please sign in to save workspaces.");
+      navigate("/login", { state: { from: location.pathname } });
+      return;
+    }
 
+    try {
       if (isSaved) {
-        await api.removeFavorite(venue.venue_id);
-        favs = favs.filter((fid) => fid !== venue.venue_id);
-        localStorage.setItem("plugandwifi_favorites", JSON.stringify(favs));
-        setIsSaved(false);
+        await removeFavorite(venue.venue_id);
         toast.success("Removed from saved places");
       } else {
-        await api.addFavorite(venue.venue_id);
-        if (!favs.includes(venue.venue_id)) {
-          favs.push(venue.venue_id);
-        }
-        localStorage.setItem("plugandwifi_favorites", JSON.stringify(favs));
-        setIsSaved(true);
+        await addFavorite(venue.venue_id);
         toast.success("Added to saved places");
       }
     } catch (err: any) {
       console.error("Failed to toggle favorite:", err);
       if (err.response?.status === 401) {
         toast.error("Please sign in to save workspaces.");
+      } else if (err.response?.status === 409) {
+      } else if (err.response?.status === 404 && isSaved) {
       } else {
         toast.error("Failed to update favorite status.");
       }
@@ -239,7 +234,7 @@ export function VenueDetailPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" onClick={handleSave}>
+                <Button variant="outline" size="icon" onClick={handleSave} disabled={authLoading || favoritesLoading}>
                   <Heart className={`size-5 ${isSaved ? "fill-red-500 stroke-red-500" : ""}`} />
                 </Button>
                 <Button variant="outline" size="icon">

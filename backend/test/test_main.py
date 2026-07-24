@@ -3165,6 +3165,44 @@ def test_create_favorite_returns_409_for_duplicate_favorite():
     assert response.json()["detail"] == "Favorite already exists"
 
 
+def test_get_my_favorites_requires_authentication():
+    response = client.get("/api/favorites/me")
+    assert response.status_code == 401
+
+
+def test_get_my_favorites_returns_only_current_user_favorites():
+    login_response = client.post(
+        "/api/auth/login", json={"email": "test2@example.com", "password": "00000000"}
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+
+    db = TestingSessionLocal()
+    try:
+        other_user = User(
+            id=2,
+            full_name="Other User",
+            email="other-fav@example.com",
+            password_hash=hash_password("00000000"),
+        )
+        db.add(other_user)
+        db.add_all(
+            [
+                Favorite(id=1, user_id=1, venue_id="osm_296568074"),
+                Favorite(id=2, user_id=1, venue_id="osm_296568075"),
+                Favorite(id=3, user_id=2, venue_id="osm_296568076"),
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/favorites/me", headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {
+        "venue_ids": ["osm_296568074", "osm_296568075"],
+    }
+
+
 def test_delete_favorite_requires_authentication():
     response = client.delete("/api/favorites/osm_296568074")
     assert response.status_code == 401
