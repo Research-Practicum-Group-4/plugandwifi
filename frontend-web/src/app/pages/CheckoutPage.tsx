@@ -116,7 +116,7 @@ export function CheckoutPage() {
   const [cardNumber, setCardNumber] = useState("4242 4242 4242 4242");
   const [expiry, setExpiry] = useState("12/30");
   const [cvc, setCvc] = useState("123");
-  const [cardName, setCardName] = useState("");
+  const [cardName, setCardName] = useState("String");
 
   // Redirect if not logged in (but also allow sign-in modal)
   useEffect(() => {
@@ -455,7 +455,7 @@ export function CheckoutPage() {
                       <Input
                         id="cardName"
                         placeholder="John Doe"
-                        value={cardName || `${firstName} ${lastName}`.trim()}
+                        value={cardName}
                         onChange={(e) => setCardName(e.target.value)}
                         required
                       />

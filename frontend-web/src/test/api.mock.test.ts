@@ -99,16 +99,24 @@ describe('api.getVenueDetail (mock)', () => {
 // ── login ─────────────────────────────────────────────────────────────────
 
 describe('api.login (mock)', () => {
-  it('returns an access_token and user on valid credentials', async () => {
-    const result = await api.login({ email: 'user@test.com', password: 'pass' });
+  it('returns an access_token and user role=user for demo user account', async () => {
+    const result = await api.login({ email: 'user2@example.com', password: '00000000' });
     expect(result.access_token).toBeTruthy();
-    expect(result.user.email).toBe('user@test.com');
+    expect(result.user.email).toBe('user2@example.com');
     expect(result.user.role).toBe('user');
   });
 
-  it('assigns provider role when email contains "provider"', async () => {
-    const result = await api.login({ email: 'provider@test.com', password: 'pass' });
+  it('returns role=provider for demo provider account', async () => {
+    const result = await api.login({ email: 'user3@example.com', password: '00000000' });
     expect(result.user.role).toBe('provider');
+  });
+
+  it('throws on wrong password', async () => {
+    await expect(api.login({ email: 'user2@example.com', password: 'wrongpass' })).rejects.toThrow();
+  });
+
+  it('throws on unknown email', async () => {
+    await expect(api.login({ email: 'nobody@example.com', password: '00000000' })).rejects.toThrow();
   });
 
   it('throws on empty credentials', async () => {
