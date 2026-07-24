@@ -1,8 +1,9 @@
 from datetime import date as date_type
 from datetime import time as time_type
+from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class UserRegister(BaseModel):
@@ -31,28 +32,55 @@ class LogoutRequest(BaseModel):
     refresh_token: str = Field(min_length=32)
 
 
-class ChatbotRecommendRequest(BaseModel):
-    message: str = Field(min_length=1)
-
-    chat_history: list["ChatbotHistoryMessage"] = Field(default_factory=list)
-
-
 class ChatbotHistoryMessage(BaseModel):
     role: Literal["user", "assistant"]
 
-    message: str = Field(min_length=1, max_length=500)
+    message: str = Field(min_length=1, max_length=1000)
+
+
+class ChatbotIntent(str, Enum):
+    NEW_SEARCH = "new_search"
+    REFINE_SEARCH = "refine_search"
+    COMPARE_PREVIOUS = "compare_previous"
+    VENUE_DETAIL = "venue_detail"
+    GENERAL_CHAT = "general_chat"
+    RESET = "reset"
+
+
+class ChatbotExtractionResult(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    intent: ChatbotIntent | None = None
+    venue_name: str | None = Field(default=None, max_length=200)
+    location: str | None = Field(default=None, max_length=200)
+    radius_km: float | None = Field(default=None, gt=0, le=20)
+    venue_type: str | None = Field(default=None, max_length=100)
+    date: date_type | str | None = None
+    start_time: time_type | str | None = None
+    wifi: bool | None = None
+    plug_access: bool | int | None = None
+    accessibility_friendly: bool | None = None
+    calls_allowed: bool | None = None
+    wbe_certified: bool | None = None
+    mbe_certified: bool | None = None
+    vbe_certified: bool | None = None
+    bcorp_certified: bool | None = None
+    lgbt_friendly: bool | None = None
+    busyness: Literal["low", "medium", "moderate", "high"] | None = None
+    time: str | None = Field(default=None, max_length=50)
+    no_preference: bool = False
 
 
 class ChatbotSearchParameters(BaseModel):
-    venue_name: str | None = None
+    venue_name: str | None = Field(default=None, max_length=200)
 
-    candidate_venue_names: list[str] = Field(default_factory=list)
+    candidate_venue_names: list[str] = Field(default_factory=list, max_length=10)
 
-    location: str | None = None
+    location: str | None = Field(default=None, max_length=200)
 
-    radius_km: float | None = None
+    radius_km: float | None = Field(default=None, gt=0, le=20)
 
-    venue_type: str | None = None
+    venue_type: str | None = Field(default=None, max_length=100)
 
     date: date_type | None = None
 
@@ -78,9 +106,33 @@ class ChatbotSearchParameters(BaseModel):
 
     busyness: str | None = None
 
-    time: str | None = None
+    time: str | None = Field(default=None, max_length=50)
 
     sort_by_distance: bool = False
+
+    no_preference: bool = False
+
+
+class ChatbotConversationContext(BaseModel):
+    active_search_parameters: ChatbotSearchParameters | None = None
+
+    last_recommended_venue_ids: list[str] = Field(
+        default_factory=list, max_length=10
+    )
+
+    clarification_asked: bool = False
+
+    last_intent: ChatbotIntent | None = None
+
+
+class ChatbotRecommendRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=500)
+
+    chat_history: list[ChatbotHistoryMessage] = Field(
+        default_factory=list, max_length=12
+    )
+
+    conversation_context: ChatbotConversationContext | None = None
 
 
 class ChatbotRecommendResponse(BaseModel):
@@ -94,6 +146,8 @@ class ChatbotRecommendResponse(BaseModel):
 
     follow_up_question: str | None = None
 
+    conversation_context: ChatbotConversationContext
+
 
 class VenueResponse(BaseModel):
     venue_id: str
@@ -105,6 +159,11 @@ class VenueResponse(BaseModel):
 
     cuisine_type: str | None = None
     has_wifi: bool | None = None
+    phone: str | None = None
+    website: str | None = None
+    building_number: str | None = None
+    street: str | None = None
+    zipcode: str | None = None
 
     accessibility_friendly: bool = False
     calls_allowed: bool = False

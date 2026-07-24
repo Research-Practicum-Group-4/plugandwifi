@@ -282,7 +282,7 @@ def test_chatbot_recommend_returns_real_venue_suggestions(monkeypatch):
     response = client.post(
         "/api/chatbot/recommend",
         json={
-            "message": "Find me a library with Wi-Fi and plug access near UCD that is not too busy now."
+                "message": "Find me a library with Wi-Fi and plug access near UCD that is not too busy."
         },
     )
 
@@ -295,7 +295,7 @@ def test_chatbot_recommend_returns_real_venue_suggestions(monkeypatch):
     assert data["search_parameters"]["wifi"] is True
     assert data["search_parameters"]["plug_access"] == 1
     assert data["search_parameters"]["busyness"] == "low"
-    assert data["search_parameters"]["time"] == "now"
+    assert data["search_parameters"]["time"] is None
     assert data["venues"][0]["venue_id"] == "osm_296568074"
     assert data["venues"][0]["busyness_label"] == "Low"
     assert "Top matches:" in data["response"]
@@ -315,7 +315,7 @@ def test_chatbot_recommend_uses_extracted_radius_and_location(monkeypatch):
             "wifi": True,
             "plug_access": 1,
             "busyness": None,
-            "time": "now",
+            "time": None,
         },
     )
     monkeypatch.setattr(
@@ -326,7 +326,7 @@ def test_chatbot_recommend_uses_extracted_radius_and_location(monkeypatch):
 
     response = client.post(
         "/api/chatbot/recommend",
-        json={"message": "Find a Wi-Fi workspace within 0.1km of UCD Library now."},
+        json={"message": "Find a Wi-Fi workspace within 0.1km of UCD Library."},
     )
 
     assert response.status_code == 200
@@ -369,8 +369,8 @@ def test_chatbot_recommend_applies_advanced_filters(monkeypatch):
             "location": None,
             "radius_km": None,
             "venue_type": "library",
-            "date": "2026-07-24",
-            "start_time": "14:30",
+            "date": "2026-06-15",
+            "start_time": "09:30",
             "wifi": True,
             "plug_access": 1,
             "accessibility_friendly": True,
@@ -387,7 +387,7 @@ def test_chatbot_recommend_applies_advanced_filters(monkeypatch):
             venue_id: {
                 "busyness_score": 20,
                 "busyness_label": "Low",
-                "busyness_predicted_for": "2026-07-24T14:00:00",
+                    "busyness_predicted_for": "2026-06-15T09:00:00",
             }
             for venue_id in venue_ids
         },
@@ -396,7 +396,7 @@ def test_chatbot_recommend_applies_advanced_filters(monkeypatch):
     response = client.post(
         "/api/chatbot/recommend",
         json={
-            "message": "Find an accessible B Corp venue with Wi-Fi, plugs and calls allowed on 24 July at 2:30pm."
+                "message": "Find an accessible B Corp venue with Wi-Fi, plugs and calls allowed on June 15 at 9:30am."
         },
     )
 
@@ -404,8 +404,8 @@ def test_chatbot_recommend_applies_advanced_filters(monkeypatch):
     data = response.json()
     assert len(data["venues"]) <= 3
     assert [venue["venue_id"] for venue in data["venues"]] == ["osm_296568074"]
-    assert data["search_parameters"]["date"] == "2026-07-24"
-    assert data["search_parameters"]["start_time"] == "14:30:00"
+    assert data["search_parameters"]["date"] == "2026-06-15"
+    assert data["search_parameters"]["start_time"] == "09:30:00"
     assert data["search_parameters"]["plug_access"] == 1
     assert data["search_parameters"]["accessibility_friendly"] is True
     assert data["search_parameters"]["calls_allowed"] is True
@@ -418,7 +418,7 @@ def test_default_gemini_model_uses_flash_lite(monkeypatch):
     assert main_module.get_gemini_model() == "gemini-3.1-flash-lite"
 
 
-def test_chatbot_recommend_returns_default_recommendations_without_preferences(
+def test_chatbot_recommend_uses_gemini_for_general_chat_without_search_intent(
     monkeypatch,
 ):
     monkeypatch.setattr(
@@ -426,11 +426,8 @@ def test_chatbot_recommend_returns_default_recommendations_without_preferences(
     )
     monkeypatch.setattr(
         main_module,
-        "get_busyness_predictions",
-        lambda venue_ids, hour=None, day_type=None, prediction_date=None, selected_date=None, selected_time=None: {
-            venue_id: {"busyness_score": 20, "busyness_label": "Low"}
-            for venue_id in venue_ids
-        },
+        "call_gemini_chatbot",
+        lambda message, chat_history=None: "Hi! I can help you find a workspace. What area are you looking at?",
     )
 
     response = client.post(
@@ -439,22 +436,22 @@ def test_chatbot_recommend_returns_default_recommendations_without_preferences(
 
     assert response.status_code == 200
     data = response.json()
-    assert 1 <= len(data["venues"]) <= 3
+    assert data["venues"] == []
     assert data["follow_up_question"] is None
     assert data["response"] == (
-        "Here are three strong default picks based on suitability, lower busyness, and rating."
+        "Hi! I can help you find a workspace. What area are you looking at?"
     )
 
 
-def test_chatbot_recommend_asks_for_missing_core_preferences(monkeypatch):
+def test_chatbot_recommend_location_alone_does_not_ask_for_preferences(monkeypatch):
     monkeypatch.setattr(
         main_module,
         "call_gemini_search_parameter_extraction",
         lambda message: {
             "location": "Times Square",
             "radius_km": None,
-            "venue_type": "cafe",
-            "wifi": True,
+            "venue_type": None,
+            "wifi": None,
             "plug_access": None,
             "time": None,
         },
@@ -462,15 +459,92 @@ def test_chatbot_recommend_asks_for_missing_core_preferences(monkeypatch):
 
     response = client.post(
         "/api/chatbot/recommend",
-        json={"message": "Find me a cafe near Times Square with Wi-Fi."},
+        json={"message": "Find me recommendations near Times Square."},
     )
 
     assert response.status_code == 200
     data = response.json()
     assert data["venues"] == []
-    assert data["follow_up_question"] == (
-        "Before I recommend venues, tell me your plug access. For venue type, examples are cafe, restaurant, hotel, library, or workspace."
+    assert data["follow_up_question"] is None
+    assert data["conversation_context"]["clarification_asked"] is False
+
+
+def test_chatbot_recommend_does_not_repeat_preference_follow_up_after_partial_reply(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message, chat_history=None: {
+            "location": None,
+            "radius_km": None,
+            "venue_type": None,
+            "wifi": True,
+            "plug_access": 1,
+            "time": None,
+        },
     )
+    monkeypatch.setattr(
+        main_module,
+        "search_venues_for_chatbot",
+        lambda search_parameters, db, limit=3, **kwargs: ([], True),
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "I need Wifi and plugs",
+            "chat_history": [
+                {
+                    "role": "user",
+                    "message": "I am near Times Square, give me some recommendations venue",
+                },
+                {
+                    "role": "assistant",
+                    "message": "Before I recommend venues, tell me your venue type, Wi-Fi, and plug access.",
+                },
+            ],
+            "conversation_context": {
+                "active_search_parameters": {
+                    "location": "Times Square",
+                    "radius_km": 3,
+                },
+                "last_recommended_venue_ids": [],
+                "clarification_asked": True,
+                "last_intent": "new_search",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["follow_up_question"] is None
+    assert data["search_parameters"]["location"] == "Times Square"
+    assert data["search_parameters"]["venue_name"] is None
+    assert data["search_parameters"]["wifi"] is True
+    assert data["search_parameters"]["plug_access"] == 1
+
+
+def test_infer_chatbot_search_parameters_inherits_location_from_structured_context():
+    search_parameters = main_module.infer_chatbot_search_parameters(
+        "a cafe would be nice",
+        [],
+        main_module.ChatbotConversationContext(
+            active_search_parameters=main_module.ChatbotSearchParameters(
+                location="Times Square",
+                radius_km=3,
+                wifi=True,
+                plug_access=1,
+            ),
+            last_intent=main_module.ChatbotIntent.NEW_SEARCH,
+        ),
+    )
+
+    assert search_parameters.location == "Times Square"
+    assert search_parameters.venue_name is None
+    assert search_parameters.venue_type == "cafe"
+    assert search_parameters.wifi is True
+    assert search_parameters.plug_access == 1
 
 
 def test_chatbot_recommend_returns_useful_no_result(monkeypatch):
@@ -572,6 +646,52 @@ def test_chatbot_recommend_returns_specific_venue_lookup_response(monkeypatch):
     assert "Top matches:" not in data["response"]
 
 
+def test_chatbot_recommend_returns_specific_venue_address_response(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message, chat_history=None: {
+            "venue_name": "UCD Library Shared Space",
+            "location": None,
+            "radius_km": None,
+            "venue_type": None,
+            "date": None,
+            "start_time": None,
+            "wifi": None,
+            "plug_access": None,
+            "accessibility_friendly": None,
+            "calls_allowed": None,
+            "wbe_certified": None,
+            "mbe_certified": None,
+            "vbe_certified": None,
+            "bcorp_certified": None,
+            "lgbt_friendly": None,
+            "busyness": None,
+            "time": None,
+        },
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, hour=None, day_type=None, prediction_date=None, selected_date=None, selected_time=None: {
+            venue_id: {} for venue_id in venue_ids
+        },
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={"message": "What is the address of UCD Library Shared Space?"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["venues"][0]["venue_id"] == "osm_296568074"
+    assert data["response"] == (
+        "The address of UCD Library Shared Space is 12, Library Road, Dublin South, D04A1B2."
+    )
+    assert "Top matches:" not in data["response"]
+
+
 def test_chatbot_recommend_passes_recent_history_to_extractor(monkeypatch):
     captured = {}
 
@@ -664,6 +784,15 @@ def test_chatbot_recommend_compares_previous_candidates_by_distance(monkeypatch)
                     ),
                 }
             ],
+            "conversation_context": {
+                "active_search_parameters": {},
+                "last_recommended_venue_ids": [
+                    "osm_296568074",
+                    "osm_296568075",
+                ],
+                "clarification_asked": False,
+                "last_intent": "new_search",
+            },
         },
     )
 
@@ -671,15 +800,250 @@ def test_chatbot_recommend_compares_previous_candidates_by_distance(monkeypatch)
     data = response.json()
     assert data["search_parameters"]["location"] == "UCD Library"
     assert data["search_parameters"]["venue_name"] is None
-    assert data["search_parameters"]["candidate_venue_names"] == [
-        "UCD Library Shared Space",
-        "UCD Village Study Hub",
-    ]
+    assert data["search_parameters"]["candidate_venue_names"] == []
     assert data["search_parameters"]["sort_by_distance"] is True
     assert data["venues"][0]["name"] == "UCD Library Shared Space"
+    assert data["response"].startswith("Among your previous options,")
     assert {venue["name"] for venue in data["venues"]}.issubset(
         {"UCD Library Shared Space", "UCD Village Study Hub"}
     )
+
+
+def test_chatbot_distance_follow_up_prefers_exact_candidate_names(monkeypatch):
+    db = TestingSessionLocal()
+    try:
+        db.add_all(
+            [
+                Venue(
+                    venue_id="osm_test_frederick",
+                    name="The Frederick Hotel",
+                    borough="Manhattan",
+                    osm_type="hotel",
+                    cuisine_type="hotel",
+                    has_wifi=True,
+                    accessibility_friendly=True,
+                    calls_allowed=True,
+                    wbe_certified=False,
+                    mbe_certified=False,
+                    vbe_certified=False,
+                    bcorp_certified=False,
+                    lgbt_friendly=True,
+                    noise_level="moderate",
+                    hourly_price=8.99,
+                    opening_hours="Mo-Su 00:00-23:59",
+                    lat=40.715575,
+                    lon=-74.008857,
+                    noise_score=0.3,
+                    rating=4.5,
+                    plug_access=1,
+                    wifi_norm=1.0,
+                    plug_norm=1.0,
+                    rating_norm=0.9,
+                    bus_norm=0.5,
+                    train_norm=0.5,
+                ),
+                Venue(
+                    venue_id="osm_test_modernhaus",
+                    name="Modernhaus SoHo",
+                    borough="Manhattan",
+                    osm_type="hotel",
+                    cuisine_type="hotel",
+                    has_wifi=True,
+                    accessibility_friendly=True,
+                    calls_allowed=True,
+                    wbe_certified=False,
+                    mbe_certified=False,
+                    vbe_certified=False,
+                    bcorp_certified=False,
+                    lgbt_friendly=True,
+                    noise_level="moderate",
+                    hourly_price=15.16,
+                    opening_hours="Mo-Su 00:00-23:59",
+                    lat=40.7226301,
+                    lon=-74.0048444,
+                    noise_score=0.3,
+                    rating=5.0,
+                    plug_access=1,
+                    wifi_norm=1.0,
+                    plug_norm=1.0,
+                    rating_norm=1.0,
+                    bus_norm=0.5,
+                    train_norm=0.5,
+                ),
+                Venue(
+                    venue_id="osm_test_renaissance",
+                    name="Renaissance",
+                    borough="Manhattan",
+                    osm_type="hotel",
+                    cuisine_type="hotel",
+                    has_wifi=True,
+                    accessibility_friendly=True,
+                    calls_allowed=True,
+                    wbe_certified=False,
+                    mbe_certified=False,
+                    vbe_certified=False,
+                    bcorp_certified=False,
+                    lgbt_friendly=True,
+                    noise_level="moderate",
+                    hourly_price=7.99,
+                    opening_hours="Mo-Su 00:00-23:59",
+                    lat=40.7517323,
+                    lon=-73.9910643,
+                    noise_score=0.3,
+                    rating=5.0,
+                    plug_access=1,
+                    wifi_norm=1.0,
+                    plug_norm=1.0,
+                    rating_norm=1.0,
+                    bus_norm=0.5,
+                    train_norm=0.5,
+                ),
+                Venue(
+                    venue_id="osm_test_renaissance_times_square",
+                    name="Renaissance New York Times Square Hotel",
+                    borough="Manhattan",
+                    osm_type="hotel",
+                    cuisine_type="hotel",
+                    has_wifi=True,
+                    accessibility_friendly=True,
+                    calls_allowed=True,
+                    wbe_certified=False,
+                    mbe_certified=False,
+                    vbe_certified=False,
+                    bcorp_certified=False,
+                    lgbt_friendly=True,
+                    noise_level="moderate",
+                    hourly_price=9.34,
+                    opening_hours="Mo-Su 00:00-23:59",
+                    lat=40.7597371,
+                    lon=-73.9845837,
+                    noise_score=0.3,
+                    rating=2.4,
+                    plug_access=0,
+                    wifi_norm=1.0,
+                    plug_norm=0.0,
+                    rating_norm=0.4,
+                    bus_norm=0.5,
+                    train_norm=0.5,
+                ),
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    monkeypatch.setattr(
+        main_module,
+        "call_gemini_search_parameter_extraction",
+        lambda message, chat_history=None: {
+            "venue_name": None,
+            "location": None,
+            "radius_km": None,
+            "venue_type": None,
+            "date": None,
+            "start_time": None,
+            "wifi": None,
+            "plug_access": None,
+            "accessibility_friendly": None,
+            "calls_allowed": None,
+            "wbe_certified": None,
+            "mbe_certified": None,
+            "vbe_certified": None,
+            "bcorp_certified": None,
+            "lgbt_friendly": None,
+            "busyness": None,
+            "time": None,
+        },
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, hour=None, day_type=None, prediction_date=None, selected_date=None, selected_time=None: {
+            venue_id: {} for venue_id in venue_ids
+        },
+    )
+    monkeypatch.setattr(
+        main_module,
+        "resolve_chatbot_location",
+        lambda location, db: type(
+            "ResolvedLocation", (), {"lat": 40.7580, "lon": -73.9855}
+        )(),
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "which one is closer to times square?",
+            "chat_history": [
+                {"role": "user", "message": "give me a venue"},
+                {
+                    "role": "assistant",
+                    "message": (
+                        "Here are three strong default picks based on suitability, lower busyness, and rating.\n\n"
+                        "??The Frederick Hotel (Manhattan)\n"
+                        "??Modernhaus SoHo (Manhattan)\n"
+                        "??Renaissance (Manhattan)"
+                    ),
+                },
+            ],
+            "conversation_context": {
+                "active_search_parameters": {},
+                "last_recommended_venue_ids": [
+                    "osm_test_frederick",
+                    "osm_test_modernhaus",
+                    "osm_test_renaissance",
+                ],
+                "clarification_asked": False,
+                "last_intent": "new_search",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["search_parameters"]["candidate_venue_names"] == []
+    assert data["response"].startswith("Among your previous options,")
+    assert {venue["name"] for venue in data["venues"]}.issubset(
+        {"The Frederick Hotel", "Modernhaus SoHo", "Renaissance"}
+    )
+
+
+def test_chatbot_recommend_asks_once_then_uses_defaults_for_generic_request(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        main_module, "call_gemini_search_parameter_extraction", lambda message: None
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, hour=None, day_type=None, prediction_date=None, selected_date=None, selected_time=None: {
+            venue_id: {"busyness_score": 20, "busyness_label": "Low"}
+            for venue_id in venue_ids
+        },
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={"message": "Give me 3 venue recommendations"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["venues"] == []
+    assert data["conversation_context"]["clarification_asked"] is True
+
+    follow_up_response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Okay",
+            "conversation_context": data["conversation_context"],
+        },
+    )
+    follow_up_data = follow_up_response.json()
+    assert follow_up_response.status_code == 200
+    assert 1 <= len(follow_up_data["venues"]) <= 3
+    assert follow_up_data["follow_up_question"] is None
 
 
 def test_normalize_chatbot_history_enforces_window_limits():
@@ -729,8 +1093,379 @@ def test_call_gemini_chatbot_handles_api_failure(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         main_module.call_gemini_chatbot("Find a workspace.")
 
-    assert exc_info.value.status_code == 502
-    assert exc_info.value.detail == "Gemini API request failed"
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Gemini is temporarily unavailable"
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_wifi"),
+    [
+        ("I need Wi-Fi", True),
+        ("No Wi-Fi needed", False),
+        ("Without wi-fi", False),
+        ("Wireless is required", True),
+    ],
+)
+def test_parse_wifi_preference_is_negative_first(message, expected_wifi):
+    assert main_module.parse_wifi_preference(message) is expected_wifi
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_plugs"),
+    [
+        ("I need plugs", 1),
+        ("No plugs needed", 0),
+        ("Without plug access", 0),
+        ("A power outlet is required", 1),
+    ],
+)
+def test_parse_plug_preference_is_negative_first(message, expected_plugs):
+    assert main_module.parse_plug_preference(message) == expected_plugs
+
+
+def test_explicit_false_preferences_override_structured_context(monkeypatch):
+    monkeypatch.setattr(
+        main_module, "call_gemini_search_parameter_extraction", lambda *args: None
+    )
+    context = main_module.ChatbotConversationContext(
+        active_search_parameters=main_module.ChatbotSearchParameters(
+            location="Times Square", radius_km=3, wifi=True, plug_access=1
+        ),
+        last_intent=main_module.ChatbotIntent.NEW_SEARCH,
+    )
+
+    _, parameters = main_module.interpret_chatbot_turn(
+        "I also do not need wifi and need no plugs", [], context
+    )
+
+    assert parameters.location == "Times Square"
+    assert parameters.wifi is False
+    assert parameters.plug_access == 0
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("low", "low"),
+        ("medium", "medium"),
+        ("moderate", "medium"),
+        ("Medium", "medium"),
+        ("high", "high"),
+        ("invalid", None),
+    ],
+)
+def test_normalize_busyness_uses_canonical_vocabulary(value, expected):
+    assert main_module.normalize_busyness_preference(value) == expected
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"message": "x" * 501},
+        {
+            "message": "valid",
+            "chat_history": [
+                {"role": "user", "message": f"message-{index}"}
+                for index in range(13)
+            ],
+        },
+        {
+            "message": "valid",
+            "chat_history": [{"role": "user", "message": "x" * 1001}],
+        },
+        {
+            "message": "valid",
+            "conversation_context": {
+                "active_search_parameters": {"radius_km": 21},
+                "last_recommended_venue_ids": [],
+            },
+        },
+        {
+            "message": "valid",
+            "conversation_context": {
+                "active_search_parameters": None,
+                "last_recommended_venue_ids": [f"venue-{index}" for index in range(11)],
+            },
+        },
+    ],
+)
+def test_chatbot_request_bounds_return_validation_error(payload):
+    response = client.post("/api/chatbot/recommend", json=payload)
+    assert response.status_code == 422
+
+
+def test_normalize_chatbot_history_drops_oldest_messages_for_total_budget():
+    history = [
+        main_module.ChatbotHistoryMessage(
+            role="user" if index % 2 == 0 else "assistant",
+            message=f"{index}-" + ("x" * 998),
+        )
+        for index in range(8)
+    ]
+
+    normalized = main_module.normalize_chatbot_history(history)
+
+    assert len(normalized) == 6
+    assert normalized[0].message.startswith("2-")
+    assert normalized[-1].message.startswith("7-")
+    assert sum(len(item.message) for item in normalized) <= 6000
+
+
+def test_gemini_extraction_rejects_non_object_and_invalid_values(monkeypatch):
+    class FakeResponse:
+        def __init__(self, text):
+            self.text = text
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "candidates": [
+                    {"content": {"parts": [{"text": self.text}]}}
+                ]
+            }
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(
+        main_module.httpx, "post", lambda *args, **kwargs: FakeResponse("[]")
+    )
+    assert main_module.call_gemini_search_parameter_extraction("test") is None
+
+    monkeypatch.setattr(
+        main_module.httpx,
+        "post",
+        lambda *args, **kwargs: FakeResponse(
+            '{"location":"SoHo","busyness":"extreme","unknown":"ignored"}'
+        ),
+    )
+    assert main_module.call_gemini_search_parameter_extraction("test") is None
+
+    monkeypatch.setattr(
+        main_module.httpx,
+        "post",
+        lambda *args, **kwargs: FakeResponse(
+            '```json\n{"location":"SoHo","busyness":"moderate","unknown":"ignored"}\n```'
+        ),
+    )
+    extracted = main_module.call_gemini_search_parameter_extraction("test")
+    assert extracted["location"] == "SoHo"
+    assert extracted["busyness"] == "moderate"
+    assert "unknown" not in extracted
+
+
+def test_chatbot_no_preference_returns_baseline_recommendations(monkeypatch):
+    monkeypatch.setattr(
+        main_module, "call_gemini_search_parameter_extraction", lambda *args: None
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, **kwargs: {
+            venue_id: {"busyness_score": 20, "busyness_label": "Low"}
+            for venue_id in venue_ids
+        },
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend", json={"message": "No preference"}
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["follow_up_question"] is None
+    assert data["venues"]
+    assert data["search_parameters"]["no_preference"] is True
+
+
+def test_new_search_does_not_reuse_previous_venue_ids(monkeypatch):
+    monkeypatch.setattr(
+        main_module, "call_gemini_search_parameter_extraction", lambda *args: None
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, **kwargs: {venue_id: {} for venue_id in venue_ids},
+    )
+    context = {
+        "active_search_parameters": {"venue_type": "library"},
+        "last_recommended_venue_ids": ["osm_296568074"],
+        "clarification_asked": False,
+        "last_intent": "new_search",
+    }
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Now find cafes near UCD instead",
+            "conversation_context": context,
+        },
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["search_parameters"]["location"] == "UCD", data
+    assert data["search_parameters"]["venue_type"] == "cafe", data
+    assert [venue["venue_id"] for venue in data["venues"]] == [
+        "osm_296568075"
+    ], data
+    assert data["conversation_context"]["last_intent"] == "new_search"
+
+
+def test_comparison_revalidates_client_ids_and_excludes_suspended_venues(monkeypatch):
+    monkeypatch.setattr(
+        main_module, "call_gemini_search_parameter_extraction", lambda *args: None
+    )
+    db = TestingSessionLocal()
+    try:
+        venue = db.query(Venue).filter(Venue.venue_id == "osm_296568074").one()
+        venue.state = "Suspended"
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Which one is least busy?",
+            "conversation_context": {
+                "active_search_parameters": {},
+                "last_recommended_venue_ids": [
+                    "osm_296568074",
+                    "client-invented-id",
+                ],
+                "clarification_asked": False,
+                "last_intent": "new_search",
+            },
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["venues"] == []
+
+
+def test_venue_detail_resolves_returned_name_against_active_context_ids(monkeypatch):
+    monkeypatch.setattr(
+        main_module, "call_gemini_search_parameter_extraction", lambda *args: None
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, **kwargs: {venue_id: {} for venue_id in venue_ids},
+    )
+
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Tell me more about UCD Village Study Hub",
+            "conversation_context": {
+                "active_search_parameters": {},
+                "last_recommended_venue_ids": [
+                    "osm_296568074",
+                    "osm_296568075",
+                ],
+                "clarification_asked": False,
+                "last_intent": "new_search",
+            },
+        },
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert [venue["venue_id"] for venue in data["venues"]] == [
+        "osm_296568075"
+    ], data
+    assert data["conversation_context"]["last_intent"] == "venue_detail"
+
+
+def test_candidate_venue_name_extractor_has_one_supported_implementation():
+    names = main_module.extract_chatbot_candidate_venue_names(
+        [
+            main_module.ChatbotHistoryMessage(
+                role="assistant",
+                message="• First Workspace (Manhattan)\n- Second Workspace (SoHo)",
+            )
+        ]
+    )
+
+    assert names == ["First Workspace", "Second Workspace"]
+
+
+def test_chatbot_date_and_time_require_real_availability(monkeypatch):
+    monkeypatch.setattr(
+        main_module, "call_gemini_search_parameter_extraction", lambda *args: None
+    )
+    monkeypatch.setattr(
+        main_module,
+        "get_busyness_predictions",
+        lambda venue_ids, **kwargs: {venue_id: {} for venue_id in venue_ids},
+    )
+    db = TestingSessionLocal()
+    try:
+        second_slot = (
+            db.query(AvailabilitySlot)
+            .filter(AvailabilitySlot.venue_id == "osm_296568075")
+            .one()
+        )
+        second_slot.available = False
+        db.commit()
+    finally:
+        db.close()
+
+    context = {
+        "active_search_parameters": {
+            "date": "2026-06-15",
+            "start_time": "09:30:00",
+            "wifi": True,
+        },
+        "last_recommended_venue_ids": [],
+        "clarification_asked": False,
+        "last_intent": "new_search",
+    }
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Show me those options",
+            "conversation_context": context,
+        },
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert [venue["venue_id"] for venue in data["venues"]] == ["osm_296568074"]
+    assert "available slot" in data["response"]
+
+
+def test_reset_clears_filters_and_previous_venue_ids():
+    response = client.post(
+        "/api/chatbot/recommend",
+        json={
+            "message": "Start over",
+            "conversation_context": {
+                "active_search_parameters": {"wifi": True},
+                "last_recommended_venue_ids": ["osm_296568074"],
+                "clarification_asked": True,
+                "last_intent": "new_search",
+            },
+        },
+    )
+    context = response.json()["conversation_context"]
+
+    assert response.status_code == 200
+    assert context["active_search_parameters"] is None
+    assert context["last_recommended_venue_ids"] == []
+    assert context["clarification_asked"] is False
+    assert context["last_intent"] == "reset"
+
+
+def test_known_landmarks_resolve_without_database_lookup():
+    db = TestingSessionLocal()
+    try:
+        resolved = main_module.resolve_chatbot_location("Times Square", db)
+    finally:
+        db.close()
+
+    assert resolved == (40.758, -73.9855)
 
 
 @pytest.fixture(autouse=True)
@@ -754,6 +1489,11 @@ def setup_and_seed_database():
             borough="Dublin South",
             osm_type="bakery",
             cuisine_type="library",
+            phone="+35315551234",
+            website="https://ucdlibrary.example",
+            building_number="12",
+            street="Library Road",
+            zipcode="D04A1B2",
             has_wifi=True,
             accessibility_friendly=True,
             calls_allowed=True,
@@ -784,6 +1524,9 @@ def setup_and_seed_database():
             borough="Dublin South",
             osm_type="cafe",
             cuisine_type="cafe",
+            building_number="5",
+            street="Campus Drive",
+            zipcode="D04C3D4",
             has_wifi=True,
             accessibility_friendly=False,
             calls_allowed=False,
