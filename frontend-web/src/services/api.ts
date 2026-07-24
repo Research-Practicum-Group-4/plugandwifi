@@ -13,6 +13,7 @@ import {
   ProviderDashboardKPIsResponse,
   ProviderArrivalsResponse,
   VenueSuggestionsResponse,
+  ChatbotRecommendRequest,
   ChatbotRecommendResponse,
   FavoriteResponse,
   AdminActionType,
@@ -20,6 +21,8 @@ import {
   AdminCustomerIssue,
   AdminVenueIssue,
   AdminStatsResponse,
+  AdminDashboardOverviewResponse,
+  VenueSuspensionResponse,
 } from "../types/api";
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
@@ -1008,7 +1011,10 @@ export const api = {
   },
 
   // 11. Call Gemini Chatbot
-  getChatbotReply: async (message: string): Promise<ChatbotRecommendResponse> => {
+  getChatbotReply: async (
+    message: string,
+    chat_history: ChatbotRecommendRequest["chat_history"] = []
+  ): Promise<ChatbotRecommendResponse> => {
     if (USE_MOCK) {
       await delay(800);
       return {
@@ -1016,7 +1022,10 @@ export const api = {
         model: "gemini-1.5-flash"
       };
     } else {
-      const response = await axiosInstance.post<ChatbotRecommendResponse>("/chatbot/recommend", { message });
+      const response = await axiosInstance.post<ChatbotRecommendResponse>(
+        "/chatbot/recommend",
+        { message, chat_history }
+      );
       return response.data;
     }
   },
@@ -1045,64 +1054,7 @@ export const api = {
     }
   },
 
-  // 14. Provider — Create venue (Offer Space)
-  createVenue: async (data: {
-    name: string;
-    lat: number;
-    lon: number;
-    borough: string;
-    opening_hours?: string;
-    seat_capacity: number;
-    amenity_tags?: string[];
-    rules_text?: string;
-    has_wifi?: boolean;
-    plug_access?: number;
-    hourly_price?: number;
-  }): Promise<any> => {
-    checkAuth();
-    if (USE_MOCK) {
-      await delay(300);
-      return { venue_id: "provider-mock123", name: data.name, message: "Venue created successfully" };
-    } else {
-      const response = await axiosInstance.post("/venues", data);
-      return response.data;
-    }
-  },
-
-  // 15. Admin — Suspend venue
-  suspendVenue: async (venueId: string, state: "Suspended" | "Active" = "Suspended"): Promise<any> => {
-    checkAuth();
-    if (USE_MOCK) {
-      await delay(300);
-      return { venue_id: venueId, state, message: `Venue ${state.toLowerCase()} successfully` };
-    } else {
-      const response = await axiosInstance.patch(`/admin/venues/${venueId}/suspension`, { state });
-      return response.data;
-    }
-  },
-
-  // 16. Admin — Get overview
-  getAdminOverview: async (): Promise<any> => {
-    checkAuth();
-    if (USE_MOCK) {
-      await delay(300);
-      return {
-        global_active_properties: 98,
-        total_completed_checkout_revenues: 45670,
-        system_incident_counts: {
-          pending_incident_reports: 5,
-          active_warnings_issued: 2,
-          refund_pending_bookings: 3,
-          unavailable_slots: 4
-        }
-      };
-    } else {
-      const response = await axiosInstance.get("/admin/dashboard/overview");
-      return response.data;
-    }
-  },
-
-  // 17. Admin — Get platform stats
+  // 14. Admin — Get platform stats
   getAdminStats: async (): Promise<AdminStatsResponse> => {
     checkAuth();
     if (USE_MOCK) {
@@ -1124,6 +1076,27 @@ export const api = {
       };
     } else {
       const response = await axiosInstance.get<AdminStatsResponse>("/admin/stats");
+      return response.data;
+    }
+  },
+
+  getAdminOverview: async (): Promise<AdminDashboardOverviewResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(300);
+      return {
+        global_active_properties: 98,
+        total_completed_checkout_revenues: 45670,
+        system_incident_counts: {
+          cancelled_bookings: 12,
+          refund_pending_bookings: 3,
+          unavailable_slots: 4,
+        },
+      };
+    } else {
+      const response = await axiosInstance.get<AdminDashboardOverviewResponse>(
+        "/admin/dashboard/overview"
+      );
       return response.data;
     }
   },
@@ -1249,6 +1222,29 @@ export const api = {
       const response = await axiosInstance.post<AdminActionResponse>(
         `/admin/venue-issues/${issueId}/action`,
         { action }
+      );
+      return response.data;
+    }
+  },
+
+  suspendVenue: async (
+    venueId: string,
+    state: "Suspended" | "Active" = "Suspended"
+  ): Promise<VenueSuspensionResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(300);
+      return {
+        venue_id: venueId,
+        state,
+        cancelled_bookings: 0,
+        released_seats: 0,
+        message: `Venue ${state.toLowerCase()} successfully`,
+      };
+    } else {
+      const response = await axiosInstance.patch<VenueSuspensionResponse>(
+        `/admin/venues/${venueId}/suspension`,
+        { state }
       );
       return response.data;
     }

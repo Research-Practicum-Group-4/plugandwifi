@@ -6,9 +6,7 @@ from .database import engine
 
 
 def get_venue_state_column_status(connection):
-    venue_count = connection.execute(
-        text("SELECT COUNT(*) FROM venues")
-    ).scalar_one()
+    venue_count = connection.execute(text("SELECT COUNT(*) FROM venues")).scalar_one()
     state_exists = connection.execute(
         text(
             "SELECT EXISTS ("
@@ -43,10 +41,7 @@ def migrate_venue_state(apply=False):
             )
         )
         connection.execute(
-            text(
-                "UPDATE venues SET state = 'Active' "
-                "WHERE state IS NULL"
-            )
+            text("UPDATE venues SET state = 'Active' WHERE state IS NULL")
         )
 
     print("Venue state migration completed successfully.")

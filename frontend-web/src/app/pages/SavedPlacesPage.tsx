@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { Bell, Heart, MapPin, Star, Building2 } from "lucide-react";
+
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Star, MapPin, Heart, Bell } from "lucide-react";
 import { api } from "../../services/api";
 import { Venue } from "../../types/api";
 
@@ -17,45 +18,45 @@ export function SavedPlacesPage() {
         setLoading(true);
         const favsStr = localStorage.getItem("plugandwifi_favorites");
         const favs: string[] = favsStr ? JSON.parse(favsStr) : [];
-        
+
         if (favs.length === 0) {
           setVenues([]);
-          setLoading(false);
           return;
         }
 
-        // Fetch detail for each favorited venue ID from the backend database
         const details = await Promise.all(
-          favs.map(id => api.getVenueDetail(id).catch(err => {
-            console.warn(`Failed to fetch details for saved venue ${id}:`, err);
-            return null;
-          }))
+          favs.map((id) =>
+            api.getVenueDetail(id).catch((err) => {
+              console.warn(`Failed to fetch details for saved venue ${id}:`, err);
+              return null;
+            })
+          )
         );
 
-        // Filter out any failed requests (nulls) and convert to Venue objects for the list view
         const validVenues = details
-          .filter((d): d is NonNullable<typeof d> => d !== null)
-          .map(d => ({
-            venue_id: d.venue_id,
-            name: d.name,
-            cuisine_type: d.cuisine_type || "Workspace",
-            distance_km: d.distance_km || 0,
-            has_wifi: d.has_wifi || false,
-            wifi_free: d.wifi_free || false,
+          .filter((detail): detail is NonNullable<typeof detail> => detail !== null)
+          .map((detail) => ({
+            venue_id: detail.venue_id,
+            name: detail.name,
+            cuisine_type: detail.cuisine_type || "Workspace",
+            distance_km: detail.distance_km || 0,
+            has_wifi: detail.has_wifi || false,
+            wifi_free: detail.wifi_free || false,
             opening_now: true,
-            seats_avail: d.seats_avail || 10,
-            total_seats: d.total_seats || 20,
-            hourly_price: d.hourly_price || 0,
-            rating: d.rating || 4.5,
-            lat: d.lat,
-            lon: d.lon,
-            accessibility_friendly: d.accessibility_friendly,
-            calls_allowed: d.calls_allowed,
-            wbe_certified: d.wbe_certified,
-            mbe_certified: d.mbe_certified,
-            vbe_certified: d.vbe_certified,
-            bcorp_certified: d.bcorp_certified,
-            lgbt_friendly: d.lgbt_friendly
+            seats_avail: detail.seats_avail || 10,
+            total_seats: detail.total_seats || 20,
+            hourly_price: detail.hourly_price || 0,
+            rating: detail.rating || 4.5,
+            lat: detail.lat,
+            lon: detail.lon,
+            accessibility_friendly: detail.accessibility_friendly,
+            calls_allowed: detail.calls_allowed,
+            wbe_certified: detail.wbe_certified,
+            mbe_certified: detail.mbe_certified,
+            vbe_certified: detail.vbe_certified,
+            bcorp_certified: detail.bcorp_certified,
+            lgbt_friendly: detail.lgbt_friendly,
+            state: detail.state,
           }));
 
         setVenues(validVenues);
@@ -102,38 +103,55 @@ export function SavedPlacesPage() {
 
         <TabsContent value="saved" className="mt-6">
           {loading ? (
-            <div className="text-center py-12 text-muted-foreground">Loading saved workspaces...</div>
+            <div className="py-12 text-center text-muted-foreground">
+              Loading saved workspaces...
+            </div>
           ) : venues.length === 0 ? (
             <Card>
-              <CardContent className="pt-12 pb-12 text-center">
-                <Heart className="size-12 mx-auto mb-4 text-muted-foreground" />
+              <CardContent className="pb-12 pt-12 text-center">
+                <Heart className="mx-auto mb-4 size-12 text-muted-foreground" />
                 <h3 className="mb-2">No saved places yet</h3>
-                <p className="text-muted-foreground mb-6">
+                <p className="mb-6 text-muted-foreground">
                   Start saving your favorite workspaces
                 </p>
                 <Link to="/search">
-                  <Button>Browse Spaces</Button>
+                  <Button style={{ backgroundColor: "#253c50" }}>Browse Spaces</Button>
                 </Link>
               </CardContent>
             </Card>
           ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {venues.map((venue) => (
                 <Link key={venue.venue_id} to={`/venue/${venue.venue_id}`}>
-                  <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer">
+                  <Card className="cursor-pointer overflow-hidden transition-shadow hover:shadow-lg">
                     <CardContent className="p-5">
-                      <div className="flex items-start justify-between mb-2">
+                      <div className="mb-4 rounded-2xl border border-border/70 bg-gradient-to-br from-rose-50 via-white to-amber-50 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
+                              <Building2 className="size-3.5" />
+                              <span>Saved workspace</span>
+                            </div>
+                            <p className="text-sm text-muted-foreground">{venue.cuisine_type || "Workspace"}</p>
+                          </div>
+                          <div className="rounded-full border border-rose-200 bg-white/90 px-3 py-1 text-xs font-medium text-rose-700">
+                            Favorite
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mb-2 flex items-start justify-between">
                         <div>
-                          <h4 className="font-semibold text-base">{venue.name}</h4>
-                          <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
-                            <Star className="size-3.5 fill-yellow-400 stroke-yellow-400" />
-                            <span className="font-medium text-foreground">{venue.rating}</span>
+                          <h4>{venue.name}</h4>
+                          <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                            <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
+                            <span>{venue.rating}</span>
                           </div>
                         </div>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 cursor-pointer"
+                          className="text-red-500 hover:bg-red-50 hover:text-red-600"
                           onClick={async (e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -141,9 +159,9 @@ export function SavedPlacesPage() {
                               await api.removeFavorite(venue.venue_id);
                               const favsStr = localStorage.getItem("plugandwifi_favorites");
                               let favs: string[] = favsStr ? JSON.parse(favsStr) : [];
-                              favs = favs.filter(fid => fid !== venue.venue_id);
+                              favs = favs.filter((favId) => favId !== venue.venue_id);
                               localStorage.setItem("plugandwifi_favorites", JSON.stringify(favs));
-                              setVenues(prev => prev.filter(v => v.venue_id !== venue.venue_id));
+                              setVenues((prev) => prev.filter((item) => item.venue_id !== venue.venue_id));
                             } catch (err) {
                               console.error("Failed to remove favorite:", err);
                             }
@@ -152,10 +170,10 @@ export function SavedPlacesPage() {
                           <Heart className="size-4 fill-red-500 stroke-red-500" />
                         </Button>
                       </div>
-                      <p className="text-muted-foreground mb-2">
+                      <p className="mb-2 text-muted-foreground">
                         {venue.cuisine_type} • {venue.distance_km} km away
                       </p>
-                      <p style={{ color: '#2f8a64' }}>${venue.hourly_price}/hour</p>
+                      <p style={{ color: "#2f8a64" }}>${venue.hourly_price}/hour</p>
                     </CardContent>
                   </Card>
                 </Link>
@@ -171,11 +189,11 @@ export function SavedPlacesPage() {
                 <h3 className="mb-4">Create New Alert</h3>
                 <div className="flex gap-2">
                   <Button variant="outline" className="flex-1">
-                    <MapPin className="size-4 mr-2" />
+                    <MapPin className="mr-2 size-4" />
                     City Alert
                   </Button>
                   <Button variant="outline" className="flex-1">
-                    <Heart className="size-4 mr-2" />
+                    <Heart className="mr-2 size-4" />
                     Venue Alert
                   </Button>
                 </div>
@@ -187,7 +205,7 @@ export function SavedPlacesPage() {
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3">
-                      <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center mt-1">
+                      <div className="mt-1 flex size-10 items-center justify-center rounded-full bg-primary/10">
                         <Bell className="size-5 text-primary" />
                       </div>
                       <div>

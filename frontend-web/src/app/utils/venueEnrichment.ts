@@ -182,11 +182,11 @@ export function enrichVenue(venue: Venue): EnrichedVenue {
   const enrichedPrice = pickPrice(rand);
 
   const certifications: string[] = [];
-  const wbeCertified = venue.wbe_certified ?? rand() < 0.2;
-  const mbeCertified = venue.mbe_certified ?? rand() < 0.15;
-  const lgbtFriendly = venue.lgbt_friendly ?? rand() < 0.25;
-  const bcorpCertified = venue.bcorp_certified ?? rand() < 0.1;
-  const vbeCertified = venue.vbe_certified ?? rand() < 0.08;
+  const wbeCertified = venue.wbe_certified === true || rand() < 0.2;
+  const mbeCertified = venue.mbe_certified === true || rand() < 0.15;
+  const lgbtFriendly = venue.lgbt_friendly === true || rand() < 0.25;
+  const bcorpCertified = venue.bcorp_certified === true || rand() < 0.1;
+  const vbeCertified = venue.vbe_certified === true || rand() < 0.08;
 
   if (wbeCertified) certifications.push("WBE-Certified");
   if (mbeCertified) certifications.push("MBE-Certified");

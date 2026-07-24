@@ -12,7 +12,7 @@ import { Star, MapPin, Wifi, Zap, Clock, Heart, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../services/api";
 import { VenueDetail, AvailabilitySlot } from "../../types/api";
-import { enrichVenue, EnrichedVenue, venueImages } from "../utils/venueEnrichment";
+import { enrichVenue, EnrichedVenue } from "../utils/venueEnrichment";
 
 const EDI_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
   "WBE-Certified":    { bg: "bg-purple-100", text: "text-purple-700" },
@@ -112,7 +112,6 @@ export function VenueDetailPage() {
         duration: duration.toString(),
         price: totalPrice,
         seatsReserved,
-        venueImages: venueImages(venue.venue_id, venue.osm_type),
       },
     });
   };
@@ -223,7 +222,6 @@ export function VenueDetailPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-
       <div className="grid lg:grid-cols-[1fr_400px] gap-8">
         {/* Main Content */}
         <div>
