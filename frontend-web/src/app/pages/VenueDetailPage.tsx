@@ -12,7 +12,8 @@ import { Star, MapPin, Wifi, Zap, Clock, Heart, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../services/api";
 import { VenueDetail, AvailabilitySlot } from "../../types/api";
-import { enrichVenue, EnrichedVenue } from "../utils/venueEnrichment";
+import { enrichVenue, EnrichedVenue, venueImage } from "../utils/venueEnrichment";
+import { calculateDistanceKm, formatDistance, LandmarkContext } from "../utils/distance";
 import { useAuth } from "../contexts/AuthContext";
 import { useFavorites } from "../contexts/FavoritesContext";
 
@@ -31,6 +32,7 @@ export function VenueDetailPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const { isFavorite, addFavorite, removeFavorite, loading: favoritesLoading } = useFavorites();
   const stateParams = location.state || {};
+  const stateLandmark = stateParams.landmark as LandmarkContext | undefined;
 
   const todayStr = new Date().toISOString().split("T")[0];
 
@@ -53,6 +55,7 @@ export function VenueDetailPage() {
   const [venue, setVenue] = useState<(VenueDetail & EnrichedVenue) | null>(null);
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
+  const [storedLandmark, setStoredLandmark] = useState<LandmarkContext | null>(null);
 
   const getDurationHours = (start: string, end: string) => {
     try {
@@ -64,6 +67,20 @@ export function VenueDetailPage() {
       return 0;
     }
   };
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("activeLandmark");
+    if (!raw) {
+      setStoredLandmark(null);
+      return;
+    }
+
+    try {
+      setStoredLandmark(JSON.parse(raw) as LandmarkContext);
+    } catch {
+      setStoredLandmark(null);
+    }
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -89,6 +106,10 @@ export function VenueDetailPage() {
 
   const duration = getDurationHours(startTime, endTime);
   const totalPrice = venue ? venue.enrichedPrice * duration * seatsReserved : 0;
+  const activeLandmark = stateLandmark ?? storedLandmark;
+  const displayedDistance = venue && activeLandmark
+    ? formatDistance(calculateDistanceKm(activeLandmark.lat, activeLandmark.lon, venue.lat, venue.lon))
+    : formatDistance(venue?.distance_km);
 
   const handleBooking = () => {
     if (!venue) return;
@@ -221,25 +242,33 @@ export function VenueDetailPage() {
         {/* Main Content */}
         <div>
           <div className="mb-6">
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <h1 className="mb-2">{venue.name}</h1>
-                <div className="flex items-center gap-4 text-muted-foreground">
+            <div className="relative mb-6 overflow-hidden rounded-3xl">
+              <img
+                src={venueImage(venue.venue_id, venue.osm_type ?? venue.cuisine_type ?? "workspace")}
+                alt={venue.name}
+                className="h-[320px] w-full object-cover sm:h-[380px]"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
+              <div className="absolute inset-x-0 top-0 flex justify-end gap-2 p-4">
+                <Button variant="outline" size="icon" className="border-white/60 bg-white/85" onClick={handleSave} disabled={authLoading || favoritesLoading}>
+                  <Heart className={`size-5 ${isSaved ? "fill-red-500 stroke-red-500" : ""}`} />
+                </Button>
+                <Button variant="outline" size="icon" className="border-white/60 bg-white/85">
+                  <Share2 className="size-5" />
+                </Button>
+              </div>
+              <div className="absolute inset-x-0 bottom-0 p-6 text-white sm:p-8">
+                <div className="mb-3 inline-flex rounded-full bg-black/35 px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-white/85 backdrop-blur-sm">
+                  {(venue.osm_type ?? venue.cuisine_type ?? "workspace").replace(/_/g, " ")}
+                </div>
+                <h1 className="mb-2 text-white">{venue.name}</h1>
+                <div className="flex flex-wrap items-center gap-3 text-sm text-white/85">
                   <span className="flex items-center gap-1">
                     <MapPin className="size-4" />
                     {getAddress(venue)}
                   </span>
-                  <span>•</span>
-                  <span>{venue.distance_km} km away</span>
+                  {activeLandmark ? <span>{displayedDistance ?? "Distance unavailable"}</span> : null}
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" onClick={handleSave} disabled={authLoading || favoritesLoading}>
-                  <Heart className={`size-5 ${isSaved ? "fill-red-500 stroke-red-500" : ""}`} />
-                </Button>
-                <Button variant="outline" size="icon">
-                  <Share2 className="size-5" />
-                </Button>
               </div>
             </div>
 

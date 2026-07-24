@@ -13,6 +13,7 @@ interface MapViewProps {
   height?: string;
   center?: [number, number];
   zoom?: number;
+  userLocation?: [number, number] | null;
 }
 
 type LatLng = {
@@ -26,9 +27,33 @@ type MarkerVenue = Venue & {
 
 const DEFAULT_CENTER: [number, number] = [40.7589, -73.9851];
 const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? "";
+const USER_LOCATION_ICON = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+  <svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+    <defs>
+      <radialGradient id="outerGlow" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.42" />
+        <stop offset="65%" stop-color="#3b82f6" stop-opacity="0.18" />
+        <stop offset="100%" stop-color="#3b82f6" stop-opacity="0" />
+      </radialGradient>
+      <radialGradient id="innerGlow" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#bfdbfe" stop-opacity="0.95" />
+        <stop offset="100%" stop-color="#60a5fa" stop-opacity="0.35" />
+      </radialGradient>
+      <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+        <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#1d4ed8" flood-opacity="0.35"/>
+      </filter>
+    </defs>
+    <circle cx="36" cy="36" r="30" fill="url(#outerGlow)" />
+    <circle cx="36" cy="36" r="19" fill="url(#innerGlow)" />
+    <circle cx="36" cy="36" r="10.5" fill="#ffffff" filter="url(#shadow)" />
+    <circle cx="36" cy="36" r="7.5" fill="#1d4ed8" />
+    <circle cx="36" cy="36" r="4.5" fill="#3b82f6" />
+  </svg>
+`)}`;
 
 function fitMapToVenues(
   venues: MarkerVenue[],
+  userLocation: LatLng | null,
   map: {
     panTo: (position: LatLng) => void;
     setCenter: (position: LatLng) => void;
@@ -37,32 +62,45 @@ function fitMapToVenues(
   },
   zoom: number
 ) {
-  if (venues.length === 0) return;
+  const positions = [
+    ...venues.map((venue) => venue.position),
+    ...(userLocation ? [userLocation] : []),
+  ];
 
-  if (venues.length === 1) {
-    map.setCenter(venues[0].position);
+  if (positions.length === 0) return;
+
+  if (positions.length === 1) {
+    map.setCenter(positions[0]);
     map.setZoom(zoom);
     return;
   }
 
   const bounds = {
-    north: Math.max(...venues.map((venue) => venue.position.lat)),
-    south: Math.min(...venues.map((venue) => venue.position.lat)),
-    east: Math.max(...venues.map((venue) => venue.position.lng)),
-    west: Math.min(...venues.map((venue) => venue.position.lng)),
+    north: Math.max(...positions.map((position) => position.lat)),
+    south: Math.min(...positions.map((position) => position.lat)),
+    east: Math.max(...positions.map((position) => position.lng)),
+    west: Math.min(...positions.map((position) => position.lng)),
   };
 
   map.fitBounds(bounds, 50);
 }
 
-function MapMarkers({ venues, zoom }: { venues: MarkerVenue[]; zoom: number }) {
+function MapMarkers({
+  venues,
+  zoom,
+  userLocation,
+}: {
+  venues: MarkerVenue[];
+  zoom: number;
+  userLocation: LatLng | null;
+}) {
   const map = useMap();
   const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!map) return;
-    fitMapToVenues(venues, map, zoom);
-  }, [map, venues, zoom]);
+    fitMapToVenues(venues, userLocation, map, zoom);
+  }, [map, venues, userLocation, zoom]);
 
   useEffect(() => {
     if (!selectedVenueId || venues.some((venue) => venue.venue_id === selectedVenueId)) return;
@@ -73,6 +111,15 @@ function MapMarkers({ venues, zoom }: { venues: MarkerVenue[]; zoom: number }) {
 
   return (
     <>
+      {userLocation && (
+        <Marker
+          position={userLocation}
+          title="Your location"
+          zIndex={1000}
+          icon={USER_LOCATION_ICON}
+        />
+      )}
+
       {venues.map((venue) => (
         <Marker
           key={venue.venue_id}
@@ -157,6 +204,7 @@ export const MapView: React.FC<MapViewProps> = ({
   height = "500px",
   center = DEFAULT_CENTER,
   zoom = 13,
+  userLocation = null,
 }) => {
   const validVenues = useMemo<MarkerVenue[]>(
     () =>
@@ -203,7 +251,15 @@ export const MapView: React.FC<MapViewProps> = ({
           clickableIcons={false}
           style={{ width: "100%", height: "100%" }}
         >
-          <MapMarkers venues={validVenues} zoom={zoom} />
+          <MapMarkers
+            venues={validVenues}
+            zoom={zoom}
+            userLocation={
+              userLocation
+                ? { lat: userLocation[0], lng: userLocation[1] }
+                : null
+            }
+          />
         </Map>
       </APIProvider>
     </div>

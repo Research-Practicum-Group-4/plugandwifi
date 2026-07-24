@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Search, Star, Filter, Clock, MapPin, Sparkles, Phone, Accessibility, Plug, Wifi, Zap, Volume, Loader2 } from "lucide-react";
 import { api } from "../../services/api";
 import { enrichVenue, EnrichedVenue, venueImage, busynessDisplay } from "../utils/venueEnrichment";
+import { formatDistance, LandmarkContext } from "../utils/distance";
 import { MapView } from "../components/MapView";
 import { manhattanVenues } from "../data/manhattanVenues";
 import { Venue, VenueSuggestion } from "../../types/api";
@@ -49,38 +50,8 @@ function getSuitabilityColor(score: number): string {
   }
 }
 
-function formatDistance(distanceKm?: number | null): string | null {
-  if (typeof distanceKm !== "number" || !Number.isFinite(distanceKm) || distanceKm < 0) {
-    return null;
-  }
-
-  if (distanceKm < 1) {
-    return `${Math.round(distanceKm * 1000)} m away`;
-  }
-
-  return `${distanceKm.toFixed(1)} km away`;
-}
-
 function normalizeSearchText(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function normalizeLandmarkDistanceDisplay(venue: EnrichedVenue): EnrichedVenue {
-  const formattedDistance = formatDistance(venue.distance_km);
-  if (!formattedDistance) return venue;
-
-  if (venue.distance_km < 1) {
-    return {
-      ...venue,
-      distance_km: 0,
-      borough: formattedDistance,
-    };
-  }
-
-  return {
-    ...venue,
-    distance_km: formattedDistance.replace(" km away", "") as unknown as number,
-  };
 }
 
 function renderWorkspaceFeatureBadges({
@@ -166,6 +137,7 @@ const fallbackMapVenues: Venue[] = manhattanVenues.map((venue) => ({
 }));
 
 const INITIAL_DISPLAY_COUNT = 10;
+type FallbackVenue = (typeof manhattanVenues)[number];
 
 export function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -202,6 +174,7 @@ export function SearchPage() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [autocompleteItems, setAutocompleteItems] = useState<{ name: string; type: "landmark" | "venue"; id?: string; coords?: { lat: number; lon: number } }[]>([]);
   const [selectedVenueSuggestionId, setSelectedVenueSuggestionId] = useState<string | null>(null);
+  const [activeLandmark, setActiveLandmark] = useState<LandmarkContext | null>(null);
 
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
 
@@ -273,6 +246,15 @@ export function SearchPage() {
     sessionStorage.setItem("seatsRequired", seatsRequired.toString());
   }, [searchQuery, searchDate, startTime, endTime, seatsRequired]);
 
+  useEffect(() => {
+    if (activeLandmark) {
+      sessionStorage.setItem("activeLandmark", JSON.stringify(activeLandmark));
+      return;
+    }
+
+    sessionStorage.removeItem("activeLandmark");
+  }, [activeLandmark]);
+
   // Main Data Fetching Engine
   useEffect(() => {
     const executeQuery = async () => {
@@ -283,6 +265,7 @@ export function SearchPage() {
       let nameFilter: string | undefined = undefined;
       let selectedVenueId: string | undefined = undefined;
       let isLandmarkSearch = false;
+      let matchedLandmark: LandmarkContext | null = null;
 
       if (debouncedSearchQuery) {
         const clean = debouncedSearchQuery.trim().toLowerCase();
@@ -313,6 +296,7 @@ export function SearchPage() {
               lat = coords.lat;
               lon = coords.lon;
               isLandmarkSearch = true;
+              matchedLandmark = { name, lat: coords.lat, lon: coords.lon };
               break;
             }
           }
@@ -378,9 +362,9 @@ export function SearchPage() {
             (v) => v.enrichedPrice >= priceRange[0] && v.enrichedPrice <= priceRange[1]
           );
           matched = applyEdiFilters(matched);
-          matched = matched.map(normalizeLandmarkDistanceDisplay);
 
           setAllVenues(matched);
+          setActiveLandmark(matchedLandmark);
           setApiFailed(false);
         } else if (nameFilter) {
           const normalizedNameFilter = normalizeSearchText(nameFilter);
@@ -450,6 +434,7 @@ export function SearchPage() {
           matched = applyEdiFilters(matched);
 
           setAllVenues(matched);
+          setActiveLandmark(null);
           setApiFailed(false);
         } else {
           // General browse — pass user coords when available for proximity sorting
@@ -466,12 +451,14 @@ export function SearchPage() {
           finalAll = applyEdiFilters(finalAll);
 
           setAllVenues(finalAll);
+          setActiveLandmark(null);
           setApiFailed(false);
         }
       } catch (err) {
         console.error("Failed to load search data, using fallback data:", err);
         setApiFailed(true);
         setAllVenues([]);
+        setActiveLandmark(null);
       } finally {
         setLoading(false);
       }
@@ -527,16 +514,15 @@ export function SearchPage() {
   const visibleFallbackVenues = sortEnrichedVenues(
     fallbackVenues.slice(0, visibleCount)
   );
-  const displayVenues = apiFailed
-    ? manhattanVenues.slice(0, visibleCount)
-    : emptySearchState
-      ? visibleFallbackVenues
-      : sortEnrichedVenues(allVenues.slice(0, visibleCount));
+  const visibleLegacyFallbackVenues: FallbackVenue[] = manhattanVenues.slice(0, visibleCount);
+  const visibleApiVenues = emptySearchState
+    ? visibleFallbackVenues
+    : sortEnrichedVenues(allVenues.slice(0, visibleCount));
   const canLoadMore = apiFailed
-    ? manhattanVenues.length > displayVenues.length
+    ? manhattanVenues.length > visibleLegacyFallbackVenues.length
     : emptySearchState
       ? fallbackVenues.length > visibleFallbackVenues.length
-      : allVenues.length > displayVenues.length;
+      : allVenues.length > visibleApiVenues.length;
   const displayCount = apiFailed
     ? manhattanVenues.length
     : emptySearchState && fallbackVenues.length > 0
@@ -579,12 +565,18 @@ export function SearchPage() {
         className="overflow-hidden hover:shadow-lg transition-shadow"
       >
         <div className="grid md:grid-cols-[250px_1fr] gap-4">
-          <div className="flex min-h-[180px] flex-col justify-between rounded-l-xl border-b border-border/60 bg-gradient-to-br from-slate-50 via-white to-sky-50 p-5 md:border-b-0 md:border-r">
-            <div>
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
+          <div className="relative min-h-[180px] overflow-hidden rounded-l-xl border-b border-border/60 md:border-b-0 md:border-r">
+            <img
+              src={venueImage(venue.venue_id, venue.osm_type ?? venue.cuisine_type ?? "workspace")}
+              alt={venue.name}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 p-5 text-white">
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.24em] text-white/80">
                 {(venue.osm_type ?? venue.cuisine_type ?? "workspace").replace(/_/g, " ")}
               </p>
-              <h3 className="text-2xl font-bold leading-tight text-foreground">
+              <h3 className="text-2xl font-bold leading-tight">
                 {venue.name}
               </h3>
             </div>
@@ -597,13 +589,15 @@ export function SearchPage() {
                 >
                   {busyness.label}
                 </span>
-                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-                  <MapPin className="size-4" />
-                  <span>{formatDistance(venue.distance_km) ?? venue.borough ?? "Manhattan"}</span>
-                </div>
+                {activeLandmark ? (
+                  <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                    <MapPin className="size-4" />
+                    <span>{formatDistance(venue.distance_km) ?? "Distance unavailable"}</span>
+                  </div>
+                ) : null}
                 <h3 className="hidden">{venue.name}</h3>
                 <p className="hidden text-muted-foreground">
-                  {venue.cuisine_type} • {formatDistance(venue.distance_km) ?? venue.borough}
+                  {venue.cuisine_type}
                 </p>
               </div>
               <div className="flex items-center gap-1">
@@ -667,12 +661,98 @@ export function SearchPage() {
                 </p>
                 <Link
                   to={`/venue/${venue.venue_id}`}
-                  state={{ searchDate, startTime, endTime, seatsRequired }}
+                  state={{ searchDate, startTime, endTime, seatsRequired, landmark: activeLandmark }}
                 >
                   <Button
                     style={{ backgroundColor: "#253c50" }}
                     className="cursor-pointer"
                   >
+                    Book a Space
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </CardContent>
+        </div>
+      </Card>
+    );
+  };
+
+  const renderFallbackVenueCard = (venue: FallbackVenue) => {
+    const busyness = busynessDisplay(String(venue.id));
+
+    return (
+      <Card key={venue.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+        <div className="grid md:grid-cols-[250px_1fr] gap-4">
+          <div className="relative min-h-[180px] overflow-hidden rounded-l-xl border-b border-border/60 md:border-b-0 md:border-r">
+            <img
+              src={venueImage(String(venue.id), venue.type)}
+              alt={venue.name}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 p-5 text-white">
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.24em] text-white/80">
+                {venue.type}
+              </p>
+              <h3 className="text-2xl font-bold leading-tight">
+                {venue.name}
+              </h3>
+            </div>
+          </div>
+          <CardContent className="pt-4">
+            <div className="flex justify-between items-start mb-2">
+              <div>
+                <span
+                  className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full mb-1 ${busyness.color}`}
+                >
+                  {busyness.label}
+                </span>
+                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                  <MapPin className="size-4" />
+                  <span>{venue.distance} km away</span>
+                </div>
+                <h3 className="hidden">{venue.name}</h3>
+                <p className="hidden text-muted-foreground">
+                  {venue.type} • {venue.distance} km away
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
+                <span>{venue.rating}</span>
+                <span className="text-muted-foreground">({venue.reviews})</span>
+              </div>
+            </div>
+
+            {renderWorkspaceFeatureBadges({
+              hasWifi: venue.amenities.includes("WiFi"),
+              plugAccess: venue.amenities.includes("Power Outlets") ? 1 : 0,
+              callsAllowed: venue.amenities.includes("Calls Allowed"),
+            })}
+
+            <div className="mb-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Suitability for you</span>
+                <span
+                  className="font-semibold"
+                  style={{ color: getSuitabilityColor(venue.suitabilityScore) }}
+                >
+                  {venue.suitabilityScore}/100
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-muted-foreground">Available</p>
+                <p>{venue.availability}</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <p className="text-2xl" style={{ color: "#2f8a64" }}>
+                  ${venue.price}/hr
+                </p>
+                <Link to={`/venue/${venue.id}`}>
+                  <Button style={{ backgroundColor: "#253c50" }} className="cursor-pointer">
                     Book a Space
                   </Button>
                 </Link>
@@ -1107,21 +1187,27 @@ export function SearchPage() {
                     <div className="text-center py-6 text-muted-foreground">
                       No matching venues found. Here are some recommended venues for you.
                     </div>
-                    {displayVenues.map((venue) => renderApiVenueCard(venue))}
+                    {visibleApiVenues.map((venue) => renderApiVenueCard(venue))}
                   </div>
                 ) : apiFailed ? (
                   // Fallback: render manhattanVenues with Figma card UI
-                  displayVenues.map((venue) => {
+                  visibleLegacyFallbackVenues.map((venue) => {
                     const busyness = busynessDisplay(String(venue.id));
                     return (
                       <Card key={venue.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                         <div className="grid md:grid-cols-[250px_1fr] gap-4">
-                          <div className="flex min-h-[180px] flex-col justify-between rounded-l-xl border-b border-border/60 bg-gradient-to-br from-slate-50 via-white to-amber-50 p-5 md:border-b-0 md:border-r">
-                            <div>
-                              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
+                          <div className="relative min-h-[180px] overflow-hidden rounded-l-xl border-b border-border/60 md:border-b-0 md:border-r">
+                            <img
+                              src={venueImage(String(venue.id), venue.type)}
+                              alt={venue.name}
+                              className="absolute inset-0 h-full w-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                            <div className="absolute inset-x-0 bottom-0 p-5 text-white">
+                              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.24em] text-white/80">
                                 {venue.type}
                               </p>
-                              <h3 className="text-2xl font-bold leading-tight text-foreground">
+                              <h3 className="text-2xl font-bold leading-tight">
                                 {venue.name}
                               </h3>
                             </div>
@@ -1192,126 +1278,7 @@ export function SearchPage() {
                     );
                   })
                 ) : (
-                  // API data with enriched card UI
-                  displayVenues.map((venue) => {
-                    // Use ML suitability_score from backend when available, fall back to rating proxy
-                    const suitability = venue.suitability_score != null
-                      ? Math.round(venue.suitability_score)
-                      : Math.round(venue.rating * 20);
-                    const busyness = busynessDisplay(venue.venue_id, venue.busyness_score, venue.busyness_label);
-
-                    return (
-                      <Card
-                        key={venue.venue_id}
-                        className="overflow-hidden hover:shadow-lg transition-shadow"
-                      >
-                        <div className="grid md:grid-cols-[250px_1fr] gap-4">
-                          <div className="flex min-h-[180px] flex-col justify-between rounded-l-xl border-b border-border/60 bg-gradient-to-br from-slate-50 via-white to-sky-50 p-5 md:border-b-0 md:border-r">
-                            <div>
-                              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
-                                {(venue.osm_type ?? venue.cuisine_type ?? "workspace").replace(/_/g, " ")}
-                              </p>
-                              <h3 className="text-2xl font-bold leading-tight text-foreground">
-                                {venue.name}
-                              </h3>
-                            </div>
-                          </div>
-                          <CardContent className="pt-4">
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <span
-                                  className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full mb-1 ${busyness.color}`}
-                                >
-                                  {busyness.label}
-                                </span>
-                                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-                                  <MapPin className="size-4" />
-                                  <span>{venue.distance_km ? `${venue.distance_km} km away` : venue.borough}</span>
-                                </div>
-                                <h3 className="hidden">{venue.name}</h3>
-                                <p className="hidden text-muted-foreground">
-                                  {venue.cuisine_type} •{" "}
-                                  {venue.distance_km ? `${venue.distance_km} km away` : venue.borough}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
-                                <span>{venue.rating}</span>
-                              </div>
-                            </div>
-
-                            {renderWorkspaceFeatureBadges({
-                              hasWifi: venue.has_wifi,
-                              plugAccess: venue.plug_access ?? 0,
-                              callsAllowed: venue.calls_allowed,
-                            })}
-
-                            {venue.seats_avail > 0 && (
-                              <div className="mb-3">
-                                <span className="inline-flex items-center rounded-full border border-border/80 px-2.5 py-1 text-xs text-muted-foreground">
-                                  {venue.seats_avail} seats left
-                                </span>
-                              </div>
-                            )}
-
-                            {/* EDI certification badges */}
-                            {venue.certifications.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 mb-3">
-                                {venue.certifications.map((cert) => {
-                                  const style = EDI_BADGE_STYLES[cert] ?? { bg: "bg-gray-100", text: "text-gray-700" };
-                                  return (
-                                    <span
-                                      key={cert}
-                                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${style.bg} ${style.text}`}
-                                    >
-                                      {cert}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            )}
-
-                            <div className="mb-3">
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-muted-foreground">Suitability for you</span>
-                                <span
-                                  className="font-semibold"
-                                  style={{ color: getSuitabilityColor(suitability) }}
-                                >
-                                  {suitability}/100
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <p className="text-muted-foreground">Status</p>
-                                <p className={venue.opening_now ? "text-green-600" : "text-red-500"}>
-                                  {venue.opening_now ? "Open Now" : "Closed"}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-4">
-                                <p className="text-2xl" style={{ color: "#2f8a64" }}>
-                                  ${venue.enrichedPrice}/hr
-                                </p>
-                                <Link
-                                  to={`/venue/${venue.venue_id}`}
-                                  state={{ searchDate, startTime, endTime, seatsRequired }}
-                                >
-                                  <Button
-                                    style={{ backgroundColor: "#253c50" }}
-                                    className="cursor-pointer"
-                                  >
-                                    Book a Space
-                                  </Button>
-                                </Link>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </div>
-                      </Card>
-                    );
-                  })
+                  visibleApiVenues.map((venue) => renderApiVenueCard(venue))
                 )}
 
                 {!loading && canLoadMore && (

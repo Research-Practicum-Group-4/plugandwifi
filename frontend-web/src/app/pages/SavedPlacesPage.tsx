@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { api } from "../../services/api";
 import { Venue } from "../../types/api";
 import { useFavorites } from "../contexts/FavoritesContext";
+import { venueImage } from "../utils/venueEnrichment";
 
 export function SavedPlacesPage() {
   const [venues, setVenues] = useState<Venue[]>([]);
@@ -37,6 +38,7 @@ export function SavedPlacesPage() {
           .map((detail) => ({
             venue_id: detail.venue_id,
             name: detail.name,
+            osm_type: detail.osm_type,
             cuisine_type: detail.cuisine_type || "Workspace",
             distance_km: detail.distance_km || 0,
             has_wifi: detail.has_wifi || false,
@@ -121,25 +123,32 @@ export function SavedPlacesPage() {
               {venues.map((venue) => (
                 <Link key={venue.venue_id} to={`/venue/${venue.venue_id}`}>
                   <Card className="cursor-pointer overflow-hidden transition-shadow hover:shadow-lg">
-                    <CardContent className="p-5">
-                      <div className="mb-4 rounded-2xl border border-border/70 bg-gradient-to-br from-rose-50 via-white to-amber-50 p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
-                              <Building2 className="size-3.5" />
-                              <span>Saved workspace</span>
-                            </div>
-                            <p className="text-sm text-muted-foreground">{venue.cuisine_type || "Workspace"}</p>
-                          </div>
-                          <div className="rounded-full border border-rose-200 bg-white/90 px-3 py-1 text-xs font-medium text-rose-700">
-                            Favorite
+                    <div className="relative overflow-hidden">
+                      <img
+                        src={venueImage(venue.venue_id, venue.osm_type ?? venue.cuisine_type ?? "workspace")}
+                        alt={venue.name}
+                        className="h-48 w-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+                      <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-4">
+                        <div className="rounded-full bg-black/45 px-3 py-1.5 backdrop-blur-sm">
+                          <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.24em] text-white/85">
+                            <Building2 className="size-3.5" />
+                            <span>Saved workspace</span>
                           </div>
                         </div>
+                        <div className="rounded-full border border-rose-200/70 bg-white/90 px-3 py-1 text-xs font-medium text-rose-700">
+                          Favorite
+                        </div>
                       </div>
-
+                      <div className="absolute inset-x-0 bottom-0 p-4 text-white">
+                        <p className="text-sm text-white/80">{venue.cuisine_type || "Workspace"}</p>
+                        <h4 className="mt-1">{venue.name}</h4>
+                      </div>
+                    </div>
+                    <CardContent className="p-5">
                       <div className="mb-2 flex items-start justify-between">
                         <div>
-                          <h4>{venue.name}</h4>
                           <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
                             <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
                             <span>{venue.rating}</span>

@@ -24,11 +24,16 @@ import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { api } from "../../services/api";
 import { MapView } from "../components/MapView";
-import { enrichVenue, EnrichedVenue, busynessDisplay } from "../utils/venueEnrichment";
+import { enrichVenue, EnrichedVenue, busynessDisplay, venueImage } from "../utils/venueEnrichment";
+import { formatDistance } from "../utils/distance";
 
 const PAGE_SIZE = 6;
 const HOME_VENUES_CACHE_PREFIX = "home-venues-cache:";
 const HOME_VENUES_CACHE_TTL_MS = 5 * 60 * 1000;
+const DEFAULT_NEARBY_LOCATION = {
+  lat: 40.7589,
+  lon: -73.9851,
+};
 
 type HomeVenueFilters = {
   wifi: boolean;
@@ -73,15 +78,15 @@ function getSuitabilityColor(score: number): string {
   return `rgb(${Math.round(40 + ((100 - s) / 50) * 160)}, 180, 0)`;
 }
 
-function buildHomeVenueCacheKey(filters: HomeVenueFilters): string {
-  return `${HOME_VENUES_CACHE_PREFIX}${JSON.stringify(filters)}`;
+function buildHomeVenueCacheKey(filters: HomeVenueFilters, nearbyMode: boolean): string {
+  return `${HOME_VENUES_CACHE_PREFIX}${nearbyMode ? "nearby" : "recommended"}:${JSON.stringify(filters)}`;
 }
 
-function readCachedHomeVenues(filters: HomeVenueFilters): EnrichedVenue[] | null {
+function readCachedHomeVenues(filters: HomeVenueFilters, nearbyMode: boolean): EnrichedVenue[] | null {
   if (typeof window === "undefined") return null;
 
   try {
-    const raw = window.localStorage.getItem(buildHomeVenueCacheKey(filters));
+    const raw = window.localStorage.getItem(buildHomeVenueCacheKey(filters, nearbyMode));
     if (!raw) return null;
 
     const parsed = JSON.parse(raw) as HomeVenueCacheEntry;
@@ -94,7 +99,7 @@ function readCachedHomeVenues(filters: HomeVenueFilters): EnrichedVenue[] | null
   }
 }
 
-function writeCachedHomeVenues(filters: HomeVenueFilters, venues: EnrichedVenue[]) {
+function writeCachedHomeVenues(filters: HomeVenueFilters, nearbyMode: boolean, venues: EnrichedVenue[]) {
   if (typeof window === "undefined") return;
 
   try {
@@ -102,7 +107,7 @@ function writeCachedHomeVenues(filters: HomeVenueFilters, venues: EnrichedVenue[
       timestamp: Date.now(),
       venues,
     };
-    window.localStorage.setItem(buildHomeVenueCacheKey(filters), JSON.stringify(entry));
+    window.localStorage.setItem(buildHomeVenueCacheKey(filters, nearbyMode), JSON.stringify(entry));
   } catch {
     // Ignore quota and serialization failures.
   }
@@ -116,9 +121,9 @@ export function HomePage() {
   const [showOwnedByFilters, setShowOwnedByFilters] = useState(false);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
   const [filters, setFilters] = useState<HomeVenueFilters>(DEFAULT_HOME_FILTERS);
-  const [venues, setVenues] = useState<EnrichedVenue[]>(() => readCachedHomeVenues(DEFAULT_HOME_FILTERS) ?? []);
+  const [venues, setVenues] = useState<EnrichedVenue[]>(() => readCachedHomeVenues(DEFAULT_HOME_FILTERS, false) ?? []);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [loading, setLoading] = useState(() => readCachedHomeVenues(DEFAULT_HOME_FILTERS) === null);
+  const [loading, setLoading] = useState(() => readCachedHomeVenues(DEFAULT_HOME_FILTERS, false) === null);
   const [loadError, setLoadError] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState<boolean | null>(null);
 
@@ -134,7 +139,8 @@ export function HomePage() {
   ].filter((loc) => loc.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const fetchVenues = useCallback(async () => {
-    const cachedVenues = readCachedHomeVenues(filters);
+    const useNearbyMode = locationEnabled === true;
+    const cachedVenues = readCachedHomeVenues(filters, useNearbyMode);
     if (cachedVenues) {
       setVenues(cachedVenues);
       setVisibleCount(PAGE_SIZE);
@@ -148,7 +154,10 @@ export function HomePage() {
       const data = await api.getVenues({
         page: 1,
         limit: 200,
-        sort: "recommended",
+        sort: useNearbyMode ? undefined : "recommended",
+        lat: useNearbyMode ? DEFAULT_NEARBY_LOCATION.lat : undefined,
+        lon: useNearbyMode ? DEFAULT_NEARBY_LOCATION.lon : undefined,
+        radius: useNearbyMode ? 2.0 : undefined,
         wifi: filters.wifi ? true : undefined,
         calls_allowed: filters.callsAllowed ? true : undefined,
         accessibility_friendly: filters.accessibilityFriendly ? true : undefined,
@@ -161,14 +170,16 @@ export function HomePage() {
       const filteredItems = filters.fourPlusStars
         ? data.items.filter((venue) => venue.rating >= 4)
         : data.items;
-      const sorted = [...filteredItems].sort((a, b) => {
-        const suitabilityDiff = (b.suitability_score ?? -1) - (a.suitability_score ?? -1);
-        if (suitabilityDiff !== 0) return suitabilityDiff;
-        return b.rating - a.rating;
-      });
+      const sorted = useNearbyMode
+        ? [...filteredItems].sort((a, b) => a.distance_km - b.distance_km)
+        : [...filteredItems].sort((a, b) => {
+            const suitabilityDiff = (b.suitability_score ?? -1) - (a.suitability_score ?? -1);
+            if (suitabilityDiff !== 0) return suitabilityDiff;
+            return b.rating - a.rating;
+          });
       const enrichedVenues = sorted.map(enrichVenue);
       setVenues(enrichedVenues);
-      writeCachedHomeVenues(filters, enrichedVenues);
+      writeCachedHomeVenues(filters, useNearbyMode, enrichedVenues);
       setVisibleCount(PAGE_SIZE);
     } catch {
       if (!cachedVenues) {
@@ -178,7 +189,7 @@ export function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, locationEnabled]);
 
   useEffect(() => {
     fetchVenues();
@@ -428,13 +439,21 @@ export function HomePage() {
                 return (
                   <Card key={venue.venue_id} className="overflow-hidden hover:shadow-lg transition-shadow">
                     <CardContent className="pt-4 space-y-3">
-                      <div className="rounded-2xl border border-border/70 bg-gradient-to-br from-slate-50 via-white to-emerald-50 p-4">
-                        <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
-                          {(venue.osm_type ?? venue.cuisine_type ?? "workspace").replace(/_/g, " ")}
-                        </p>
-                        <h4 className="mt-2 text-xl font-bold leading-tight text-foreground">
-                          {venue.name}
-                        </h4>
+                      <div className="relative overflow-hidden rounded-2xl border border-border/70">
+                        <img
+                          src={venueImage(venue.venue_id, venue.osm_type ?? venue.cuisine_type ?? "workspace")}
+                          alt={venue.name}
+                          className="h-48 w-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+                        <div className="absolute inset-x-0 bottom-0 p-4 text-white">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-white/80">
+                            {(venue.osm_type ?? venue.cuisine_type ?? "workspace").replace(/_/g, " ")}
+                          </p>
+                          <h4 className="mt-2 text-xl font-bold leading-tight">
+                            {venue.name}
+                          </h4>
+                        </div>
                       </div>
 
                       <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${busyness.color}`}>
@@ -485,11 +504,11 @@ export function HomePage() {
                             Calls Allowed
                           </span>
                         )}
-                        {venue.distance_km > 0 && (
-                          <div className="flex items-center gap-1 text-sm ml-auto">
-                            <Navigation className="size-4" />
-                            {venue.distance_km.toFixed(1)}km
-                          </div>
+                        {locationEnabled === true && venue.distance_km > 0 && (
+                        <div className="flex items-center gap-1 text-sm ml-auto">
+                          <Navigation className="size-4" />
+                          {formatDistance(venue.distance_km)}
+                        </div>
                         )}
                       </div>
 
@@ -539,7 +558,16 @@ export function HomePage() {
 
         {!loading && !loadError && venues.length > 0 && viewMode === "map" && (
           <Card className="h-[600px] overflow-hidden border border-border shadow-sm">
-            <MapView venues={venues} height="600px" />
+            <MapView
+              venues={venues}
+              height="600px"
+              center={[DEFAULT_NEARBY_LOCATION.lat, DEFAULT_NEARBY_LOCATION.lon]}
+              userLocation={
+                locationEnabled === true
+                  ? [DEFAULT_NEARBY_LOCATION.lat, DEFAULT_NEARBY_LOCATION.lon]
+                  : null
+              }
+            />
           </Card>
         )}
       </div>
