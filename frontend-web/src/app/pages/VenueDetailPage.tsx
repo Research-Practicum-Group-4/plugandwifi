@@ -3,18 +3,12 @@ import { useParams, useNavigate, useLocation } from "react-router";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Badge } from "../components/ui/badge";
 import { Separator } from "../components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Label } from "../components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "../components/ui/dialog";
 import { Star, MapPin, Wifi, Zap, Clock, Heart, Share2, LogIn } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../services/api";
@@ -38,7 +32,6 @@ export function VenueDetailPage() {
   const location = useLocation();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const { isFavorite, addFavorite, removeFavorite, loading: favoritesLoading } = useFavorites();
-  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const stateParams = location.state || {};
   const stateLandmark = stateParams.landmark as LandmarkContext | undefined;
 
@@ -64,6 +57,7 @@ export function VenueDetailPage() {
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [storedLandmark, setStoredLandmark] = useState<LandmarkContext | null>(null);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
 
   const getDurationHours = (start: string, end: string) => {
     try {
@@ -250,7 +244,6 @@ export function VenueDetailPage() {
   }
 
   return (
-    <>
     <div className="container mx-auto px-4 py-8">
       <div className="grid lg:grid-cols-[1fr_400px] gap-8">
         {/* Main Content */}
@@ -621,6 +614,5 @@ export function VenueDetailPage() {
         </div>
       </DialogContent>
     </Dialog>
-    </>
   );
 }

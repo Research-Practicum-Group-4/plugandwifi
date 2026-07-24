@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Separator } from "../../components/ui/separator";
-import { Loader2, Building2, ShieldAlert, User } from "lucide-react";
+import { Loader2, ShieldAlert, User } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { toast } from "sonner";
 

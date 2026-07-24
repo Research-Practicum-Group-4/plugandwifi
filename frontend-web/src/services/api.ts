@@ -295,17 +295,16 @@ const generateMockVenues = (): VenueDetail[] => {
     const zipcode = rng.pick(zipcodes);
     const hourly_profile_label = rng.pick(hourlyProfileLabels);
     
-    const nr = rng.next();
-    const hourly_profile_score = Math.round((hourly_profile_label === "quiet" ? nr * 0.3 : hourly_profile_label === "moderate" ? 0.3 + nr * 0.4 : 0.7 + nr * 0.3) * 100) / 100;
-    const rating = Math.round((3.8 + rng.next() * 1.2) * 10) / 10;
-    const hourly_price = Math.round((1.5 + rng.next() * 8) * 2) / 2;
+    const hourly_profile_score = Math.round((hourly_profile_label === "quiet" ? Math.random() * 0.3 : hourly_profile_label === "moderate" ? 0.3 + Math.random() * 0.4 : 0.7 + Math.random() * 0.3) * 100) / 100;
+    const rating = Math.round((3.8 + Math.random() * 1.2) * 10) / 10;
+    const hourly_price = Math.round((1.5 + Math.random() * 8) * 2) / 2;
     const total_seats = rng.pick([15, 20, 25, 30, 40, 50, 100]);
-    const seats_avail = Math.floor(rng.next() * total_seats);
-
-    const inDublin = rng.next() > 0.5;
-    const lat = inDublin ? 53.30 + rng.next() * 0.05 : 40.74 + rng.next() * 0.04;
-    const lon = inDublin ? -6.25 + rng.next() * 0.05 : -73.98 + rng.next() * 0.04;
-    const distance_km = Math.round((0.1 + rng.next() * 2.5) * 10) / 10;
+    const seats_avail = Math.floor(Math.random() * total_seats);
+    
+    const inDublin = Math.random() > 0.5;
+    const lat = inDublin ? 53.30 + Math.random() * 0.05 : 40.74 + Math.random() * 0.04;
+    const lon = inDublin ? -6.25 + Math.random() * 0.05 : -73.98 + Math.random() * 0.04;
+    const distance_km = Math.round((0.1 + Math.random() * 2.5) * 10) / 10;
 
     venues.push({
       venue_id,
@@ -315,7 +314,7 @@ const generateMockVenues = (): VenueDetail[] => {
       cuisine_detail,
       phone: `+12125550${100 + i}`,
       website: `https://example_${i}.com`,
-      building_number: `${Math.floor(rng.next() * 300) + 1}`,
+      building_number: `${Math.floor(Math.random() * 300) + 1}`,
       street,
       zipcode,
       borough,
@@ -324,8 +323,8 @@ const generateMockVenues = (): VenueDetail[] => {
       opening_hours: "Mo-Su 08:00-22:00",
       opening_now: rng.next() > 0.1,
       has_wifi: true,
-      wifi_free: rng.next() > 0.3,
-      hotel_stars: osm_type === "hotel" ? `${Math.floor(rng.next() * 2) + 4}` : null,
+      wifi_free: Math.random() > 0.3,
+      hotel_stars: osm_type === "hotel" ? `${Math.floor(Math.random() * 2) + 4}` : null,
       ...DEFAULT_VENUE_CONTRACT_FIELDS,
       hourly_profile: {
         "09": { score: Math.round(hourly_profile_score * 0.9 * 100) / 100, label: hourly_profile_label },

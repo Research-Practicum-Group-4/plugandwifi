@@ -62,7 +62,6 @@ export function MainLayout() {
               </Button>
             </Link>
 
-            {/* Provider Navigation conditional CTA */}
             <Link to="/provider/dashboard">
               <Button variant="ghost" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50/50 font-medium flex items-center gap-1.5">
                 <Building2 className="size-4" />
