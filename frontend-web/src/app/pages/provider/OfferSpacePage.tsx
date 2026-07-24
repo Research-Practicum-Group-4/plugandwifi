@@ -235,6 +235,60 @@ export function OfferSpacePage() {
 
         <Card>
           <CardHeader>
+            <CardTitle>Ownership Tags</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox id="womenOwned" />
+                <Label htmlFor="womenOwned" className="cursor-pointer">Women-Owned Business</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox id="blackOwned" />
+                <Label htmlFor="blackOwned" className="cursor-pointer">Black-Owned Business</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox id="lgbtOwned" />
+                <Label htmlFor="lgbtOwned" className="cursor-pointer">LGBT+ Owned Business</Label>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Help users find businesses that match their values
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Accessibility Features</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox id="wheelchair" />
+                <Label htmlFor="wheelchair" className="cursor-pointer">Wheelchair Accessible</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox id="elevator" />
+                <Label htmlFor="elevator" className="cursor-pointer">Elevator Access</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox id="accessibleRestroom" />
+                <Label htmlFor="accessibleRestroom" className="cursor-pointer">Accessible Restroom</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox id="signLanguage" />
+                <Label htmlFor="signLanguage" className="cursor-pointer">Sign Language Support</Label>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Mark the accessibility features available at your venue
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Booking Extensions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">

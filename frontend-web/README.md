@@ -1,143 +1,128 @@
-# Plug & Wifi Web Frontend
+# Plug & Wifi - Frontend Web Application
 
-This directory contains the main web frontend for Plug & Wifi. It is a React + TypeScript + Vite application used to prototype and implement the user-facing booking experience, venue discovery flows, and provider/admin interfaces.
+This directory contains the responsive web frontend for **Plug & Wifi (Flexible Space Finder)**, built with React 19, TypeScript, Vite, and Tailwind CSS v4.
 
-The frontend is in active development. It already includes substantial route coverage and mock-data support, but it should still be treated as a project-stage application rather than a polished production frontend.
+---
 
-## Current Scope
+## 🛠️ Prerequisites
 
-- landing and discovery flows
-- venue search and venue detail pages
-- saved places and booking flows
-- login and signup
-- provider dashboard, registration, and offer-space pages
-- admin dashboard and moderation pages
-- mock and real API integration modes
+Before you start, make sure you have the following installed locally:
+* **Node.js** (v18.0.0 or higher recommended)
+* **npm** (v9.0.0 or higher)
 
-## Stack
+> [!NOTE]
+> The project includes a `.npmrc` file configured with `legacy-peer-deps=true`. This automatically handles peer dependency conflicts between React 19 and older third-party component packages (such as `react-day-picker` v8).
 
-| Area | Current choice |
-| :--- | :--- |
-| Framework | React 18 |
-| Language | TypeScript |
-| Build tool | Vite |
-| Styling | Tailwind CSS v4 |
-| Routing | React Router |
-| UI primitives | Radix UI |
-| Maps/data viz | Google Maps, Leaflet, Recharts |
-| Testing | Vitest, Testing Library |
+---
 
-## Project Layout
+## 🏃 Quick Start
 
-```text
-frontend-web/
-├── src/
-│   ├── app/
-│   │   ├── components/      # shared UI, layout, route guards
-│   │   ├── contexts/        # auth and favorites state
-│   │   ├── data/            # local app data
-│   │   ├── pages/           # route pages
-│   │   ├── utils/           # enrichment and distance helpers
-│   │   ├── App.tsx
-│   │   └── routes.tsx
-│   ├── services/            # API layer with mock/real switching
-│   ├── styles/              # theme, fonts, globals, tailwind entry
-│   ├── test/                # Vitest setup and app tests
-│   └── types/               # shared API/data types
-├── public/
-├── guidelines/
-├── package.json
-├── vite.config.ts
-└── .env.example
-```
-
-## Prerequisites
-
-- Node.js 18+ recommended
-- npm
-
-## Install
+To launch the local development environment:
 
 ```bash
+# 1. Navigate to the frontend directory
 cd frontend-web
+
+# 2. Write a mock .env file, using mock mode
+touch .env.development.mock
+echo "VITE_USE_MOCK=true" >> .env.development.mock
+echo "VITE_API_BASE_URL=<ignored>" >> .env.development.mock
+
+# 3. Install dependencies
 npm install
+
+# 4. Start the Vite development server
+npm run dev # Or `npm run dev:mock`
 ```
 
-## Environment Modes
+Once started, open your browser and navigate to: **[http://localhost:5173](http://localhost:5173)**
 
-The app supports mock mode and API-connected modes through Vite env files.
+---
 
-Base variables:
+## 📂 Project Structure
 
-```env
-VITE_USE_MOCK=true
-VITE_API_BASE_URL=http://localhost:8000/api
+```
+frontend-web/
+├── tsconfig.json          # TypeScript configurations (with @/* paths mapping)
+├── vite.config.ts         # Vite build configuration (Tailwind v4 & asset resolver)
+├── .npmrc                 # NPM configurations for legacy-peer-deps
+├── .env.example           # Shared environment variable template for the team
+└── src/
+    ├── main.tsx           # Application entry point
+    ├── vite-env.d.ts      # TypeScript environment variables and asset typings
+    ├── app/
+    │   ├── App.tsx        # App root component (with routing & toast providers)
+    │   ├── routes.tsx     # Router configuration (React Router v7 routes mapping)
+    │   ├── components/    # Reusable UI components & layouts (Radix & Tailwind v4)
+    │   └── pages/         # Page components (HomePage, SearchPage, DetailPage, etc.)
+    ├── services/          # Data layer services (api.ts with toggleable mock/real behavior)
+    ├── types/             # Shared TypeScript API contracts & interfaces
+    └── styles/            # Global styling stylesheets & variables
 ```
 
-Common profiles:
+---
 
-| Scenario | Command | Expected env file | Meaning |
-| :--- | :--- | :--- | :--- |
-| Mock development | `npm run dev` or `npm run dev:mock` | `.env.development.mock` | frontend-only work with mocked data |
-| Local API integration | `npm run dev:local` | `.env.development.local` | connect to a locally running backend |
-| Remote API integration | `npm run dev:real` | `.env.development.real` | connect to a deployed backend |
-| Production build | `npm run build` | `.env.production` | compile static assets with production env values |
+## ⚙️ Available Scripts
 
-You can use [`.env.example`](D:/05_UCD/Research%20Practicum/github%20repositry/plugandwifi/frontend-web/.env.example) as the template.
+Run these scripts from the `frontend-web/` directory:
 
-## Local Development
-
-For mock-only development:
-
-```bash
-npm run dev
-```
-
-For local backend integration:
-
-1. Create `.env.development.local`
-2. Set:
-
-```env
-VITE_USE_MOCK=false
-VITE_API_BASE_URL=http://localhost:8000/api
-```
-
-3. Start the app:
-
-```bash
-npm run dev:local
-```
-
-By default Vite serves the app at `http://localhost:5173`.
-
-## Available Scripts
-
-| Command | Purpose |
+| Command | Description |
 | :--- | :--- |
-| `npm run dev` | start Vite in mock mode |
-| `npm run dev:mock` | same as `dev` |
-| `npm run dev:local` | start Vite against a local backend |
-| `npm run dev:real` | start Vite against a remote backend |
-| `npm run build` | production build |
-| `npm run preview` | preview the built app locally |
-| `npm run lint` | run ESLint |
-| `npm run test` | run Vitest once |
-| `npm run test:watch` | run Vitest in watch mode |
-| `npm run test:coverage` | generate coverage output |
+| `npm run dev` | Starts the local Vite development server with Hot Module Replacement (HMR). |
+| `npm run build` | Transpiles TS/TSX and bundles assets into static files under the `dist/` directory. |
+| `npm run lint` | Runs ESLint to check code consistency and style guidelines. |
+| `npm run preview` | Spins up a local static server to preview the production build output (`dist/`). |
 
-## Testing
+---
 
-Run from `frontend-web/`:
+## 🌐 Environment Configurations & Team Replication
 
-```bash
-npm run test
-```
+Environment configurations are managed through Vite custom modes and `.env` files. We support 4 distinct development and testing scenarios:
 
-Current tests cover frontend behavior such as mock API integration, venue enrichment helpers, and page-level rendering flows.
+### 1. Environment Profiles
 
-## Notes For Team Development
+| Scenario | Command | Mode | Target Env File | `VITE_USE_MOCK` | `VITE_API_BASE_URL` | Description |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Pure Mock Debugging** | `npm run dev:mock` (or `npm run dev`) | `development.mock` | `.env.development.mock` | `true` | `/api` | Frontend-only styling without any backend dependencies. |
+| **Local Joint Debugging** | `npm run dev:local` | `development.local` | `.env.development.local` | `false` | `http://localhost:8000/api` | Connects local frontend to a running local backend server. |
+| **Remote Dev Debugging** | `npm run dev:real` | `development.real` | `.env.development.real` | `false` | `https://api.plugandwifi.xyz/api` | Connects local frontend directly to the deployed staging backend. |
+| **Production Build** | `npm run build` | `production` | `.env.production` | `false` | `https://api.plugandwifi.xyz/api` | Compiles static frontend files bound to the production backend API. |
 
-- The API layer switches between mock and real behavior in `src/services/api.ts`.
-- If local API calls fail, check that your env mode matches the backend port you are actually running.
-- Some assets and generated UI pieces reflect iterative design/prototyping work, so structure and polish are not fully uniform yet.
+### 2. How to Replicate Locally (For Team Members)
+
+* **Baseline Profiles**: Shared baseline configurations (`.env.development.mock`, `.env.development.real`, and `.env.production`) are committed in Git to ensure consistent default configurations for all team members.
+* **Local Customization**: If you need to override the API port or endpoint URL locally, create a local override file (e.g., `.env.development.local.local` or `.env.development.real.local`). These `.local` files are ignored by Git, ensuring your local adjustments do not cause conflicts or pollute the repository.
+
+---
+
+## 🔄 Project Lifecycle
+
+Understanding the lifecycle helps coordinate frontend and backend integration:
+
+1. **Development Stage**:
+   * Running `npm run dev` loads `.env.development` or `.env.development.local`.
+   * The client-side code interacts with our mock service layer in `src/services/api.ts` with simulated latency, enabling zero-block frontend coding.
+2. **Compilation Stage**:
+   * Running `npm run build` statically compiles the codebase.
+   * **Important**: Vite replaces all occurrences of `import.meta.env.VITE_...` with their literal string values *at build time* based on `.env.production`.
+3. **Execution Stage**:
+   * The output files under `dist/` are uploaded to static web hosting.
+   * The application executes **entirely in the user's browser**. The browser downloads the Javascript bundle and initiates real REST calls to the backend `VITE_API_BASE_URL`.
+
+---
+
+## 🚢 Deployment Guide (Vercel)
+
+We deploy the frontend as a static site on **Vercel**:
+
+1. **Import Repository**: Link your GitHub repository in your Vercel Dashboard.
+2. **Configure Monorepo Settings**:
+   * **Framework Preset**: Select **Vite**.
+   * **Root Directory**: Set to **`frontend-web`** (crucial for monorepos).
+   * **Build Command**: `npm run build`
+   * **Output Directory**: `dist`
+3. **Set Production Environment Variables**:
+   In Vercel's *Settings -> Environment Variables* panel, add the following variables for the deployment:
+   * `VITE_USE_MOCK` = `false`
+   * `VITE_API_BASE_URL` = `https://your-backend-api.render.com/api` (the hosted backend URL)
+4. **Deploy**: Vercel will automatically build and deploy new commits pushed to the `main` or `develop` branch.

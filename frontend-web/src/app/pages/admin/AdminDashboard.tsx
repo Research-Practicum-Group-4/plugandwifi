@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import {
   AlertTriangle,
   Ban,
+  BarChart2,
   Building2,
   ClipboardList,
   Flag,
@@ -10,6 +11,7 @@ import {
   Search,
   ShieldAlert,
   Tags,
+  TrendingUp,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -244,33 +246,113 @@ export function AdminDashboard() {
         </Link>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Financial Overview */}
+      <div>
+        <h2 className="mb-4 text-lg font-semibold">Financial Overview</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardContent className="pt-5">
+              <div className="flex items-start justify-between">
+                <p className="text-xs text-muted-foreground">Total Revenue</p>
+                <span className="text-xs text-muted-foreground">$</span>
+              </div>
+              <p className="mt-1 text-2xl font-bold">${stats?.total_revenue.toLocaleString() ?? "0"}</p>
+              <p className="mt-1 text-xs font-medium text-emerald-600">+18.5%</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5">
+              <div className="flex items-start justify-between">
+                <p className="text-xs text-muted-foreground">Total Bookings</p>
+                <TrendingUp className="size-4 text-muted-foreground" />
+              </div>
+              <p className="mt-1 text-2xl font-bold">{stats?.total_bookings.toLocaleString() ?? "0"}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5">
+              <div className="flex items-start justify-between">
+                <p className="text-xs text-muted-foreground">Avg Booking Value</p>
+                <span className="text-xs text-muted-foreground">$</span>
+              </div>
+              <p className="mt-1 text-2xl font-bold">${stats?.avg_booking_value ?? "0"}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5">
+              <div className="flex items-start justify-between">
+                <p className="text-xs text-muted-foreground">Median Venue Revenue</p>
+                <BarChart2 className="size-4 text-muted-foreground" />
+              </div>
+              <p className="mt-1 text-2xl font-bold">${stats?.median_venue_revenue.toLocaleString() ?? "0"}</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Venue + User Statistics */}
+      <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardContent className="pt-5">
-            <p className="text-xs text-muted-foreground">Total Revenue</p>
-            <p className="text-2xl font-bold">${stats?.total_revenue.toLocaleString() ?? "0"}</p>
+            <div className="mb-4 flex items-center gap-2">
+              <Building2 className="size-4 text-muted-foreground" />
+              <p className="font-semibold">Venue Statistics</p>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Total Venues</span>
+                <span className="font-bold text-lg">{stats?.total_venues ?? 0}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Active Venues</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-lg text-emerald-600">{stats?.active_venues ?? 0}</span>
+                  <Badge className="bg-zinc-900 text-white text-xs">Active</Badge>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Pending Approval</span>
+                <span className="font-bold text-lg">{stats?.pending_approval ?? 0}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Suspended</span>
+                <Badge className="bg-red-600 text-white">{stats?.suspended_venues ?? 0}</Badge>
+              </div>
+              <div className="flex items-center justify-between border-t pt-3">
+                <span className="text-muted-foreground">Top Performer</span>
+                <span className="font-medium">{stats?.top_performer ?? "—"}</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
+
         <Card>
           <CardContent className="pt-5">
-            <p className="text-xs text-muted-foreground">Total Users</p>
-            <p className="text-2xl font-bold">{stats?.total_users.toLocaleString() ?? "0"}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-5">
-            <p className="text-xs text-muted-foreground">Active Venues</p>
-            <p className="text-2xl font-bold text-emerald-600">
-              {overview?.global_active_properties ?? stats?.active_venues ?? 0}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-5">
-            <p className="text-xs text-muted-foreground">Refund Pending</p>
-            <p className="text-2xl font-bold">
-              {overview?.system_incident_counts.refund_pending_bookings ?? 0}
-            </p>
+            <div className="mb-4 flex items-center gap-2">
+              <Users className="size-4 text-muted-foreground" />
+              <p className="font-semibold">User Statistics</p>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Total Users</span>
+                <span className="font-bold text-lg">{stats?.total_users.toLocaleString() ?? 0}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Active Users</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-lg text-emerald-600">{stats?.active_users.toLocaleString() ?? 0}</span>
+                  <Badge className="bg-zinc-900 text-white text-xs">Active</Badge>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">New This Month</span>
+                <span className="font-bold text-lg">+{stats?.new_this_month ?? 0}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Churn Rate</span>
+                <span className="font-bold text-lg text-red-500">{stats?.churn_rate ?? 0}%</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -544,7 +626,7 @@ export function AdminDashboard() {
                   disabled={actionPending}
                 >
                   {actionPending ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
-                  Suspend
+                  Suspend Account
                 </Button>
                 <Button
                   className="bg-red-600 text-white hover:bg-red-700"
@@ -552,7 +634,7 @@ export function AdminDashboard() {
                   disabled={actionPending}
                 >
                   {actionPending ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
-                  Ban
+                  Ban Account
                 </Button>
               </div>
             </div>

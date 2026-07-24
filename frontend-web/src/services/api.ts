@@ -482,19 +482,20 @@ export const api = {
   login: async (credentials: { email: string; password: string }): Promise<LoginResponse> => {
     if (USE_MOCK) {
       await delay(300);
-      if (credentials.email && credentials.password) {
-        const isProvider = credentials.email.includes("provider");
+      const DEMO_ACCOUNTS: Record<string, { user_id: number; full_name: string; role: string }> = {
+        "user2@example.com":    { user_id: 2, full_name: "Demo User",     role: "user"     },
+        "user3@example.com":    { user_id: 3, full_name: "Demo Provider", role: "provider" },
+        "admin@example.com":    { user_id: 1, full_name: "Demo Admin",    role: "admin"    },
+      };
+      const DEMO_PASSWORD = "00000000";
+      const account = DEMO_ACCOUNTS[credentials.email.toLowerCase()];
+      if (account && credentials.password === DEMO_PASSWORD) {
         return {
           access_token: "mock_jwt_token",
-          user: {
-            user_id: isProvider ? 2 : 1,
-            full_name: isProvider ? "Mock Provider" : "Sunmin Lee",
-            email: credentials.email,
-            role: isProvider ? "provider" : "user"
-          }
+          user: { user_id: account.user_id, full_name: account.full_name, email: credentials.email, role: account.role }
         };
       }
-      throw new Error("Invalid credentials");
+      throw new Error("Invalid email or password. Use the demo credentials shown on the login page.");
     } else {
       const response = await axiosInstance.post<any>("/auth/login", credentials);
       const data = response.data;
