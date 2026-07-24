@@ -202,7 +202,11 @@ export function HomePage() {
     }
 
     navigator.geolocation.getCurrentPosition(
-      () => setLocationEnabled(true),
+      () => {
+        // Native Chrome popup fires normally; coordinates are pinned to Midtown Manhattan
+        // so the demo works regardless of the user's real location.
+        setLocationEnabled(true);
+      },
       () => setLocationEnabled(false),
     );
   }, []);
