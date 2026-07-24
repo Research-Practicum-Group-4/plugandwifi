@@ -16,6 +16,9 @@ export function ProviderDashboard() {
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      if (import.meta.env.VITE_USE_MOCK === "true" && !localStorage.getItem("access_token")) {
+        localStorage.setItem("access_token", "mock_jwt_token");
+      }
       try {
         setLoading(true);
         const [kpiData, arrivalData] = await Promise.all([

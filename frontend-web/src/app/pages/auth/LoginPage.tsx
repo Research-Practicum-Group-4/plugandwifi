@@ -121,40 +121,6 @@ export function LoginPage() {
                 disabled={loading}
               />
             </div>
-            <div className="rounded-md border border-dashed border-muted-foreground/30 bg-muted/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
-              <p className="font-medium text-foreground/70">Demo accounts</p>
-              <div className="flex justify-between">
-                <span>User: <span className="font-mono">user2@example.com</span></span>
-                <button
-                  type="button"
-                  className="underline underline-offset-2 hover:text-foreground transition-colors"
-                  onClick={() => { setEmail("user2@example.com"); setPassword("00000000"); }}
-                >
-                  Fill
-                </button>
-              </div>
-              <div className="flex justify-between">
-                <span>Provider: <span className="font-mono">user3@example.com</span></span>
-                <button
-                  type="button"
-                  className="underline underline-offset-2 hover:text-foreground transition-colors"
-                  onClick={() => { setEmail("user3@example.com"); setPassword("00000000"); }}
-                >
-                  Fill
-                </button>
-              </div>
-              <div className="flex justify-between">
-                <span>Admin: <span className="font-mono">admin@example.com</span></span>
-                <button
-                  type="button"
-                  className="underline underline-offset-2 hover:text-foreground transition-colors"
-                  onClick={() => { setEmail("admin@example.com"); setPassword("00000000"); }}
-                >
-                  Fill
-                </button>
-              </div>
-              <p>Password: <span className="font-mono">00000000</span></p>
-            </div>
             <Button type="submit" className="w-full" size="lg" disabled={loading}>
               {loading ? (
                 <>

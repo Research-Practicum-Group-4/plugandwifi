@@ -90,6 +90,9 @@ export function AdminDashboard() {
 
   useEffect(() => {
     (async () => {
+      if (import.meta.env.VITE_USE_MOCK === "true" && !localStorage.getItem("access_token")) {
+        localStorage.setItem("access_token", "mock_jwt_token");
+      }
       try {
         const [statsData, overviewData, customerData, venueData, venueListData] = await Promise.all([
           api.getAdminStats(),
