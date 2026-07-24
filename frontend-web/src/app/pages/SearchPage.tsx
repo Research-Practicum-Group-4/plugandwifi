@@ -168,6 +168,19 @@ export function SearchPage() {
   const [fallbackVenues, setFallbackVenues] = useState<EnrichedVenue[]>([]);
   const [apiFailed, setApiFailed] = useState(false);
 
+  // Pinned Midtown Manhattan — Chrome popup fires normally but real coords are ignored
+  const PINNED_LAT = 40.7589;
+  const PINNED_LON = -73.9851;
+  const [userLocationEnabled, setUserLocationEnabled] = useState(false);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      () => setUserLocationEnabled(true),
+      () => {},
+    );
+  }, []);
+
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(INITIAL_DISPLAY_COUNT);
 
@@ -393,6 +406,7 @@ export function SearchPage() {
 
           const allData = await api.getVenues({
             ...queryParams,
+            ...(userLocationEnabled ? { lat: PINNED_LAT, lon: PINNED_LON, radius: 50 } : {}),
             page: 1,
             limit: 1000,
           });
@@ -437,8 +451,13 @@ export function SearchPage() {
           setActiveLandmark(null);
           setApiFailed(false);
         } else {
-          // General browse — pass user coords when available for proximity sorting
-          const allData = await api.getVenues({ ...queryParams, page: 1, limit: 1000 });
+          // General browse — pass pinned coords when user granted location for proximity sorting
+          const allData = await api.getVenues({
+            ...queryParams,
+            ...(userLocationEnabled ? { lat: PINNED_LAT, lon: PINNED_LON, radius: 50 } : {}),
+            page: 1,
+            limit: 1000,
+          });
 
           let finalAll: EnrichedVenue[] = allData.items.map(enrichVenue);
 
@@ -465,7 +484,7 @@ export function SearchPage() {
     };
 
     executeQuery();
-  }, [filters, selectedVenueTypes, debouncedSearchQuery, priceRange, searchDate, startTime, endTime, seatsRequired, duration]);
+  }, [filters, selectedVenueTypes, debouncedSearchQuery, priceRange, searchDate, startTime, endTime, seatsRequired, duration, userLocationEnabled]);
 
   useEffect(() => {
     const shouldShowFallback = !loading && !apiFailed && allVenues.length === 0;
@@ -589,7 +608,7 @@ export function SearchPage() {
                 >
                   {busyness.label}
                 </span>
-                {activeLandmark ? (
+                {(activeLandmark || userLocationEnabled) && venue.distance_km > 0 ? (
                   <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                     <MapPin className="size-4" />
                     <span>{formatDistance(venue.distance_km) ?? "Distance unavailable"}</span>

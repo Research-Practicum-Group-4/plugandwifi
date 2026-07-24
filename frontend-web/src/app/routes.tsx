@@ -9,6 +9,7 @@ import { SavedPlacesPage } from "./pages/SavedPlacesPage";
 import { BookingsPage } from "./pages/BookingsPage";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { SignupPage } from "./pages/auth/SignupPage";
+import { ForgotPasswordPage } from "./pages/auth/ForgotPasswordPage";
 import { ProviderRegisterPage } from "./pages/provider/ProviderRegisterPage";
 import { ProviderDashboard } from "./pages/provider/ProviderDashboard";
 import { OfferSpacePage } from "./pages/provider/OfferSpacePage";
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
       { path: "venue/:id", Component: VenueDetailPage },
       { path: "login", Component: LoginPage },
       { path: "signup", Component: SignupPage },
+      { path: "forgot-password", Component: ForgotPasswordPage },
       { path: "provider/register", Component: ProviderRegisterPage },
 
       // User Protected pages
