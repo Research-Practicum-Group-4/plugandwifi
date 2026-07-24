@@ -1033,18 +1033,26 @@ export const api = {
   // 11. Call Gemini Chatbot
   getChatbotReply: async (
     message: string,
-    chat_history: ChatbotRecommendRequest["chat_history"] = []
+    chat_history: ChatbotRecommendRequest["chat_history"] = [],
+    conversation_context: ChatbotRecommendRequest["conversation_context"] = null
   ): Promise<ChatbotRecommendResponse> => {
     if (USE_MOCK) {
       await delay(800);
       return {
         response: `Hello! I am your Manhattan AI assistant. Based on your prompt "${message}", I recommend booking Flatiron Workspace or Grand Central Office Hub.`,
-        model: "gemini-1.5-flash"
+        model: "gemini-1.5-flash",
+        venues: [],
+        conversation_context: conversation_context ?? {
+          active_search_parameters: null,
+          last_recommended_venue_ids: [],
+          clarification_asked: false,
+          last_intent: "general_chat",
+        },
       };
     } else {
       const response = await axiosInstance.post<ChatbotRecommendResponse>(
         "/chatbot/recommend",
-        { message, chat_history }
+        { message, chat_history, conversation_context }
       );
       return response.data;
     }

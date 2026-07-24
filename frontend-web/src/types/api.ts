@@ -213,16 +213,57 @@ export interface ChatbotHistoryMessage {
   message: string;
 }
 
+export type ChatbotIntent =
+  | "new_search"
+  | "refine_search"
+  | "compare_previous"
+  | "venue_detail"
+  | "general_chat"
+  | "reset";
+
+export interface ChatbotSearchParameters {
+  venue_name?: string | null;
+  candidate_venue_names?: string[];
+  location?: string | null;
+  radius_km?: number | null;
+  venue_type?: string | null;
+  date?: string | null;
+  start_time?: string | null;
+  wifi?: boolean | null;
+  plug_access?: number | null;
+  accessibility_friendly?: boolean | null;
+  calls_allowed?: boolean | null;
+  wbe_certified?: boolean | null;
+  mbe_certified?: boolean | null;
+  vbe_certified?: boolean | null;
+  bcorp_certified?: boolean | null;
+  lgbt_friendly?: boolean | null;
+  busyness?: "low" | "medium" | "high" | null;
+  time?: string | null;
+  sort_by_distance?: boolean;
+  no_preference?: boolean;
+}
+
+export interface ChatbotConversationContext {
+  active_search_parameters: ChatbotSearchParameters | null;
+  last_recommended_venue_ids: string[];
+  clarification_asked: boolean;
+  last_intent: ChatbotIntent | null;
+}
+
 export interface ChatbotRecommendRequest {
   message: string;
   chat_history?: ChatbotHistoryMessage[];
+  conversation_context?: ChatbotConversationContext | null;
 }
 
 export interface ChatbotRecommendResponse {
   response: string;
   model: string;
+  search_parameters?: ChatbotSearchParameters | null;
   venues?: Venue[];
   follow_up_question?: string | null;
+  conversation_context: ChatbotConversationContext;
 }
 
 export interface FavoriteResponse {
