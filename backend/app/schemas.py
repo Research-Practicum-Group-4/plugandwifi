@@ -470,6 +470,10 @@ class FavoriteResponse(BaseModel):
     message: str
 
 
+class FavoriteListResponse(BaseModel):
+    venue_ids: list[str]
+
+
 class SlotDeactivationResponse(BaseModel):
     slot_id: int
 

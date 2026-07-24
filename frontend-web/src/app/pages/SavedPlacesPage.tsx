@@ -7,17 +7,16 @@ import { Card, CardContent } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { api } from "../../services/api";
 import { Venue } from "../../types/api";
+import { useFavorites } from "../contexts/FavoritesContext";
 
 export function SavedPlacesPage() {
   const [venues, setVenues] = useState<Venue[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { favoriteVenueIds, loading, removeFavorite } = useFavorites();
 
   useEffect(() => {
     const fetchSavedVenues = async () => {
       try {
-        setLoading(true);
-        const favsStr = localStorage.getItem("plugandwifi_favorites");
-        const favs: string[] = favsStr ? JSON.parse(favsStr) : [];
+        const favs = favoriteVenueIds;
 
         if (favs.length === 0) {
           setVenues([]);
@@ -62,13 +61,11 @@ export function SavedPlacesPage() {
         setVenues(validVenues);
       } catch (err) {
         console.error("Failed to load saved places:", err);
-      } finally {
-        setLoading(false);
       }
     };
 
-    fetchSavedVenues();
-  }, []);
+    void fetchSavedVenues();
+  }, [favoriteVenueIds]);
 
   const alerts = [
     {
@@ -156,14 +153,13 @@ export function SavedPlacesPage() {
                             e.preventDefault();
                             e.stopPropagation();
                             try {
-                              await api.removeFavorite(venue.venue_id);
-                              const favsStr = localStorage.getItem("plugandwifi_favorites");
-                              let favs: string[] = favsStr ? JSON.parse(favsStr) : [];
-                              favs = favs.filter((favId) => favId !== venue.venue_id);
-                              localStorage.setItem("plugandwifi_favorites", JSON.stringify(favs));
+                              await removeFavorite(venue.venue_id);
                               setVenues((prev) => prev.filter((item) => item.venue_id !== venue.venue_id));
                             } catch (err) {
                               console.error("Failed to remove favorite:", err);
+                              if ((err as any).response?.status === 404) {
+                                setVenues((prev) => prev.filter((item) => item.venue_id !== venue.venue_id));
+                              }
                             }
                           }}
                         >
