@@ -1,39 +1,70 @@
-# Plug & Wifi - Flexible Space Finder
+# Plug & Wifi
 
-## 📖 Project Overview
-Welcome to the repository for **Plug & Wifi**, a flexible space finder platform that acts as an intermediary between space users and space providers. Our platform aims to solve the friction of finding reliable, short-term workspaces (1 to 3 hours) for remote professionals, international business travellers, and students. By leveraging underutilised real estate during off-peak hours, we provide verified environments with guaranteed Wi-Fi and plug access.
+Plug & Wifi is a monorepo for a flexible workspace discovery project developed in a research and prototyping context. The repository combines the main user-facing apps with the backend API and the data/ML experiments that support venue quality, ranking, and busyness-related features.
 
-## 🏗️ Project Structure (Monorepo)
-To streamline our development process and ensure API compatibility across all platforms, we use a **Monorepo** architecture. The repository is divided into the following dedicated directories:
+The current codebase is best understood as an active course/project workspace rather than a finished production system. Some areas are more complete than others, and several directories reflect parallel workstreams from different team members.
 
-* 📁 **`/frontend-web`** - Contains the React codebase for the web application.
-* 📁 **`/frontend-mobile`** - Contains the mobile application codebase.
-* 📁 **`/backend`** - Contains the Python/Flask REST API and database configuration.
-* 📁 **`/data-ml`** - Contains datasets, data cleaning scripts, and machine learning models (Venue ranking/predictions).
-* 📄 **`.gitignore`** - Global git ignore rules.
-* 📄 **`CONTRIBUTING.md`** - Guidelines for our branching strategy and pull request workflows.
+## What Is In This Repo
 
-> **Note for Developers:** Each sub-directory will contain its own specific `README.md` with instructions on how to install dependencies and run that specific service locally.
+- `frontend-web/` contains the main web application built with React, TypeScript, Vite, and Tailwind CSS.
+- `frontend-mobile/` contains the React Native mobile app prototype for Android and iOS.
+- `backend/` contains the FastAPI backend, authentication logic, booking flows, role-based access control, and database models.
+- `data-ml/` contains data collection, cleaning, feature engineering, and prediction scripts used for venue scoring and busyness modelling.
+- `data/` stores raw data assets used by the data pipeline.
+- `docs/` contains project artefacts, planning notes, meeting records, and research materials.
 
-## 🛠️ Architecture and Technology Stack
+## Current Scope
 
-| Component | Technology/Framework | Rationale |
-| :--- | :--- | :--- |
-| **Frontend (Mobile/Web)** | React, JavaScript, HTML, CSS | Reusable, responsive UI development. |
-| **Backend/API** | Python, Flask, REST API, JWT | Lightweight API development and secure login. |
-| **Database** | MySQL, SQLAlchemy ORM | Structured data storage and simpler database access. |
-| **Data & ML** | Python, pandas, scikit-learn | Venue ranking and suitability prediction. |
-| **Hosting/Cloud** | AWS EC2, AWS RDS for MySQL | Scalable hosting and MySQL management. |
-| **DevOps** | Docker | Containerisation for continuous deployment. |
+The repository currently supports work in these areas:
 
-## 🚀 Getting Started
-Before starting any development work, please ensure you have synchronised your local repository with the latest changes from the `main` branch.
+- Venue discovery and detail views
+- User authentication and favorites
+- Booking and mock payment flows
+- Provider and admin dashboard features
+- Mobile and web interface prototypes
+- Data exploration and ML experiments for venue suitability and busyness prediction
 
-1. Clone the repository:
-```bash
-   git clone [Your-Repository-URL]
-```
+## Tech Stack
 
-2. Navigate to your designated team directory (cd frontend-web, cd backend, etc.).
+| Area | Current stack |
+| :--- | :--- |
+| Web frontend | React 18, TypeScript, Vite, Tailwind CSS |
+| Mobile frontend | React Native |
+| Backend | FastAPI, SQLAlchemy, Pydantic |
+| Database | PostgreSQL via `psycopg2` |
+| Data / ML | Python, pandas, scikit-learn, joblib |
+| Testing | Vitest, Jest, pytest |
+| Containers | Dockerfiles for web and backend |
 
-3. Always create a new feature branch from develop before writing any code. Do not push directly to main.
+## Repository Notes
+
+- This is a monorepo, but each major service is developed somewhat independently.
+- The root README is intentionally lightweight; service-specific setup lives in each subdirectory README where available.
+- The web and backend directories are the most directly documented parts of the repo right now.
+- The mobile and data/ML areas include working code, but some documentation and structure are still uneven.
+
+## Getting Started
+
+Choose the part of the system you want to work on, then follow its local setup instructions:
+
+- `frontend-web/README.md`
+- `backend/README.md`
+- `frontend-mobile/README.md`
+
+Typical workflow:
+
+1. Clone the repository.
+2. Move into the relevant subproject directory.
+3. Install that subproject's dependencies.
+4. Run the local development server or app from that directory.
+
+## Suggested Use Of This Repo
+
+This repository is most suitable for:
+
+- team development during the project lifecycle
+- demonstrating the product concept and technical approach
+- experimenting with venue data and ranking models
+- iterating on web/mobile UX and backend booking logic
+
+It should not be treated as a polished production deployment reference without checking the current state of each subproject first.

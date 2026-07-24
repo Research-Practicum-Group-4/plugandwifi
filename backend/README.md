@@ -1,115 +1,156 @@
-# Plug&WiFi Backend API
+# Plug & Wifi Backend
 
-Welcome to the backend infrastructure of **Plug&WiFi**, a high‑performance space‑sharing reservation engine. This platform manages user identity, geospatial verification, contiguous seating allocations, and real‑time venue booking logic.
+This directory contains the FastAPI backend for Plug & Wifi. It provides the API layer for authentication, venue discovery, booking flows, favorites, provider/admin actions, and the busyness-based recommendation features used by the project.
 
----
+This backend is best treated as an active project service, not a finished production reference. The codebase includes core business flows, test coverage for many routes, and supporting scripts for local data and schema updates.
 
-## 🛠️ Technology Stack
+## Current Responsibilities
 
-- **Core Framework**: FastAPI – modern, high‑performance web framework for Python 3.12, using Pydantic for data validation and automatic OpenAPI generation.
-- **Database Engine**: PostgreSQL – production‑grade relational database (Google Cloud SQL) handling transactional bounds and secure user data.
-- **ORM**: SQLAlchemy – maps Python models to relational schemas and manages transaction pools.
-- **Authentication**: JWT (HS256) via `OAuth2PasswordBearer` – stateless, cryptographically signed tokens.
-- **Geospatial Computation**: Native Haversine Formula implementation for distance calculations.
+- user signup, login, refresh token rotation, and logout
+- venue listing, venue detail, and availability endpoints
+- favorites and user booking history
+- booking creation, mock payment confirmation, and cancellation
+- provider dashboard and venue slot management
+- admin venue suspension and dashboard summary endpoints
+- busyness diagnostics and suitability scoring support
+- chatbot recommendation endpoint backed by search parameter extraction
 
----
+## Stack
 
-## 💻 Local Development Setup
+| Area | Current choice |
+| :--- | :--- |
+| API framework | FastAPI |
+| Validation | Pydantic |
+| ORM | SQLAlchemy |
+| Database | PostgreSQL in normal development, SQLite in tests |
+| Auth | JWT access tokens plus refresh token sessions |
+| ML/data integration | pandas, scikit-learn, joblib |
+| Test tooling | pytest, FastAPI TestClient, httpx |
 
-### 1. Prerequisites
+## Project Layout
 
-Ensure a local PostgreSQL instance is installed and reachable on port `5432` (or configure your preferred provider).
+```text
+backend/
+├── app/
+│   ├── main.py              # FastAPI app and route handlers
+│   ├── database.py          # DB engine and session setup
+│   ├── models.py            # SQLAlchemy models
+│   ├── schemas.py           # Request/response schemas
+│   ├── auth.py              # Password hashing and JWT helpers
+│   ├── rbac.py              # Current-user and role guards
+│   ├── refresh_tokens.py    # Refresh-session lifecycle helpers
+│   ├── seed_*.py            # Local seed scripts
+│   └── migrate_*.py         # One-off migration/support scripts
+├── test/
+│   └── test_main.py         # API and business-logic tests
+├── requirements.txt
+├── Dockerfile
+└── DATABASE.md
+```
 
-### 2. Environment Configuration (`.env`)
+## Prerequisites
 
-Create a `.env` file in the `backend` root:
+- Python 3.10+ is recommended
+- PostgreSQL for normal local development
+- a virtual environment
+
+## Environment Variables
+
+Create `backend/.env` before running the API locally.
 
 ```env
-# Format: postgresql://<USER>:<PASSWORD>@<HOST>:<PORT>/<DATABASE_NAME>
-DATABASE_URL=postgresql://postgres:<YOUR_LOCAL_DB_PASSWORD>@localhost:5432/plugandwifi
-
-# Strong secret key for development
-SECRET_KEY=<INSERT_YOUR_LOCAL_SECRET_KEY_HERE>
-
+DATABASE_URL=postgresql://postgres:<password>@localhost:5432/plugandwifi
+SECRET_KEY=replace_this_with_a_local_secret
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 ```
 
-### 3. Virtual Environment & Dependencies
+Optional database pool tuning:
+
+```env
+DB_POOL_SIZE=5
+DB_MAX_OVERFLOW=5
+DB_POOL_RECYCLE=1800
+DB_POOL_TIMEOUT=30
+DB_CONNECT_TIMEOUT=10
+DB_KEEPALIVES_IDLE=30
+DB_KEEPALIVES_INTERVAL=10
+DB_KEEPALIVES_COUNT=5
+```
+
+Optional feature/config variables used by specific flows:
+
+```env
+FREE_CANCELLATION_HOURS=24
+GEMINI_MODEL=gemini-3.1-flash-lite
+BUSYNESS_MODEL_PATH=data-ml/models/zone_busyness_model.joblib
+BUSYNESS_VENUES_CSV=data-ml/models/nyc_venues.csv
+```
+
+## Local Setup
+
+1. Move into the backend directory.
 
 ```bash
-# Activate virtual environment
-source .venv/Scripts/activate   # Bash / MINGW64
-# or
-.venv\Scripts\activate          # CMD / PowerShell
+cd backend
+```
 
-# Install dependencies
+2. Create and activate a virtual environment.
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+3. Install dependencies.
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 4. Database Schema Mapping
+4. Create `backend/.env` with your local database settings.
 
-On startup the code runs:
-
-```python
-Base.metadata.create_all(bind=engine)
-```
-
-This creates missing tables in the configured database.
-
-### 5. Run the Development Server
+5. Start the API server.
 
 ```bash
 uvicorn app.main:app --reload --port 8080
 ```
 
-Visit `http://localhost:8080` (Swagger UI at `/docs`).
+Open `http://localhost:8080/docs` for Swagger UI.
 
----
+## Database Notes
 
-## 🚦 Monitoring Endpoints
+- The app requires `DATABASE_URL`; it will fail at startup if that variable is missing.
+- SQLAlchemy tables are created on startup through `Base.metadata.create_all(bind=engine)`.
+- PostgreSQL is the intended local development target.
+- Tests override the database with in-memory SQLite, so you can run the test suite without a PostgreSQL instance.
 
-### Startup Probe: `/api/ping`
-- **Method**: GET
-- **Response**: `{"status": "healthy"}`
-- **Use**: Cloud Run startup probe – lightweight health check without DB access.
+## Running Tests
 
-### System Health: `/api/health`
-- **Method**: GET
-- **Response**: Performs a `SELECT 1` via SQLAlchemy; returns 200 if DB is reachable, otherwise 500.
-- **Use**: Continuous health monitoring and CI/CD gatekeeping.
+Run from `backend/`:
 
-### Busyness Readiness: `/api/diagnostics/busyness`
-- **Method**: GET
-- **Optional Query**: `sample_venue_id=<venue_id>`
-- **Response**: Checks whether the busyness model, venue-zone CSV, required columns, predictor, and optional sample prediction are available.
-- **Use**: Cloud Run diagnostics for model readiness. This endpoint is separate from `/api/health` because database connectivity does not prove busyness prediction is available.
-
-Production Cloud Run should set:
-
-```env
-BUSYNESS_MODEL_PATH=/mnt/busyness-models/busyness/zone_busyness_model.joblib
-BUSYNESS_VENUES_CSV=/mnt/busyness-models/busyness/nyc_venues.csv
+```bash
+pytest
 ```
 
-The mounted CSV must include `venue_id` and `zone_id`. Venue detail requests emit a structured `busyness_prediction` log with the venue id, zone id, New York prediction datetime, cache key, final score, and final label.
+The test suite covers a large part of the route behavior, including authentication, bookings, favorites, refresh tokens, provider/admin access control, and busyness-related flows.
 
----
+## Useful Endpoints
 
-## 🚀 CI/CD Pipeline Architecture
+| Endpoint | Purpose |
+| :--- | :--- |
+| `/docs` | Swagger UI |
+| `/api/ping` | lightweight health check |
+| `/api/health` | DB connectivity health check |
+| `/api/diagnostics/busyness` | model and CSV readiness check |
+| `/api/venues` | venue search/listing |
+| `/api/venues/{venue_id}` | venue detail |
+| `/api/bookings` | booking creation |
+| `/api/auth/login` | login |
+| `/api/auth/refresh` | refresh token rotation |
 
-```
-[ Git Push ] → [ Cloud Build ] → [ Build Image ] → [ Push Artifact Registry ]
-                                           │
-[ Active Traffic ] ← [ Fail: Rollback ] ← [ Smoke Test ] ← [ Deploy Cloud Run ]
-                                           │
-                                           └──→ [ Pass: Route Production ]
-```
+## Notes For Team Development
 
-**Automated Steps**
-1. **Build** – Cloud Build builds Docker image using `backend/Dockerfile` with `--no-cache`.
-2. **Push** – Image pushed to Google Artifact Registry, tagged with `$COMMIT_SHA`.
-3. **Deploy** – Updates Cloud Run service in `europe-west4`, initial delay 2 s targeting `/api/ping`.
-4. **Smoke Test** – Cloud Build runs a curl script against `https://api.plugandwifi.xyz/api/health`.
-   - **Success** (200 OK) → Traffic switched to new revision.
-   - **Failure** (non‑200/timeout) → Build aborts, rollback to previous stable revision.
+- This service mixes core API behavior with some experimental recommendation features.
+- Several migration and seeding scripts are kept in `app/` as project support utilities rather than as a formal migration framework.
+- If you are integrating with `frontend-web`, make sure the frontend `VITE_API_BASE_URL` matches the port you run locally.
