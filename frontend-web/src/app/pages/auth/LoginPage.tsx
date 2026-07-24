@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Separator } from "../../components/ui/separator";
-import { MapPin, Loader2, Building2, ShieldAlert, User } from "lucide-react";
+import { Loader2, ShieldAlert, User } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -74,15 +74,13 @@ export function LoginPage() {
               {isAdminPortal ? "Back to User Login" : "Admin Login"}
             </Link>
           </div>
-          <div className="flex justify-center mb-4">
-            <div className="size-12 rounded-full flex items-center justify-center" style={{ backgroundColor: '#2f8a64' }}>
-              {isAdminPortal ? (
+          {isAdminPortal && (
+            <div className="flex justify-center mb-4">
+              <div className="size-12 rounded-full flex items-center justify-center" style={{ backgroundColor: '#2f8a64' }}>
                 <ShieldAlert className="size-6 text-white" />
-              ) : (
-                <MapPin className="size-6 text-white" />
-              )}
+              </div>
             </div>
-          </div>
+          )}
           <CardTitle>{isAdminPortal ? "Admin Sign In" : "Welcome Back"}</CardTitle>
           <CardDescription>
             {isAdminPortal

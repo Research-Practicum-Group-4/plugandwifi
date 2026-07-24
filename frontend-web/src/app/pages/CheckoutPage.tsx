@@ -6,8 +6,8 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Separator } from "../components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { CheckCircle, Loader2, MapPin, Building2, CalendarDays, Clock3 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { CheckCircle, CheckCircle2, Loader2, MapPin, Building2, CalendarDays, Clock3 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../../services/api";
@@ -102,6 +102,11 @@ export function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState("stripe");
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSignIn, setShowSignIn] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [confirmedBooking, setConfirmedBooking] = useState<{
+    bookingId: number;
+    orderId: string;
+  } | null>(null);
 
   // Form states for contact info
   const [firstName, setFirstName] = useState("");
@@ -111,7 +116,7 @@ export function CheckoutPage() {
   const [cardNumber, setCardNumber] = useState("4242 4242 4242 4242");
   const [expiry, setExpiry] = useState("12/30");
   const [cvc, setCvc] = useState("123");
-  const [cardName, setCardName] = useState("");
+  const [cardName, setCardName] = useState("String");
 
   // Redirect if not logged in (but also allow sign-in modal)
   useEffect(() => {
@@ -151,20 +156,8 @@ export function CheckoutPage() {
       }
 
       setIsProcessing(false);
-      toast.success("Payment approved. Booking confirmed!");
-      navigate("/booking-confirmation", {
-        state: {
-          bookingId: payment.booking_id,
-          orderId: payment.order_id,
-          venueName: bookingData.venueName,
-          bookingDate: bookingData.bookingDate,
-          startTime: bookingData.startTime,
-          endTime: bookingData.endTime,
-          duration: bookingData.duration,
-          seatsReserved: bookingData.seatsReserved || 1,
-          price: bookingData.price,
-        },
-      });
+      setConfirmedBooking({ bookingId: payment.booking_id, orderId: payment.order_id });
+      setShowSuccess(true);
     } catch (err: any) {
       console.error("Booking failed:", err);
       setIsProcessing(false);
@@ -202,6 +195,71 @@ export function CheckoutPage() {
           processPayment();
         }}
       />
+
+      {/* Booking success dialog */}
+      <Dialog open={showSuccess} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md text-center" onPointerDownOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <div className="flex justify-center mb-3">
+              <div className="size-16 rounded-full flex items-center justify-center bg-emerald-100">
+                <CheckCircle2 className="size-9 text-emerald-600" />
+              </div>
+            </div>
+            <DialogTitle className="text-center text-xl">Booking Confirmed!</DialogTitle>
+            <DialogDescription className="text-center">
+              Your workspace at{" "}
+              <span className="font-medium text-foreground">{bookingData.venueName}</span> is
+              booked.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg bg-muted p-4 text-sm space-y-1 text-left mt-2">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Date</span>
+              <span className="font-medium">{bookingData.bookingDate}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Time</span>
+              <span className="font-medium">{bookingData.startTime} – {bookingData.endTime}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Order ID</span>
+              <span className="font-medium font-mono text-xs">{confirmedBooking?.orderId}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Total paid</span>
+              <span className="font-semibold" style={{ color: "#2f8a64" }}>
+                ${(bookingData.price * 1.1).toFixed(2)}
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 mt-2">
+            <Button
+              className="w-full"
+              style={{ backgroundColor: "#253c50" }}
+              onClick={() =>
+                navigate("/booking-confirmation", {
+                  state: {
+                    bookingId: confirmedBooking?.bookingId,
+                    orderId: confirmedBooking?.orderId,
+                    venueName: bookingData.venueName,
+                    bookingDate: bookingData.bookingDate,
+                    startTime: bookingData.startTime,
+                    endTime: bookingData.endTime,
+                    duration: bookingData.duration,
+                    seatsReserved: bookingData.seatsReserved || 1,
+                    price: bookingData.price,
+                  },
+                })
+              }
+            >
+              View Booking Details
+            </Button>
+            <Button variant="outline" className="w-full" onClick={() => navigate("/")}>
+              Back to Home
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <h1 className="mb-8">Checkout</h1>
 
@@ -349,8 +407,14 @@ export function CheckoutPage() {
                   </div>
                 </RadioGroup>
 
-                {paymentMethod === "stripe" && (
+                {(paymentMethod === "stripe" || paymentMethod === "googlepay") && (
                   <div className="space-y-4 pt-4 border-t">
+                    {paymentMethod === "googlepay" && (
+                      <div className="flex items-center gap-2 rounded-lg bg-slate-50 border px-4 py-2 text-sm text-muted-foreground">
+                        <span className="font-semibold text-foreground">Google Pay</span>
+                        — enter your card details below
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label htmlFor="cardNumber">Card Number</Label>
                       <Input
@@ -361,7 +425,7 @@ export function CheckoutPage() {
                         required
                       />
                       <p className="text-xs text-muted-foreground">
-                        Demo cards: 4242 4242 4242 4242 succeeds, 4000 0000 0000 0002 fails.
+                        Demo: 4242 4242 4242 4242 succeeds · 4000 0000 0000 0002 fails
                       </p>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -391,7 +455,7 @@ export function CheckoutPage() {
                       <Input
                         id="cardName"
                         placeholder="John Doe"
-                        value={cardName || `${firstName} ${lastName}`.trim()}
+                        value={cardName}
                         onChange={(e) => setCardName(e.target.value)}
                         required
                       />

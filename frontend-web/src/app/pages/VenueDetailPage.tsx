@@ -3,12 +3,13 @@ import { useParams, useNavigate, useLocation } from "react-router";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Badge } from "../components/ui/badge";
 import { Separator } from "../components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Label } from "../components/ui/label";
-import { Star, MapPin, Wifi, Zap, Clock, Heart, Share2 } from "lucide-react";
+import { Star, MapPin, Wifi, Zap, Clock, Heart, Share2, LogIn } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../services/api";
 import { VenueDetail, AvailabilitySlot } from "../../types/api";
@@ -56,6 +57,7 @@ export function VenueDetailPage() {
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [storedLandmark, setStoredLandmark] = useState<LandmarkContext | null>(null);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
 
   const getDurationHours = (start: string, end: string) => {
     try {
@@ -123,6 +125,11 @@ export function VenueDetailPage() {
     }
     if (duration <= 0) {
       toast.error("End time must be after start time.");
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setShowLoginPrompt(true);
       return;
     }
 
@@ -237,7 +244,7 @@ export function VenueDetailPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <><div className="container mx-auto px-4 py-8">
       <div className="grid lg:grid-cols-[1fr_400px] gap-8">
         {/* Main Content */}
         <div>
@@ -246,8 +253,7 @@ export function VenueDetailPage() {
               <img
                 src={venueImage(venue.venue_id, venue.osm_type ?? venue.cuisine_type ?? "workspace")}
                 alt={venue.name}
-                className="h-[320px] w-full object-cover sm:h-[380px]"
-              />
+                className="h-[320px] w-full object-cover sm:h-[380px]" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
               <div className="absolute inset-x-0 top-0 flex justify-end gap-2 p-4">
                 <Button variant="outline" size="icon" className="border-white/60 bg-white/85" onClick={handleSave} disabled={authLoading || favoritesLoading}>
@@ -396,9 +402,7 @@ export function VenueDetailPage() {
                   slots.map((slot) => (
                     <div
                       key={slot.slot_id}
-                      className={`flex items-center justify-between p-4 rounded-lg border ${
-                        slot.available ? "bg-card" : "bg-muted opacity-50"
-                      }`}
+                      className={`flex items-center justify-between p-4 rounded-lg border ${slot.available ? "bg-card" : "bg-muted opacity-50"}`}
                     >
                       <div className="flex items-center gap-2">
                         <Clock className="size-4" />
@@ -473,8 +477,7 @@ export function VenueDetailPage() {
                       type="date"
                       value={bookingDate}
                       onChange={(e) => setBookingDate(e.target.value)}
-                      className="w-full bg-background"
-                    />
+                      className="w-full bg-background" />
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
@@ -565,6 +568,45 @@ export function VenueDetailPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </div><Dialog open={showLoginPrompt} onOpenChange={setShowLoginPrompt}>
+        <DialogContent className="sm:max-w-sm text-center">
+          <DialogHeader>
+            <div className="flex justify-center mb-2">
+              <div className="size-12 rounded-full flex items-center justify-center bg-[#253c50]">
+                <LogIn className="size-6 text-white" />
+              </div>
+            </div>
+            <DialogTitle className="text-center">Sign in to continue</DialogTitle>
+            <DialogDescription className="text-center">
+              Create a free account or sign in to complete your booking at{" "}
+              <span className="font-medium text-foreground">{venue?.name}</span>.
+              Your selection will be waiting for you.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 mt-2">
+            <Button
+              className="w-full"
+              style={{ backgroundColor: "#253c50" }}
+              onClick={() => navigate("/login", { state: { from: location.pathname } })}
+            >
+              Sign in
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => navigate("/signup", { state: { from: location.pathname } })}
+            >
+              Create account
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full text-muted-foreground"
+              onClick={() => setShowLoginPrompt(false)}
+            >
+              Continue browsing
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog></>
   );
 }

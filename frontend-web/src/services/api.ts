@@ -482,19 +482,20 @@ export const api = {
   login: async (credentials: { email: string; password: string }): Promise<LoginResponse> => {
     if (USE_MOCK) {
       await delay(300);
-      if (credentials.email && credentials.password) {
-        const isProvider = credentials.email.includes("provider");
+      const DEMO_ACCOUNTS: Record<string, { user_id: number; full_name: string; role: string }> = {
+        "user2@example.com":    { user_id: 2, full_name: "Demo User",     role: "user"     },
+        "user3@example.com":    { user_id: 3, full_name: "Demo Provider", role: "provider" },
+        "admin@example.com":    { user_id: 1, full_name: "Demo Admin",    role: "admin"    },
+      };
+      const DEMO_PASSWORD = "00000000";
+      const account = DEMO_ACCOUNTS[credentials.email.toLowerCase()];
+      if (account && credentials.password === DEMO_PASSWORD) {
         return {
           access_token: "mock_jwt_token",
-          user: {
-            user_id: isProvider ? 2 : 1,
-            full_name: isProvider ? "Mock Provider" : "Sunmin Lee",
-            email: credentials.email,
-            role: isProvider ? "provider" : "user"
-          }
+          user: { user_id: account.user_id, full_name: account.full_name, email: credentials.email, role: account.role }
         };
       }
-      throw new Error("Invalid credentials");
+      throw new Error("Invalid email or password. Use the demo credentials shown on the login page.");
     } else {
       const response = await axiosInstance.post<any>("/auth/login", credentials);
       const data = response.data;
@@ -1193,6 +1194,46 @@ export const api = {
           reported_at: "2026-05-28",
           status: "pending",
         },
+        {
+          id: 4,
+          user_id: "USR-3301",
+          user_name: "Lisa Park",
+          issue: "Harassment of venue staff",
+          description: "Customer made repeated inappropriate comments toward front-desk staff during check-in",
+          severity: "medium",
+          reported_at: "2026-05-20",
+          status: "warned",
+        },
+        {
+          id: 5,
+          user_id: "USR-4422",
+          user_name: "Carlos Rivera",
+          issue: "Fraudulent booking dispute",
+          description: "Customer filed three chargebacks for completed bookings, claiming non-attendance",
+          severity: "high",
+          reported_at: "2026-05-15",
+          status: "suspended",
+        },
+        {
+          id: 6,
+          user_id: "USR-7788",
+          user_name: "Derek Walsh",
+          issue: "Repeated policy violations",
+          description: "Customer received two prior warnings and continued to violate the workspace usage policy",
+          severity: "high",
+          reported_at: "2026-05-10",
+          status: "banned",
+        },
+        {
+          id: 7,
+          user_id: "USR-2255",
+          user_name: "Amelia Brooks",
+          issue: "Noise disturbance during quiet hours",
+          description: "Customer was playing audio aloud in a silent workspace; resolved after a single warning",
+          severity: "low",
+          reported_at: "2026-05-05",
+          status: "resolved",
+        },
       ];
     } else {
       const response = await axiosInstance.get<AdminCustomerIssue[]>("/admin/customer-issues");
@@ -1208,23 +1249,53 @@ export const api = {
       return [
         {
           id: 1,
-          venue_id: "osm_12345",
-          venue_name: "Bryant Park Cafe",
-          issue: "Multiple noise complaints",
-          description: "Venue has received 5 noise complaints from customers in the past month",
+          venue_id: "VEN-3456",
+          venue_name: "Sunset Cafe",
+          issue: "Asked customer to leave during booked time",
+          description: "Venue staff asked customer to vacate table 30 minutes into a 2-hour booking",
           severity: "high",
           reported_at: "2026-06-02",
           status: "pending",
         },
         {
           id: 2,
-          venue_id: "osm_12347",
-          venue_name: "Grand Central Lounge",
-          issue: "Overbooked seats 3 times",
-          description: "Venue accepted more bookings than available seats on 3 separate occasions",
+          venue_id: "VEN-7890",
+          venue_name: "Urban Workspace",
+          issue: "WiFi not available despite listing",
+          description: "Multiple complaints about WiFi being unavailable or extremely slow during booked sessions",
           severity: "medium",
-          reported_at: "2026-05-29",
+          reported_at: "2026-06-01",
           status: "pending",
+        },
+        {
+          id: 3,
+          venue_id: "VEN-2211",
+          venue_name: "Bryant Park Cafe",
+          issue: "Inaccurate capacity listed",
+          description: "Venue lists 12 seats but only 6 are consistently available due to permanent furniture",
+          severity: "medium",
+          reported_at: "2026-05-25",
+          status: "warned",
+        },
+        {
+          id: 4,
+          venue_id: "VEN-5544",
+          venue_name: "Grand Central Lounge",
+          issue: "Overbooked seats on multiple occasions",
+          description: "Venue accepted more bookings than available seats on 3 separate occasions this month",
+          severity: "high",
+          reported_at: "2026-05-18",
+          status: "suspended",
+        },
+        {
+          id: 5,
+          venue_id: "VEN-9900",
+          venue_name: "Midtown Co-Work Hub",
+          issue: "Persistent cleanliness issues",
+          description: "Four customers reported unclean desks and restrooms across separate bookings",
+          severity: "low",
+          reported_at: "2026-05-10",
+          status: "resolved",
         },
       ];
     } else {
