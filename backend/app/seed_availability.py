@@ -1,12 +1,8 @@
-from datetime import (
-    date,
-    time
-)
+from datetime import date, time
 
 from .database import SessionLocal
-from .models import (
-    AvailabilitySlot
-)
+from .models import AvailabilitySlot
+
 
 def seed_availability():
 
@@ -18,7 +14,7 @@ def seed_availability():
         start_time=time(9, 0),
         end_time=time(12, 0),
         available=True,
-        available_seats=10
+        available_seats=10,
     )
 
     slot2 = AvailabilitySlot(
@@ -27,7 +23,7 @@ def seed_availability():
         start_time=time(9, 0),
         end_time=time(12, 0),
         available=False,
-        available_seats=0
+        available_seats=0,
     )
 
     db.add(slot1)
@@ -38,6 +34,7 @@ def seed_availability():
     db.close()
 
     print("Availability seeded")
+
 
 if __name__ == "__main__":
     seed_availability()
