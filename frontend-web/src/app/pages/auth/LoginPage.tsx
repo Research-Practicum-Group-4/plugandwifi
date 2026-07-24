@@ -58,13 +58,13 @@ export function LoginPage() {
         <CardHeader className="text-center relative">
           {/* Register/Login as a Space Provider button */}
           <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
-            <Link
+            {/* <Link
               to="/provider/register"
               className="text-xs inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-primary/60 text-primary hover:bg-primary/10 transition-colors whitespace-nowrap"
             >
               <Building2 className="size-3" />
               Register/Login as a Space Provider
-            </Link>
+            </Link> */}
             <Link
               to={isAdminPortal ? "/login" : "/login?portal=admin"}
               state={location.state}
