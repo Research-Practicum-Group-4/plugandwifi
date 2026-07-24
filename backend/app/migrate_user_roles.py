@@ -6,9 +6,7 @@ from .database import engine
 
 
 def get_role_column_status(connection):
-    user_count = connection.execute(
-        text("SELECT COUNT(*) FROM users")
-    ).scalar_one()
+    user_count = connection.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
     role_exists = connection.execute(
         text(
             "SELECT EXISTS ("

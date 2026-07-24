@@ -24,10 +24,7 @@ def migrate_refresh_sessions(apply=False):
         print("Dry run complete. No database changes were made.")
         return
 
-    RefreshSession.__table__.create(
-        bind=engine,
-        checkfirst=True
-    )
+    RefreshSession.__table__.create(bind=engine, checkfirst=True)
 
     print("Refresh sessions migration completed successfully.")
 

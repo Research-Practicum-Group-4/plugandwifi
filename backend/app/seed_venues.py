@@ -8,12 +8,8 @@ from sqlalchemy.dialects.postgresql import insert
 from .database import SessionLocal
 from .models import Venue
 
-
 DEFAULT_CSV_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "data"
-    / "raw"
-    / "nyc_venues.csv"
+    Path(__file__).resolve().parents[1] / "data" / "raw" / "nyc_venues.csv"
 )
 
 CSV_COLUMNS = (
@@ -51,7 +47,7 @@ CSV_COLUMNS = (
     "wifi_norm",
     "rating_norm",
     "bus_norm",
-    "train_norm"
+    "train_norm",
 )
 
 TEXT_COLUMNS = (
@@ -69,22 +65,17 @@ TEXT_COLUMNS = (
     "hourly_profile",
     "borough",
     "nearest_subway",
-    "nearest_bus"
+    "nearest_bus",
 )
 
 BOOLEAN_COLUMNS = (
     "has_wifi",
     "inferred_wifi",
     "wifi_user_reported",
-    "plug_user_reported"
+    "plug_user_reported",
 )
 
-INTEGER_COLUMNS = (
-    "partner",
-    "nearest_subway_m",
-    "nearest_bus_m",
-    "plug_access"
-)
+INTEGER_COLUMNS = ("partner", "nearest_subway_m", "nearest_bus_m", "plug_access")
 
 FLOAT_COLUMNS = (
     "lat",
@@ -97,16 +88,10 @@ FLOAT_COLUMNS = (
     "wifi_norm",
     "rating_norm",
     "bus_norm",
-    "train_norm"
+    "train_norm",
 )
 
-NORMALIZED_COLUMNS = (
-    "plug_norm",
-    "wifi_norm",
-    "rating_norm",
-    "bus_norm",
-    "train_norm"
-)
+NORMALIZED_COLUMNS = ("plug_norm", "wifi_norm", "rating_norm", "bus_norm", "train_norm")
 
 
 def clean_text(value):
@@ -169,9 +154,7 @@ def build_record(row, row_number):
     for column in NORMALIZED_COLUMNS:
         value = record[column]
         if value is None or not 0 <= value <= 1:
-            raise ValueError(
-                f"Row {row_number} has invalid {column}: {value}"
-            )
+            raise ValueError(f"Row {row_number} has invalid {column}: {value}")
 
     return record
 
@@ -193,9 +176,7 @@ def load_records(csv_path):
             venue_id = record["venue_id"]
 
             if venue_id in seen_ids:
-                raise ValueError(
-                    f"Duplicate venue_id at row {row_number}: {venue_id}"
-                )
+                raise ValueError(f"Duplicate venue_id at row {row_number}: {venue_id}")
 
             seen_ids.add(venue_id)
             records.append(record)
@@ -207,8 +188,7 @@ def add_normalized_columns(db):
     for column in NORMALIZED_COLUMNS:
         db.execute(
             text(
-                f"ALTER TABLE venues "
-                f"ADD COLUMN IF NOT EXISTS {column} DOUBLE PRECISION"
+                f"ALTER TABLE venues ADD COLUMN IF NOT EXISTS {column} DOUBLE PRECISION"
             )
         )
     db.commit()
@@ -223,8 +203,7 @@ def upsert_batch(db, records):
     }
     db.execute(
         statement.on_conflict_do_update(
-            index_elements=[Venue.venue_id],
-            set_=update_columns
+            index_elements=[Venue.venue_id], set_=update_columns
         )
     )
     db.commit()
@@ -240,9 +219,7 @@ def seed_venues(csv_path=DEFAULT_CSV_PATH, apply=False, batch_size=500):
 
     with SessionLocal() as db:
         existing_ids = set(
-            db.scalars(
-                select(Venue.venue_id).where(Venue.venue_id.in_(venue_ids))
-            )
+            db.scalars(select(Venue.venue_id).where(Venue.venue_id.in_(venue_ids)))
         )
 
         insert_count = len(venue_ids - existing_ids)
@@ -259,7 +236,7 @@ def seed_venues(csv_path=DEFAULT_CSV_PATH, apply=False, batch_size=500):
         add_normalized_columns(db)
 
         for start in range(0, len(records), batch_size):
-            batch = records[start:start + batch_size]
+            batch = records[start : start + batch_size]
             upsert_batch(db, batch)
             print(f"Processed {min(start + batch_size, len(records))} venues")
 
@@ -277,8 +254,4 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
-    seed_venues(
-        csv_path=args.csv,
-        apply=args.apply,
-        batch_size=args.batch_size
-    )
+    seed_venues(csv_path=args.csv, apply=args.apply, batch_size=args.batch_size)

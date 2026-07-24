@@ -1,84 +1,68 @@
-from fastapi import (
-    FastAPI ,
-    Depends,
-    HTTPException,
-    Query
-)
-from .database import (
-    engine, 
-    Base , 
-    get_db
-)
-from .models import (
-    User,
-    Venue,
-    AvailabilitySlot,
-    Booking,
-    RefreshSession,
-    Favorite,
-    PostBookingReview
-)
-from sqlalchemy.orm import Session
-from sqlalchemy import func, text
-from .schemas import (
-    UserRegister,
-    UserLogin,
-    ChatbotRecommendRequest,
-    ChatbotRecommendResponse,
-    ChatbotHistoryMessage,
-    ChatbotSearchParameters,
-    VenueListResponse,
-    VenueSuggestionsResponse,
-    VenueCreate,
-    VenueCreateResponse,
-    VenueDetailResponse,
-    VenueAvailabilityResponse,
-    BookingCreate,
-    BookingResponse,
-    MockPaymentConfirmRequest,
-    MockPaymentResponse,
-    ReviewCreate,
-    ReviewResponse,
-    UserBookingsResponse,
-    BookingCancellationResponse,
-    FavoriteResponse,
-    SlotDeactivationResponse,
-    RefreshTokenRequest,
-    LogoutRequest,
-    ProviderDashboardKPIsResponse,
-    ProviderArrivalsResponse,
-    VenueSurveyMetricsResponse,
-    AdminDashboardOverviewResponse,
-    VenueSuspensionRequest,
-    VenueSuspensionResponse
-)
-from .auth import (
-    hash_password, 
-    verify_password,
-    create_access_token
-)
-from .rbac import get_current_user, require_roles
-from .refresh_tokens import (
-    hash_refresh_token,
-    issue_refresh_session
-)
-from datetime import date, datetime, time, timedelta
-from contextlib import asynccontextmanager
-from math import asin, cos, radians, sin, sqrt
-from zoneinfo import ZoneInfo
-
-from fastapi.middleware.cors import CORSMiddleware
-
-import httpx
 import json
 import logging
 import os
 import re
 import sys
 import uuid
+from contextlib import asynccontextmanager
+from datetime import date, datetime, time, timedelta, timezone
 from functools import lru_cache
+from math import asin, cos, radians, sin, sqrt
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
+import httpx
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import func, text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from .auth import create_access_token, hash_password, verify_password
+from .database import Base, engine, get_db
+from .models import (
+    AvailabilitySlot,
+    Booking,
+    Favorite,
+    PostBookingReview,
+    RefreshSession,
+    User,
+    Venue,
+)
+from .rbac import get_current_user, require_roles
+from .refresh_tokens import hash_refresh_token, issue_refresh_session
+from .schemas import (
+    AdminDashboardOverviewResponse,
+    BookingCancellationResponse,
+    BookingCreate,
+    BookingResponse,
+    ChatbotHistoryMessage,
+    ChatbotRecommendRequest,
+    ChatbotRecommendResponse,
+    ChatbotSearchParameters,
+    FavoriteResponse,
+    LogoutRequest,
+    MockPaymentConfirmRequest,
+    MockPaymentResponse,
+    ProviderArrivalsResponse,
+    ProviderDashboardKPIsResponse,
+    RefreshTokenRequest,
+    ReviewCreate,
+    ReviewResponse,
+    SlotDeactivationResponse,
+    UserBookingsResponse,
+    UserLogin,
+    UserRegister,
+    VenueAvailabilityResponse,
+    VenueCreate,
+    VenueCreateResponse,
+    VenueDetailResponse,
+    VenueListResponse,
+    VenueSuggestionsResponse,
+    VenueSurveyMetricsResponse,
+    VenueSuspensionRequest,
+    VenueSuspensionResponse,
+)
 
 logger = logging.getLogger(__name__)
 BUSYNESS_PREDICTION_CACHE = {}
@@ -87,11 +71,23 @@ CHATBOT_HISTORY_MAX_MESSAGES = 6
 CHATBOT_HISTORY_MAX_MESSAGE_CHARS = 240
 CHATBOT_HISTORY_MAX_TOTAL_CHARS = 1200
 CHATBOT_DEFAULT_LOCATION_RADIUS_KM = 3.0
-CHATBOT_REQUIRED_PREFERENCE_FIELDS = (
-    "venue_type",
-    "wifi",
-    "plug_access"
-)
+CHATBOT_REQUIRED_PREFERENCE_FIELDS = ("venue_type", "wifi", "plug_access")
+
+
+def get_current_local_datetime() -> datetime:
+    return datetime.now(NYC_TIMEZONE).replace(tzinfo=None)
+
+
+def get_current_local_date() -> date:
+    return get_current_local_datetime().date()
+
+
+def get_current_utc_datetime() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def get_current_utc_naive_datetime() -> datetime:
+    return get_current_utc_datetime().replace(tzinfo=None)
 
 
 def get_free_cancellation_hours():
@@ -100,14 +96,10 @@ def get_free_cancellation_hours():
     try:
         hours = int(raw_value)
     except ValueError as exc:
-        raise RuntimeError(
-            "FREE_CANCELLATION_HOURS must be an integer."
-        ) from exc
+        raise RuntimeError("FREE_CANCELLATION_HOURS must be an integer.") from exc
 
     if hours < 0:
-        raise RuntimeError(
-            "FREE_CANCELLATION_HOURS must be at least 0."
-        )
+        raise RuntimeError("FREE_CANCELLATION_HOURS must be at least 0.")
 
     return hours
 
@@ -138,24 +130,15 @@ GEMINI_SYSTEM_INSTRUCTION = (
 
 
 def get_gemini_model():
-    return os.getenv(
-        "GEMINI_MODEL",
-        "gemini-3.1-flash-lite"
-    )
+    return os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
 
 def get_busyness_model_path():
-    return os.getenv(
-        "BUSYNESS_MODEL_PATH",
-        "data-ml/models/zone_busyness_model.joblib"
-    )
+    return os.getenv("BUSYNESS_MODEL_PATH", "data-ml/models/zone_busyness_model.joblib")
 
 
 def get_busyness_venues_csv_path():
-    return os.getenv(
-        "BUSYNESS_VENUES_CSV",
-        "data-ml/models/nyc_venues.csv"
-    )
+    return os.getenv("BUSYNESS_VENUES_CSV", "data-ml/models/nyc_venues.csv")
 
 
 def get_day_type(prediction_date: date):
@@ -163,15 +146,13 @@ def get_day_type(prediction_date: date):
 
 
 def get_default_day_type():
-    return get_day_type(
-        datetime.now(NYC_TIMEZONE).date()
-    )
+    return get_day_type(get_current_local_date())
 
 
 def get_busyness_prediction_datetime(
     selected_date: date | str | None = None,
     selected_time: time | None = None,
-    hour: int | None = None
+    hour: int | None = None,
 ):
     if isinstance(selected_date, str):
         try:
@@ -179,16 +160,10 @@ def get_busyness_prediction_datetime(
         except ValueError:
             selected_date = None
 
-    now = datetime.now(NYC_TIMEZONE)
+    now = get_current_local_datetime()
 
     if hour is not None:
-        selected_hour = max(
-            0,
-            min(
-                23,
-                int(hour)
-            )
-        )
+        selected_hour = max(0, min(23, int(hour)))
     elif selected_time is not None:
         selected_hour = selected_time.hour
     else:
@@ -196,16 +171,10 @@ def get_busyness_prediction_datetime(
 
     prediction_date = selected_date or now.date()
 
-    return datetime.combine(
-        prediction_date,
-        time(selected_hour, 0, 0)
-    )
+    return datetime.combine(prediction_date, time(selected_hour, 0, 0))
 
 
-def get_busyness_prediction_key(
-    zone_id,
-    prediction_datetime: datetime
-):
+def get_busyness_prediction_key(zone_id, prediction_datetime: datetime):
     try:
         normalized_zone_id = int(zone_id)
     except (TypeError, ValueError):
@@ -214,7 +183,7 @@ def get_busyness_prediction_key(
     return (
         normalized_zone_id,
         prediction_datetime.date().isoformat(),
-        prediction_datetime.hour
+        prediction_datetime.hour,
     )
 
 
@@ -224,9 +193,7 @@ def get_busyness_zone_id_for_venue(venue_id: str):
     if venues is None:
         return None
 
-    selected_venue = venues[
-        venues["venue_id"] == venue_id
-    ]
+    selected_venue = venues[venues["venue_id"] == venue_id]
 
     if selected_venue.empty:
         return None
@@ -259,9 +226,7 @@ def get_zone_busyness_predictor():
     try:
         from zone_busyness_predictor import load_zone_busyness_predictor
 
-        return load_zone_busyness_predictor(
-            str(model_path)
-        )
+        return load_zone_busyness_predictor(str(model_path))
     except Exception:
         logger.exception("Failed to load zone busyness model")
         return None
@@ -277,22 +242,17 @@ def get_busyness_venues_dataframe():
     try:
         import pandas as pd
 
-        venues = pd.read_csv(
-            venues_csv_path
-        )
+        venues = pd.read_csv(venues_csv_path)
     except Exception:
         logger.exception("Failed to load busyness venue CSV")
         return None
 
-    required_columns = {
-        "venue_id",
-        "zone_id"
-    }
+    required_columns = {"venue_id", "zone_id"}
 
     if not required_columns.issubset(venues.columns):
         logger.error(
             "Busyness venue CSV is missing required columns: %s",
-            sorted(required_columns - set(venues.columns))
+            sorted(required_columns - set(venues.columns)),
         )
         return None
 
@@ -302,10 +262,7 @@ def get_busyness_venues_dataframe():
 def get_busyness_diagnostics(sample_venue_id: str | None = None):
     model_path = Path(get_busyness_model_path())
     venues_csv_path = Path(get_busyness_venues_csv_path())
-    required_columns = {
-        "venue_id",
-        "zone_id"
-    }
+    required_columns = {"venue_id", "zone_id"}
     predictor = get_zone_busyness_predictor()
     venues = get_busyness_venues_dataframe()
     csv_columns = []
@@ -313,9 +270,7 @@ def get_busyness_diagnostics(sample_venue_id: str | None = None):
 
     if venues is not None:
         csv_columns = list(venues.columns)
-        missing_columns = sorted(
-            required_columns - set(csv_columns)
-        )
+        missing_columns = sorted(required_columns - set(csv_columns))
 
     diagnostic = {
         "status": "ready",
@@ -328,13 +283,9 @@ def get_busyness_diagnostics(sample_venue_id: str | None = None):
         "venues_csv_loaded": venues is not None,
         "required_columns": sorted(required_columns),
         "missing_columns": missing_columns,
-        "venue_mapping_count": (
-            int(len(venues))
-            if venues is not None
-            else 0
-        ),
+        "venue_mapping_count": (len(venues) if venues is not None else 0),
         "cache_entries": len(BUSYNESS_PREDICTION_CACHE),
-        "sample": None
+        "sample": None,
     }
 
     if (
@@ -347,14 +298,8 @@ def get_busyness_diagnostics(sample_venue_id: str | None = None):
         diagnostic["status"] = "not_ready"
 
     if sample_venue_id:
-        prediction = get_busyness_predictions(
-            [
-                sample_venue_id
-            ]
-        ).get(sample_venue_id)
-        zone_id = get_busyness_zone_id_for_venue(
-            sample_venue_id
-        )
+        prediction = get_busyness_predictions([sample_venue_id]).get(sample_venue_id)
+        zone_id = get_busyness_zone_id_for_venue(sample_venue_id)
 
         diagnostic["sample"] = {
             "venue_id": sample_venue_id,
@@ -364,7 +309,7 @@ def get_busyness_diagnostics(sample_venue_id: str | None = None):
                 prediction
                 and prediction.get("busyness_score") is not None
                 and prediction.get("busyness_label") is not None
-            )
+            ),
         }
 
         if not diagnostic["sample"]["prediction_ready"]:
@@ -377,19 +322,13 @@ def log_busyness_prediction(
     venue: Venue,
     prediction,
     selected_date: date | None = None,
-    selected_time: time | None = None
+    selected_time: time | None = None,
 ):
     prediction_datetime = get_busyness_prediction_datetime(
-        selected_date=selected_date,
-        selected_time=selected_time
+        selected_date=selected_date, selected_time=selected_time
     )
-    zone_id = get_busyness_zone_id_for_venue(
-        venue.venue_id
-    )
-    prediction_key = get_busyness_prediction_key(
-        zone_id,
-        prediction_datetime
-    )
+    zone_id = get_busyness_zone_id_for_venue(venue.venue_id)
+    prediction_key = get_busyness_prediction_key(zone_id, prediction_datetime)
     prediction = prediction or {}
     log_payload = {
         "event": "busyness_prediction",
@@ -399,21 +338,14 @@ def log_busyness_prediction(
         "prediction_datetime": prediction_datetime.isoformat(),
         "timezone": str(NYC_TIMEZONE),
         "weekday": prediction_datetime.weekday(),
-        "day_type": get_day_type(
-            prediction_datetime.date()
-        ),
+        "day_type": get_day_type(prediction_datetime.date()),
         "hour": prediction_datetime.hour,
         "cache_key": prediction_key,
         "final_score": prediction.get("busyness_score"),
-        "final_label": prediction.get("busyness_label")
+        "final_label": prediction.get("busyness_label"),
     }
 
-    logger.info(
-        json.dumps(
-            log_payload,
-            default=str
-        )
-    )
+    logger.info(json.dumps(log_payload, default=str))
 
 
 SUITABILITY_WEIGHTS = {
@@ -422,7 +354,7 @@ SUITABILITY_WEIGHTS = {
     "hourly_profile": 0.25,
     "rating": 0.10,
     "bus": 0.10,
-    "train": 0.20
+    "train": 0.20,
 }
 
 SUITABILITY_BUSYNESS_WEIGHT = 0.25
@@ -437,38 +369,19 @@ def clamp_normalized_score(value):
     except (TypeError, ValueError):
         return 0.0
 
-    return max(
-        0.0,
-        min(
-            1.0,
-            numeric_value
-        )
-    )
+    return max(0.0, min(1.0, numeric_value))
 
 
-def get_hourly_profile_suitability_score(
-    venue: Venue,
-    hour: int | None = None
-):
-    selected_hour = str(
-        hour if hour is not None else datetime.now().hour
-    )
+def get_hourly_profile_suitability_score(venue: Venue, hour: int | None = None):
+    selected_hour = str(hour if hour is not None else get_current_local_datetime().hour)
 
     if venue.hourly_profile:
         try:
-            profile = json.loads(
-                venue.hourly_profile
-            )
-            hourly_score = (
-                profile
-                .get(selected_hour, {})
-                .get("score")
-            )
+            profile = json.loads(venue.hourly_profile)
+            hourly_score = profile.get(selected_hour, {}).get("score")
 
             if hourly_score is not None:
-                return 1 - clamp_normalized_score(
-                    hourly_score
-                )
+                return 1 - clamp_normalized_score(hourly_score)
         except (TypeError, ValueError, json.JSONDecodeError):
             pass
 
@@ -479,9 +392,7 @@ def get_busyness_suitability_score(busyness=None):
     if not busyness:
         return None
 
-    busyness_score = busyness.get(
-        "busyness_score"
-    )
+    busyness_score = busyness.get("busyness_score")
 
     if busyness_score is None:
         return None
@@ -491,54 +402,35 @@ def get_busyness_suitability_score(busyness=None):
     except (TypeError, ValueError):
         return None
 
-    return 1 - clamp_normalized_score(
-        normalized_busyness
-    )
+    return 1 - clamp_normalized_score(normalized_busyness)
 
 
-def calculate_suitability_score(
-    venue: Venue,
-    hour: int | None = None,
-    busyness=None
-):
+def calculate_suitability_score(venue: Venue, hour: int | None = None, busyness=None):
     components = {
         "wifi": clamp_normalized_score(venue.wifi_norm),
         "plug": clamp_normalized_score(venue.plug_norm),
-        "hourly_profile": get_hourly_profile_suitability_score(
-            venue,
-            hour
-        ),
+        "hourly_profile": get_hourly_profile_suitability_score(venue, hour),
         "rating": clamp_normalized_score(venue.rating_norm),
         "bus": clamp_normalized_score(venue.bus_norm),
-        "train": clamp_normalized_score(venue.train_norm)
+        "train": clamp_normalized_score(venue.train_norm),
     }
-    weights = dict(
-        SUITABILITY_WEIGHTS
-    )
-    busyness_suitability = get_busyness_suitability_score(
-        busyness
-    )
+    weights = dict(SUITABILITY_WEIGHTS)
+    busyness_suitability = get_busyness_suitability_score(busyness)
 
     if busyness_suitability is not None:
         components["area_busyness"] = busyness_suitability
         weights["area_busyness"] = SUITABILITY_BUSYNESS_WEIGHT
 
-    total_weight = sum(
-        weights.values()
-    )
+    total_weight = sum(weights.values())
 
     if total_weight == 0:
         return None
 
     score = sum(
-        components[name] * weight / total_weight
-        for name, weight in weights.items()
+        components[name] * weight / total_weight for name, weight in weights.items()
     )
 
-    return round(
-        score * 100,
-        2
-    )
+    return round(score * 100, 2)
 
 
 def get_busyness_predictions(
@@ -547,15 +439,13 @@ def get_busyness_predictions(
     day_type: str | None = None,
     prediction_date: date | str | None = None,
     selected_date: date | str | None = None,
-    selected_time: time | None = None
+    selected_time: time | None = None,
 ):
     if not venue_ids:
         return {}
 
     prediction_datetime = get_busyness_prediction_datetime(
-        selected_date or prediction_date,
-        selected_time,
-        hour
+        selected_date or prediction_date, selected_time, hour
     )
     predicted_for = prediction_datetime.isoformat()
     predictor = get_zone_busyness_predictor()
@@ -565,7 +455,7 @@ def get_busyness_predictions(
         venue_id: {
             "busyness_score": None,
             "busyness_label": None,
-            "busyness_predicted_for": predicted_for
+            "busyness_predicted_for": predicted_for,
         }
         for venue_id in venue_ids
     }
@@ -574,33 +464,22 @@ def get_busyness_predictions(
         return empty_prediction
 
     try:
-        selected_venues = venues[
-            venues["venue_id"].isin(venue_ids)
-        ].copy()
+        selected_venues = venues[venues["venue_id"].isin(venue_ids)].copy()
 
         if selected_venues.empty:
             return empty_prediction
 
-        selected_venues = selected_venues[
-            selected_venues["zone_id"].notna()
-        ]
+        selected_venues = selected_venues[selected_venues["zone_id"].notna()]
 
         if selected_venues.empty:
             return empty_prediction
 
-        zone_rows = (
-            selected_venues
-            .drop_duplicates(
-                subset=["zone_id"]
-            )
-            .copy()
-        )
+        zone_rows = selected_venues.drop_duplicates(subset=["zone_id"]).copy()
         missing_zone_rows = []
 
         for _, zone_row in zone_rows.iterrows():
             prediction_key = get_busyness_prediction_key(
-                zone_row["zone_id"],
-                prediction_datetime
+                zone_row["zone_id"], prediction_datetime
             )
 
             if prediction_key is None:
@@ -612,22 +491,18 @@ def get_busyness_predictions(
         if missing_zone_rows:
             import pandas as pd
 
-            zone_prediction_rows = pd.DataFrame(
-                missing_zone_rows
-            )
+            zone_prediction_rows = pd.DataFrame(missing_zone_rows)
             prediction_results = predictor.predict_many(
                 zone_prediction_rows,
                 date=prediction_datetime.date().isoformat(),
-                hour=prediction_datetime.hour
+                hour=prediction_datetime.hour,
             )
 
             for result, (_, zone_row) in zip(
-                prediction_results,
-                zone_prediction_rows.iterrows()
+                prediction_results, zone_prediction_rows.iterrows()
             ):
                 prediction_key = get_busyness_prediction_key(
-                    zone_row["zone_id"],
-                    prediction_datetime
+                    zone_row["zone_id"], prediction_datetime
                 )
 
                 if prediction_key is None:
@@ -636,7 +511,7 @@ def get_busyness_predictions(
                 BUSYNESS_PREDICTION_CACHE[prediction_key] = {
                     "busyness_score": result.get("busyness_score"),
                     "busyness_label": result.get("busyness_label"),
-                    "busyness_predicted_for": predicted_for
+                    "busyness_predicted_for": predicted_for,
                 }
     except Exception:
         logger.exception("Failed to predict zone busyness")
@@ -646,16 +521,13 @@ def get_busyness_predictions(
 
     for _, venue in selected_venues.iterrows():
         prediction_key = get_busyness_prediction_key(
-            venue["zone_id"],
-            prediction_datetime
+            venue["zone_id"], prediction_datetime
         )
 
         if prediction_key is None:
             continue
 
-        zone_prediction = BUSYNESS_PREDICTION_CACHE.get(
-            prediction_key
-        )
+        zone_prediction = BUSYNESS_PREDICTION_CACHE.get(prediction_key)
 
         if zone_prediction is not None:
             predictions[venue["venue_id"]] = zone_prediction
@@ -664,10 +536,7 @@ def get_busyness_predictions(
 
 
 def build_venue_response(
-    venue: Venue,
-    distance_km=None,
-    busyness=None,
-    suitability_score=None
+    venue: Venue, distance_km=None, busyness=None, suitability_score=None
 ):
     busyness = busyness or {}
 
@@ -695,22 +564,16 @@ def build_venue_response(
         "distance_km": distance_km,
         "busyness_score": busyness.get("busyness_score"),
         "busyness_label": busyness.get("busyness_label"),
-        "busyness_predicted_for": busyness.get(
-            "busyness_predicted_for"
-        ),
+        "busyness_predicted_for": busyness.get("busyness_predicted_for"),
         "suitability_score": (
             suitability_score
             if suitability_score is not None
             else calculate_suitability_score(venue)
-        )
+        ),
     }
 
 
-def build_venue_detail_response(
-    venue: Venue,
-    busyness=None,
-    suitability_score=None
-):
+def build_venue_detail_response(venue: Venue, busyness=None, suitability_score=None):
     busyness = busyness or {}
 
     return {
@@ -754,22 +617,15 @@ def build_venue_detail_response(
         "actual_hourly_price": venue.actual_hourly_price,
         "busyness_score": busyness.get("busyness_score"),
         "busyness_label": busyness.get("busyness_label"),
-        "busyness_predicted_for": busyness.get(
-            "busyness_predicted_for"
-        ),
+        "busyness_predicted_for": busyness.get("busyness_predicted_for"),
         "suitability_score": (
             suitability_score
             if suitability_score is not None
-            else calculate_suitability_score(
-                venue,
-                busyness=busyness
-            )
+            else calculate_suitability_score(venue, busyness=busyness)
         ),
         "seat_capacity": venue.seat_capacity or 1,
-        "amenity_tags": deserialize_amenity_tags(
-            venue.amenity_tags
-        ),
-        "rules_text": venue.rules_text or ""
+        "amenity_tags": deserialize_amenity_tags(venue.amenity_tags),
+        "rules_text": venue.rules_text or "",
     }
 
 
@@ -779,26 +635,18 @@ def extract_json_object(text_value: str):
     except json.JSONDecodeError:
         pass
 
-    match = re.search(
-        r"\{.*\}",
-        text_value,
-        re.DOTALL
-    )
+    match = re.search(r"\{.*\}", text_value, re.DOTALL)
 
     if not match:
         return None
 
     try:
-        return json.loads(
-            match.group(0)
-        )
+        return json.loads(match.group(0))
     except json.JSONDecodeError:
         return None
 
 
-def normalize_chatbot_history(
-    chat_history: list[ChatbotHistoryMessage] | None
-):
+def normalize_chatbot_history(chat_history: list[ChatbotHistoryMessage] | None):
     if not chat_history:
         return []
 
@@ -812,24 +660,14 @@ def normalize_chatbot_history(
         if role not in {"user", "assistant"} or not message:
             continue
 
-        truncated_message = message[
-            :CHATBOT_HISTORY_MAX_MESSAGE_CHARS
-        ]
-        projected_total = total_chars + len(
-            truncated_message
-        )
+        truncated_message = message[:CHATBOT_HISTORY_MAX_MESSAGE_CHARS]
+        projected_total = total_chars + len(truncated_message)
 
-        if (
-            normalized_history
-            and projected_total > CHATBOT_HISTORY_MAX_TOTAL_CHARS
-        ):
+        if normalized_history and projected_total > CHATBOT_HISTORY_MAX_TOTAL_CHARS:
             break
 
         normalized_history.append(
-            ChatbotHistoryMessage(
-                role=role,
-                message=truncated_message
-            )
+            ChatbotHistoryMessage(role=role, message=truncated_message)
         )
         total_chars = projected_total
 
@@ -840,25 +678,19 @@ def normalize_chatbot_history(
     return normalized_history
 
 
-def format_chatbot_history_for_prompt(
-    chat_history: list[ChatbotHistoryMessage] | None
-):
-    normalized_history = normalize_chatbot_history(
-        chat_history
-    )
+def format_chatbot_history_for_prompt(chat_history: list[ChatbotHistoryMessage] | None):
+    normalized_history = normalize_chatbot_history(chat_history)
 
     if not normalized_history:
         return "No recent conversation."
 
     return "\n".join(
-        f"{message.role}: {message.message}"
-        for message in normalized_history
+        f"{message.role}: {message.message}" for message in normalized_history
     )
 
 
 def call_gemini_search_parameter_extraction(
-    message: str,
-    chat_history: list[ChatbotHistoryMessage] | None = None
+    message: str, chat_history: list[ChatbotHistoryMessage] | None = None
 ):
     api_key = os.getenv("GEMINI_API_KEY")
 
@@ -893,26 +725,12 @@ def call_gemini_search_parameter_extraction(
     try:
         response = httpx.post(
             url,
-            params={
-                "key": api_key
-            },
+            params={"key": api_key},
             json={
-                "contents": [
-                    {
-                        "role": "user",
-                        "parts": [
-                            {
-                                "text": prompt
-                            }
-                        ]
-                    }
-                ],
-                "generationConfig": {
-                    "temperature": 0.1,
-                    "maxOutputTokens": 256
-                }
+                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.1, "maxOutputTokens": 256},
             },
-            timeout=15
+            timeout=15,
         )
         response.raise_for_status()
         data = response.json()
@@ -920,26 +738,13 @@ def call_gemini_search_parameter_extraction(
         return None
 
     candidates = data.get("candidates") or []
-    parts = (
-        candidates[0]
-        .get("content", {})
-        .get("parts", [])
-        if candidates else []
-    )
-    text_parts = [
-        part.get("text", "")
-        for part in parts
-        if part.get("text")
-    ]
+    parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+    text_parts = [part.get("text", "") for part in parts if part.get("text")]
 
-    return extract_json_object(
-        "\n".join(text_parts).strip()
-    )
+    return extract_json_object("\n".join(text_parts).strip())
 
 
-def normalize_busyness_preference(
-    value
-):
+def normalize_busyness_preference(value):
     if value is None:
         return None
 
@@ -970,15 +775,13 @@ def parse_chatbot_date(value):
         return None
 
     if lowered_value in {"today", "now", "current"}:
-        return datetime.now().date()
+        return get_current_local_date()
 
     if lowered_value == "tomorrow":
-        return datetime.now().date() + timedelta(days=1)
+        return get_current_local_date() + timedelta(days=1)
 
     try:
-        return date.fromisoformat(
-            lowered_value
-        )
+        return date.fromisoformat(lowered_value)
     except ValueError:
         return None
 
@@ -996,27 +799,16 @@ def parse_chatbot_time(value):
         return None
 
     if lowered_value in {"now", "current", "currently"}:
-        now = datetime.now()
-        return time(
-            now.hour,
-            now.minute,
-            0
-        )
+        now = get_current_local_datetime()
+        return time(now.hour, now.minute, 0)
 
-    time_match = re.search(
-        r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?",
-        lowered_value
-    )
+    time_match = re.search(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", lowered_value)
 
     if not time_match:
         return None
 
-    hour = int(
-        time_match.group(1)
-    )
-    minute = int(
-        time_match.group(2) or 0
-    )
+    hour = int(time_match.group(1))
+    minute = int(time_match.group(2) or 0)
     meridiem = time_match.group(3)
 
     if meridiem == "pm" and hour < 12:
@@ -1027,11 +819,7 @@ def parse_chatbot_time(value):
     if hour > 23 or minute > 59:
         return None
 
-    return time(
-        hour,
-        minute,
-        0
-    )
+    return time(hour, minute, 0)
 
 
 def parse_chatbot_bool(value):
@@ -1053,9 +841,7 @@ def parse_chatbot_bool(value):
 
 
 def parse_chatbot_plug_access(value):
-    parsed_bool = parse_chatbot_bool(
-        value
-    )
+    parsed_bool = parse_chatbot_bool(value)
 
     if parsed_bool is True:
         return 1
@@ -1064,9 +850,7 @@ def parse_chatbot_plug_access(value):
         return 0
 
     try:
-        parsed_int = int(
-            value
-        )
+        parsed_int = int(value)
     except (TypeError, ValueError):
         return None
 
@@ -1080,19 +864,13 @@ def normalize_chatbot_search_text(value):
     if value is None:
         return ""
 
-    return re.sub(
-        r"[^a-z0-9]+",
-        "",
-        str(value).strip().lower()
-    )
+    return re.sub(r"[^a-z0-9]+", "", str(value).strip().lower())
 
 
 def extract_chatbot_candidate_venue_names(
-    chat_history: list[ChatbotHistoryMessage] | None
+    chat_history: list[ChatbotHistoryMessage] | None,
 ):
-    normalized_history = normalize_chatbot_history(
-        chat_history
-    )
+    normalized_history = normalize_chatbot_history(chat_history)
     candidate_names = []
     seen_names = set()
 
@@ -1114,14 +892,9 @@ def extract_chatbot_candidate_venue_names(
             if not venue_name:
                 continue
 
-            normalized_name = normalize_chatbot_search_text(
-                venue_name
-            )
+            normalized_name = normalize_chatbot_search_text(venue_name)
 
-            if (
-                normalized_name
-                and normalized_name not in seen_names
-            ):
+            if normalized_name and normalized_name not in seen_names:
                 candidate_names.append(venue_name)
                 seen_names.add(normalized_name)
 
@@ -1131,18 +904,12 @@ def extract_chatbot_candidate_venue_names(
     return candidate_names
 
 
-def extract_chatbot_follow_up_location(
-    message: str
-):
+def extract_chatbot_follow_up_location(message: str):
     for pattern in (
         r"\b(?:closer|closest|nearest)\s+to\s+(.+?)(?:\?|$)",
-        r"\bclosest\s+from\s+(.+?)(?:\?|$)"
+        r"\bclosest\s+from\s+(.+?)(?:\?|$)",
     ):
-        match = re.search(
-            pattern,
-            message,
-            re.IGNORECASE
-        )
+        match = re.search(pattern, message, re.IGNORECASE)
 
         if match:
             return match.group(1).strip(" .,!?:;")
@@ -1151,61 +918,40 @@ def extract_chatbot_follow_up_location(
 
 
 def is_chatbot_distance_comparison_follow_up(
-    message: str,
-    chat_history: list[ChatbotHistoryMessage] | None = None
+    message: str, chat_history: list[ChatbotHistoryMessage] | None = None
 ):
     message_lower = message.lower()
 
     if not any(
         term in message_lower
-        for term in (
-            "which one",
-            "which venue",
-            "closest",
-            "closer",
-            "nearest"
-        )
+        for term in ("which one", "which venue", "closest", "closer", "nearest")
     ):
         return False
 
-    if extract_chatbot_follow_up_location(
-        message
-    ) is None:
+    if extract_chatbot_follow_up_location(message) is None:
         return False
 
-    return bool(
-        extract_chatbot_candidate_venue_names(
-            chat_history
-        )
-    )
+    return bool(extract_chatbot_candidate_venue_names(chat_history))
 
 
 def infer_chatbot_search_parameters(
-    message: str,
-    chat_history: list[ChatbotHistoryMessage] | None = None
+    message: str, chat_history: list[ChatbotHistoryMessage] | None = None
 ):
     try:
-        extracted = call_gemini_search_parameter_extraction(
-            message,
-            chat_history
-        ) or {}
+        extracted = call_gemini_search_parameter_extraction(message, chat_history) or {}
     except TypeError:
-        extracted = call_gemini_search_parameter_extraction(
-            message
-        ) or {}
+        extracted = call_gemini_search_parameter_extraction(message) or {}
     message_lower = message.lower()
     venue_name = extracted.get("venue_name")
 
     radius_match = re.search(
         r"(?:within|under|up to|inside)\s+(\d+(?:\.\d+)?)\s*(?:km|kilometer|kilometers)",
-        message_lower
+        message_lower,
     )
     radius_km = extracted.get("radius_km")
 
     if radius_km is None and radius_match:
-        radius_km = float(
-            radius_match.group(1)
-        )
+        radius_km = float(radius_match.group(1))
 
     venue_type = extracted.get("venue_type")
 
@@ -1221,12 +967,13 @@ def infer_chatbot_search_parameters(
         elif "without wifi" in message_lower or "no wifi" in message_lower:
             wifi = False
 
-    busyness = normalize_busyness_preference(
-        extracted.get("busyness")
-    )
+    busyness = normalize_busyness_preference(extracted.get("busyness"))
 
     if busyness is None:
-        if any(term in message_lower for term in ("not too busy", "less busy", "low busyness", "not crowded")):
+        if any(
+            term in message_lower
+            for term in ("not too busy", "less busy", "low busyness", "not crowded")
+        ):
             busyness = "low"
         elif "moderate" in message_lower:
             busyness = "moderate"
@@ -1235,86 +982,97 @@ def infer_chatbot_search_parameters(
 
     requested_time = extracted.get("time")
 
-    if requested_time is None and any(term in message_lower for term in ("now", "current", "currently")):
+    if requested_time is None and any(
+        term in message_lower for term in ("now", "current", "currently")
+    ):
         requested_time = "now"
 
-    requested_date = parse_chatbot_date(
-        extracted.get("date")
-    )
+    requested_date = parse_chatbot_date(extracted.get("date"))
 
     if requested_date is None:
         if "tomorrow" in message_lower:
             requested_date = parse_chatbot_date("tomorrow")
-        elif any(term in message_lower for term in ("today", "now", "current", "currently")):
+        elif any(
+            term in message_lower for term in ("today", "now", "current", "currently")
+        ):
             requested_date = parse_chatbot_date("today")
 
-    start_time = parse_chatbot_time(
-        extracted.get("start_time") or requested_time
-    )
+    start_time = parse_chatbot_time(extracted.get("start_time") or requested_time)
 
-    plug_access = parse_chatbot_plug_access(
-        extracted.get("plug_access")
-    )
+    plug_access = parse_chatbot_plug_access(extracted.get("plug_access"))
 
     if plug_access is None:
-        if any(term in message_lower for term in ("plug", "power outlet", "charging", "socket")):
+        if any(
+            term in message_lower
+            for term in ("plug", "power outlet", "charging", "socket")
+        ):
             plug_access = 1
         elif any(term in message_lower for term in ("without plugs", "no plugs")):
             plug_access = 0
 
-    accessibility_friendly = parse_chatbot_bool(
-        extracted.get("accessibility_friendly")
-    )
+    accessibility_friendly = parse_chatbot_bool(extracted.get("accessibility_friendly"))
 
-    if accessibility_friendly is None and any(term in message_lower for term in ("accessible", "accessibility", "wheelchair")):
+    if accessibility_friendly is None and any(
+        term in message_lower for term in ("accessible", "accessibility", "wheelchair")
+    ):
         accessibility_friendly = True
 
-    calls_allowed = parse_chatbot_bool(
-        extracted.get("calls_allowed")
-    )
+    calls_allowed = parse_chatbot_bool(extracted.get("calls_allowed"))
 
     if calls_allowed is None:
-        if any(term in message_lower for term in ("calls allowed", "take calls", "phone calls", "zoom calls", "meeting calls")):
+        if any(
+            term in message_lower
+            for term in (
+                "calls allowed",
+                "take calls",
+                "phone calls",
+                "zoom calls",
+                "meeting calls",
+            )
+        ):
             calls_allowed = True
-        elif any(term in message_lower for term in ("no calls", "without calls", "quiet calls")):
+        elif any(
+            term in message_lower
+            for term in ("no calls", "without calls", "quiet calls")
+        ):
             calls_allowed = False
 
-    wbe_certified = parse_chatbot_bool(
-        extracted.get("wbe_certified")
-    )
-    mbe_certified = parse_chatbot_bool(
-        extracted.get("mbe_certified")
-    )
-    vbe_certified = parse_chatbot_bool(
-        extracted.get("vbe_certified")
-    )
-    bcorp_certified = parse_chatbot_bool(
-        extracted.get("bcorp_certified")
-    )
-    lgbt_friendly = parse_chatbot_bool(
-        extracted.get("lgbt_friendly")
-    )
+    wbe_certified = parse_chatbot_bool(extracted.get("wbe_certified"))
+    mbe_certified = parse_chatbot_bool(extracted.get("mbe_certified"))
+    vbe_certified = parse_chatbot_bool(extracted.get("vbe_certified"))
+    bcorp_certified = parse_chatbot_bool(extracted.get("bcorp_certified"))
+    lgbt_friendly = parse_chatbot_bool(extracted.get("lgbt_friendly"))
 
-    if wbe_certified is None and any(term in message_lower for term in ("women owned", "wbe")):
+    if wbe_certified is None and any(
+        term in message_lower for term in ("women owned", "wbe")
+    ):
         wbe_certified = True
 
-    if mbe_certified is None and any(term in message_lower for term in ("minority owned", "mbe")):
+    if mbe_certified is None and any(
+        term in message_lower for term in ("minority owned", "mbe")
+    ):
         mbe_certified = True
 
-    if vbe_certified is None and any(term in message_lower for term in ("veteran owned", "vbe")):
+    if vbe_certified is None and any(
+        term in message_lower for term in ("veteran owned", "vbe")
+    ):
         vbe_certified = True
 
-    if bcorp_certified is None and any(term in message_lower for term in ("b corp", "bcorp")):
+    if bcorp_certified is None and any(
+        term in message_lower for term in ("b corp", "bcorp")
+    ):
         bcorp_certified = True
 
-    if lgbt_friendly is None and any(term in message_lower for term in ("lgbt", "lgbtq")):
+    if lgbt_friendly is None and any(
+        term in message_lower for term in ("lgbt", "lgbtq")
+    ):
         lgbt_friendly = True
 
     location = extracted.get("location")
     has_location_anchor_phrase = bool(
         re.search(
             r"\b(?:within\s+\d+(?:\.\d+)?\s*(?:km|kilometer|kilometers)\s+of|near|around|close to|in)\b",
-            message_lower
+            message_lower,
         )
     )
 
@@ -1322,7 +1080,7 @@ def infer_chatbot_search_parameters(
         location_match = re.search(
             r"(?:within\s+\d+(?:\.\d+)?\s*(?:km|kilometer|kilometers)\s+of|near|around|close to|in)\s+(.+?)(?:\s+that|\s+with|\s+and|\s+for|\s+where|\s+now|$)",
             message,
-            re.IGNORECASE
+            re.IGNORECASE,
         )
 
         if location_match:
@@ -1332,25 +1090,14 @@ def infer_chatbot_search_parameters(
         venue_name = location
         location = None
 
-    if (
-        radius_km is None
-        and location
-        and has_location_anchor_phrase
-    ):
+    if radius_km is None and location and has_location_anchor_phrase:
         radius_km = CHATBOT_DEFAULT_LOCATION_RADIUS_KM
 
-    candidate_venue_names = extract_chatbot_candidate_venue_names(
-        chat_history
-    )
+    candidate_venue_names = extract_chatbot_candidate_venue_names(chat_history)
     sort_by_distance = False
 
-    if is_chatbot_distance_comparison_follow_up(
-        message,
-        chat_history
-    ):
-        follow_up_location = extract_chatbot_follow_up_location(
-            message
-        )
+    if is_chatbot_distance_comparison_follow_up(message, chat_history):
+        follow_up_location = extract_chatbot_follow_up_location(message)
 
         if follow_up_location:
             venue_name = None
@@ -1377,13 +1124,11 @@ def infer_chatbot_search_parameters(
         lgbt_friendly=lgbt_friendly,
         busyness=busyness,
         time=requested_time,
-        sort_by_distance=sort_by_distance
+        sort_by_distance=sort_by_distance,
     )
 
 
-def has_chatbot_search_signal(
-    search_parameters: ChatbotSearchParameters
-):
+def has_chatbot_search_signal(search_parameters: ChatbotSearchParameters):
     return any(
         value is not None
         for value in (
@@ -1403,23 +1148,19 @@ def has_chatbot_search_signal(
             search_parameters.bcorp_certified,
             search_parameters.lgbt_friendly,
             search_parameters.busyness,
-            search_parameters.time
+            search_parameters.time,
         )
     )
 
 
-def has_chatbot_core_preferences(
-    search_parameters: ChatbotSearchParameters
-):
+def has_chatbot_core_preferences(search_parameters: ChatbotSearchParameters):
     return any(
         getattr(search_parameters, field_name) is not None
         for field_name in CHATBOT_REQUIRED_PREFERENCE_FIELDS
     )
 
 
-def get_missing_chatbot_core_preferences(
-    search_parameters: ChatbotSearchParameters
-):
+def get_missing_chatbot_core_preferences(search_parameters: ChatbotSearchParameters):
     missing_preferences = []
 
     if search_parameters.venue_type is None:
@@ -1434,12 +1175,8 @@ def get_missing_chatbot_core_preferences(
     return missing_preferences
 
 
-def build_chatbot_preference_follow_up(
-    search_parameters: ChatbotSearchParameters
-):
-    missing_preferences = get_missing_chatbot_core_preferences(
-        search_parameters
-    )
+def build_chatbot_preference_follow_up(search_parameters: ChatbotSearchParameters):
+    missing_preferences = get_missing_chatbot_core_preferences(search_parameters)
 
     if not missing_preferences:
         return None
@@ -1447,10 +1184,7 @@ def build_chatbot_preference_follow_up(
     if len(missing_preferences) == 1:
         preference_text = missing_preferences[0]
     elif len(missing_preferences) == 2:
-        preference_text = (
-            f"{missing_preferences[0]} and "
-            f"{missing_preferences[1]}"
-        )
+        preference_text = f"{missing_preferences[0]} and {missing_preferences[1]}"
     else:
         preference_text = (
             f"{missing_preferences[0]}, "
@@ -1465,31 +1199,20 @@ def build_chatbot_preference_follow_up(
     )
 
 
-def should_ask_for_chatbot_preferences(
-    search_parameters: ChatbotSearchParameters
-):
+def should_ask_for_chatbot_preferences(search_parameters: ChatbotSearchParameters):
     if is_chatbot_specific_venue_lookup(search_parameters):
         return False
 
-    if (
-        search_parameters.sort_by_distance
-        and search_parameters.candidate_venue_names
-    ):
+    if search_parameters.sort_by_distance and search_parameters.candidate_venue_names:
         return False
 
     if not has_chatbot_search_signal(search_parameters):
         return False
 
-    return bool(
-        get_missing_chatbot_core_preferences(
-            search_parameters
-        )
-    )
+    return bool(get_missing_chatbot_core_preferences(search_parameters))
 
 
-def has_chatbot_recommendation_filters(
-    search_parameters: ChatbotSearchParameters
-):
+def has_chatbot_recommendation_filters(search_parameters: ChatbotSearchParameters):
     return any(
         value is not None
         for value in (
@@ -1508,13 +1231,13 @@ def has_chatbot_recommendation_filters(
             search_parameters.bcorp_certified,
             search_parameters.lgbt_friendly,
             search_parameters.busyness,
-            search_parameters.time
+            search_parameters.time,
         )
     )
 
 
 def has_chatbot_strict_recommendation_filters(
-    search_parameters: ChatbotSearchParameters
+    search_parameters: ChatbotSearchParameters,
 ):
     return any(
         value is not None
@@ -1533,20 +1256,16 @@ def has_chatbot_strict_recommendation_filters(
             search_parameters.bcorp_certified,
             search_parameters.lgbt_friendly,
             search_parameters.busyness,
-            search_parameters.time
+            search_parameters.time,
         )
     )
 
 
-def is_chatbot_specific_venue_lookup(
-    search_parameters: ChatbotSearchParameters
-):
+def is_chatbot_specific_venue_lookup(search_parameters: ChatbotSearchParameters):
     return (
         search_parameters.venue_name is not None
         and not search_parameters.candidate_venue_names
-        and not has_chatbot_strict_recommendation_filters(
-            search_parameters
-        )
+        and not has_chatbot_strict_recommendation_filters(search_parameters)
     )
 
 
@@ -1554,61 +1273,36 @@ def get_chatbot_sort_key(
     venue: Venue,
     distance_km,
     busyness_prediction,
-    search_parameters: ChatbotSearchParameters
+    search_parameters: ChatbotSearchParameters,
 ):
     suitability_score = calculate_suitability_score(
         venue,
         hour=(
-            search_parameters.start_time.hour
-            if search_parameters.start_time
-            else None
+            search_parameters.start_time.hour if search_parameters.start_time else None
         ),
-        busyness=busyness_prediction
+        busyness=busyness_prediction,
     )
-    busyness_score = busyness_prediction.get(
-        "busyness_score"
-    )
+    busyness_score = busyness_prediction.get("busyness_score")
     rating = venue.rating if venue.rating is not None else -1
 
     return (
-        -(
-            suitability_score
-            if suitability_score is not None
-            else -1
-        ),
-        (
-            busyness_score
-            if busyness_score is not None
-            else 999999
-        ),
+        -(suitability_score if suitability_score is not None else -1),
+        (busyness_score if busyness_score is not None else 999999),
         -rating,
-        (
-            distance_km
-            if distance_km is not None
-            else 999999
-        ),
-        venue.venue_id
+        (distance_km if distance_km is not None else 999999),
+        venue.venue_id,
     )
 
 
 def is_suitability_sort(sort: str | None):
-    return sort in {
-        "recommended",
-        "suitability"
-    }
+    return sort in {"recommended", "suitability"}
 
 
 def public_discovery_state_filter():
-    return func.coalesce(
-        Venue.state,
-        "Active"
-    ) == "Active"
+    return func.coalesce(Venue.state, "Active") == "Active"
 
 
-def resolve_chatbot_location(
-    location: str | None,
-    db: Session
-):
+def resolve_chatbot_location(location: str | None, db: Session):
     if not location:
         return None
 
@@ -1619,17 +1313,10 @@ def resolve_chatbot_location(
 
     return (
         db.query(Venue)
+        .filter(public_discovery_state_filter())
         .filter(
-            public_discovery_state_filter()
-        )
-        .filter(
-            (
-                func.lower(Venue.name).like(f"%{search_term}%")
-            )
-            |
-            (
-                func.lower(Venue.borough).like(f"%{search_term}%")
-            )
+            (func.lower(Venue.name).like(f"%{search_term}%"))
+            | (func.lower(Venue.borough).like(f"%{search_term}%"))
         )
         .order_by(Venue.venue_id)
         .first()
@@ -1637,23 +1324,15 @@ def resolve_chatbot_location(
 
 
 def search_venues_for_chatbot(
-    search_parameters: ChatbotSearchParameters,
-    db: Session,
-    limit: int = 3
+    search_parameters: ChatbotSearchParameters, db: Session, limit: int = 3
 ):
-    query = db.query(Venue).filter(
-        public_discovery_state_filter()
-    )
+    query = db.query(Venue).filter(public_discovery_state_filter())
 
     if search_parameters.wifi is not None:
-        query = query.filter(
-            Venue.has_wifi == search_parameters.wifi
-        )
+        query = query.filter(Venue.has_wifi == search_parameters.wifi)
 
     if search_parameters.plug_access is not None:
-        query = query.filter(
-            Venue.plug_access == search_parameters.plug_access
-        )
+        query = query.filter(Venue.plug_access == search_parameters.plug_access)
 
     if search_parameters.accessibility_friendly is not None:
         query = query.filter(
@@ -1661,46 +1340,30 @@ def search_venues_for_chatbot(
         )
 
     if search_parameters.calls_allowed is not None:
-        query = query.filter(
-            Venue.calls_allowed == search_parameters.calls_allowed
-        )
+        query = query.filter(Venue.calls_allowed == search_parameters.calls_allowed)
 
     if search_parameters.wbe_certified is not None:
-        query = query.filter(
-            Venue.wbe_certified == search_parameters.wbe_certified
-        )
+        query = query.filter(Venue.wbe_certified == search_parameters.wbe_certified)
 
     if search_parameters.mbe_certified is not None:
-        query = query.filter(
-            Venue.mbe_certified == search_parameters.mbe_certified
-        )
+        query = query.filter(Venue.mbe_certified == search_parameters.mbe_certified)
 
     if search_parameters.vbe_certified is not None:
-        query = query.filter(
-            Venue.vbe_certified == search_parameters.vbe_certified
-        )
+        query = query.filter(Venue.vbe_certified == search_parameters.vbe_certified)
 
     if search_parameters.bcorp_certified is not None:
-        query = query.filter(
-            Venue.bcorp_certified == search_parameters.bcorp_certified
-        )
+        query = query.filter(Venue.bcorp_certified == search_parameters.bcorp_certified)
 
     if search_parameters.lgbt_friendly is not None:
-        query = query.filter(
-            Venue.lgbt_friendly == search_parameters.lgbt_friendly
-        )
+        query = query.filter(Venue.lgbt_friendly == search_parameters.lgbt_friendly)
 
     if search_parameters.venue_name:
         venue_name = search_parameters.venue_name.strip().lower()
-        query = query.filter(
-            func.lower(Venue.name).like(f"%{venue_name}%")
-        )
+        query = query.filter(func.lower(Venue.name).like(f"%{venue_name}%"))
 
     if search_parameters.candidate_venue_names:
         candidate_filters = [
-            func.lower(Venue.name).like(
-                f"%{candidate_name.strip().lower()}%"
-            )
+            func.lower(Venue.name).like(f"%{candidate_name.strip().lower()}%")
             for candidate_name in search_parameters.candidate_venue_names
             if candidate_name.strip()
         ]
@@ -1709,45 +1372,26 @@ def search_venues_for_chatbot(
             candidate_name_clause = candidate_filters[0]
 
             for candidate_filter in candidate_filters[1:]:
-                candidate_name_clause = (
-                    candidate_name_clause
-                    |
-                    candidate_filter
-                )
+                candidate_name_clause = candidate_name_clause | candidate_filter
 
-            query = query.filter(
-                candidate_name_clause
-            )
+            query = query.filter(candidate_name_clause)
 
     if search_parameters.venue_type:
         venue_type = search_parameters.venue_type.lower()
         query = query.filter(
-            (
-                func.lower(Venue.name).like(f"%{venue_type}%")
-            )
-            |
-            (
-                func.lower(Venue.cuisine_type).like(f"%{venue_type}%")
-            )
-            |
-            (
-                func.lower(Venue.cuisine_detail).like(f"%{venue_type}%")
-            )
+            (func.lower(Venue.name).like(f"%{venue_type}%"))
+            | (func.lower(Venue.cuisine_type).like(f"%{venue_type}%"))
+            | (func.lower(Venue.cuisine_detail).like(f"%{venue_type}%"))
         )
 
-    resolved_location = resolve_chatbot_location(
-        search_parameters.location,
-        db
-    )
+    resolved_location = resolve_chatbot_location(search_parameters.location, db)
 
     if search_parameters.location and resolved_location is None:
         return [], False
 
     venues_with_distance = []
     venues = query.all()
-    normalized_venue_name = normalize_chatbot_search_text(
-        search_parameters.venue_name
-    )
+    normalized_venue_name = normalize_chatbot_search_text(search_parameters.venue_name)
 
     for venue in venues:
         distance_km = None
@@ -1757,10 +1401,7 @@ def search_venues_for_chatbot(
                 continue
 
             distance_km = calculate_distance_km(
-                resolved_location.lat,
-                resolved_location.lon,
-                venue.lat,
-                venue.lon
+                resolved_location.lat, resolved_location.lon, venue.lat, venue.lon
             )
 
             if (
@@ -1769,23 +1410,13 @@ def search_venues_for_chatbot(
             ):
                 continue
 
-        venues_with_distance.append(
-            (
-                venue,
-                distance_km
-            )
-        )
+        venues_with_distance.append((venue, distance_km))
 
     if normalized_venue_name:
         exact_name_matches = [
-            (
-                venue,
-                distance_km
-            )
+            (venue, distance_km)
             for venue, distance_km in venues_with_distance
-            if normalize_chatbot_search_text(
-                venue.name
-            ) == normalized_venue_name
+            if normalize_chatbot_search_text(venue.name) == normalized_venue_name
         ]
 
         if exact_name_matches:
@@ -1800,31 +1431,21 @@ def search_venues_for_chatbot(
             key=lambda venue_with_distance: venue_with_distance[0].venue_id
         )
 
-    candidate_venues = [
-        venue
-        for venue, _ in venues_with_distance
-    ]
+    candidate_venues = [venue for venue, _ in venues_with_distance]
     busyness_predictions = get_busyness_predictions(
-        [
-            venue.venue_id
-            for venue in candidate_venues
-        ],
+        [venue.venue_id for venue in candidate_venues],
         selected_date=search_parameters.date,
-        selected_time=search_parameters.start_time
+        selected_time=search_parameters.start_time,
     )
 
     if search_parameters.busyness:
         venues_with_distance = [
-            (
-                venue,
-                distance_km
-            )
+            (venue, distance_km)
             for venue, distance_km in venues_with_distance
             if (
-                busyness_predictions.get(
-                    venue.venue_id,
-                    {}
-                ).get("busyness_label", "").lower()
+                busyness_predictions.get(venue.venue_id, {})
+                .get("busyness_label", "")
+                .lower()
                 == search_parameters.busyness.lower()
             )
         ]
@@ -1842,11 +1463,8 @@ def search_venues_for_chatbot(
             key=lambda venue_with_distance: get_chatbot_sort_key(
                 venue_with_distance[0],
                 venue_with_distance[1],
-                busyness_predictions.get(
-                    venue_with_distance[0].venue_id,
-                    {}
-                ),
-                search_parameters
+                busyness_predictions.get(venue_with_distance[0].venue_id, {}),
+                search_parameters,
             )
         )
 
@@ -1864,18 +1482,15 @@ def search_venues_for_chatbot(
                     if search_parameters.start_time
                     else None
                 ),
-                busyness=busyness_predictions.get(
-                    venue.venue_id
-                )
-            )
+                busyness=busyness_predictions.get(venue.venue_id),
+            ),
         )
         for venue, distance_km in selected_venues
     ], True
 
 
 def build_chatbot_venue_highlights(
-    venue: dict,
-    search_parameters: ChatbotSearchParameters
+    venue: dict, search_parameters: ChatbotSearchParameters
 ):
     highlights = []
 
@@ -1888,43 +1503,27 @@ def build_chatbot_venue_highlights(
     busyness_label = venue.get("busyness_label")
 
     if busyness_label:
-        highlights.append(
-            f"{busyness_label.lower()} busyness"
-        )
+        highlights.append(f"{busyness_label.lower()} busyness")
 
     if venue.get("distance_km") is not None:
-        highlights.append(
-            f"{venue['distance_km']:.1f} km away"
-        )
+        highlights.append(f"{venue['distance_km']:.1f} km away")
 
     if venue.get("hourly_price") is not None:
-        highlights.append(
-            f"${venue['hourly_price']:.2f}/hour"
-        )
+        highlights.append(f"${venue['hourly_price']:.2f}/hour")
 
-    if (
-        search_parameters.accessibility_friendly
-        and venue.get("accessibility_friendly")
-    ):
+    if search_parameters.accessibility_friendly and venue.get("accessibility_friendly"):
         highlights.append("accessible")
 
-    if (
-        search_parameters.calls_allowed
-        and venue.get("calls_allowed")
-    ):
+    if search_parameters.calls_allowed and venue.get("calls_allowed"):
         highlights.append("calls allowed")
 
     return highlights[:3]
 
 
 def format_chatbot_venue_summary(
-    venue: dict,
-    search_parameters: ChatbotSearchParameters
+    venue: dict, search_parameters: ChatbotSearchParameters
 ):
-    highlights = build_chatbot_venue_highlights(
-        venue,
-        search_parameters
-    )
+    highlights = build_chatbot_venue_highlights(venue, search_parameters)
     summary = venue["name"]
 
     if venue.get("borough"):
@@ -1939,99 +1538,69 @@ def format_chatbot_venue_summary(
 def build_chatbot_venue_response(
     search_parameters: ChatbotSearchParameters,
     venues: list[dict],
-    location_resolved: bool
+    location_resolved: bool,
 ):
     if not has_chatbot_search_signal(search_parameters):
         return (
             "Here are three strong default picks based on suitability, lower busyness, and rating.",
-            None
+            None,
         )
 
     if should_ask_for_chatbot_preferences(search_parameters):
-        follow_up_question = build_chatbot_preference_follow_up(
-            search_parameters
-        )
+        follow_up_question = build_chatbot_preference_follow_up(search_parameters)
 
-        return (
-            follow_up_question,
-            follow_up_question
-        )
+        return (follow_up_question, follow_up_question)
 
     if not location_resolved:
         return (
             "I could not identify that location from the current venue data. Could you try a nearby venue name or borough?",
-            "Could you try a nearby venue name or borough?"
+            "Could you try a nearby venue name or borough?",
         )
 
     if not venues:
         if search_parameters.venue_name:
             return (
                 f"I could not find a venue matching '{search_parameters.venue_name}'. Try another venue name or relax the other filters.",
-                None
+                None,
             )
 
         return (
             "I could not find matching venues. Try increasing the radius or relaxing one of the filters.",
-            None
+            None,
         )
 
-    top_venue_summary = format_chatbot_venue_summary(
-        venues[0],
-        search_parameters
-    )
+    top_venue_summary = format_chatbot_venue_summary(venues[0], search_parameters)
     additional_venues = [
-        format_chatbot_venue_summary(
-            venue,
-            search_parameters
-        )
-        for venue in venues[1:3]
+        format_chatbot_venue_summary(venue, search_parameters) for venue in venues[1:3]
     ]
 
     if is_chatbot_specific_venue_lookup(search_parameters):
         if len(venues) == 1:
-            return (
-                f"I found {top_venue_summary}.",
-                None
-            )
+            return (f"I found {top_venue_summary}.", None)
 
-        other_venues_text = ", ".join(
-            additional_venues
-        )
+        other_venues_text = ", ".join(additional_venues)
 
         if other_venues_text:
             return (
                 f"I found {len(venues)} venues matching '{search_parameters.venue_name}'. The best fit is {top_venue_summary}. Other matches: {other_venues_text}.",
-                None
+                None,
             )
 
         return (
             f"I found {len(venues)} venues matching '{search_parameters.venue_name}'. The best fit is {top_venue_summary}.",
-            None
+            None,
         )
 
-    recommendation_summaries = ", ".join(
-        [
-            top_venue_summary,
-            *additional_venues
-        ]
-    )
+    recommendation_summaries = ", ".join([top_venue_summary, *additional_venues])
 
-    return (
-        f"Top matches: {recommendation_summaries}.",
-        None
-    )
+    return (f"Top matches: {recommendation_summaries}.", None)
 
 
-def call_gemini_chatbot(
-    message: str
-):
+def call_gemini_chatbot(message: str):
     api_key = os.getenv("GEMINI_API_KEY")
 
     if not api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="Gemini API key is not configured"
-        )
+        raise HTTPException(status_code=503, detail="Gemini API key is not configured")
 
     model = get_gemini_model()
     url = (
@@ -2039,141 +1608,67 @@ def call_gemini_chatbot(
         f"v1beta/models/{model}:generateContent"
     )
     payload = {
-        "systemInstruction": {
-            "parts": [
-                {
-                    "text": GEMINI_SYSTEM_INSTRUCTION
-                }
-            ]
-        },
-        "contents": [
-            {
-                "role": "user",
-                "parts": [
-                    {
-                        "text": message
-                    }
-                ]
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.4,
-            "maxOutputTokens": 512
-        }
+        "systemInstruction": {"parts": [{"text": GEMINI_SYSTEM_INSTRUCTION}]},
+        "contents": [{"role": "user", "parts": [{"text": message}]}],
+        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 512},
     }
 
     try:
-        response = httpx.post(
-            url,
-            params={
-                "key": api_key
-            },
-            json=payload,
-            timeout=15
-        )
+        response = httpx.post(url, params={"key": api_key}, json=payload, timeout=15)
         response.raise_for_status()
         data = response.json()
     except httpx.HTTPError as exc:
         raise HTTPException(
-            status_code=502,
-            detail="Gemini API request failed"
+            status_code=502, detail="Gemini API request failed"
         ) from exc
 
     candidates = data.get("candidates") or []
-    parts = (
-        candidates[0]
-        .get("content", {})
-        .get("parts", [])
-        if candidates else []
-    )
-    text_parts = [
-        part.get("text", "")
-        for part in parts
-        if part.get("text")
-    ]
+    parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+    text_parts = [part.get("text", "") for part in parts if part.get("text")]
     chatbot_response = "\n".join(text_parts).strip()
 
     if not chatbot_response:
         raise HTTPException(
-            status_code=502,
-            detail="Gemini API returned an empty response"
+            status_code=502, detail="Gemini API returned an empty response"
         )
 
     return chatbot_response
 
 
 def calculate_distance_km(
-    origin_lat: float,
-    origin_lon: float,
-    venue_lat: float,
-    venue_lon: float
+    origin_lat: float, origin_lon: float, venue_lat: float, venue_lon: float
 ):
     earth_radius_km = 6371.0
 
-    lat_delta = radians(
-        venue_lat - origin_lat
-    )
-    lon_delta = radians(
-        venue_lon - origin_lon
-    )
+    lat_delta = radians(venue_lat - origin_lat)
+    lon_delta = radians(venue_lon - origin_lon)
 
-    origin_lat_rad = radians(
-        origin_lat
-    )
-    venue_lat_rad = radians(
-        venue_lat
-    )
+    origin_lat_rad = radians(origin_lat)
+    venue_lat_rad = radians(venue_lat)
 
     haversine_value = (
-        sin(
-            lat_delta / 2
-        ) ** 2
-        + cos(
-            origin_lat_rad
-        )
-        * cos(
-            venue_lat_rad
-        )
-        * sin(
-            lon_delta / 2
-        ) ** 2
+        sin(lat_delta / 2) ** 2
+        + cos(origin_lat_rad) * cos(venue_lat_rad) * sin(lon_delta / 2) ** 2
     )
 
-    return 2 * earth_radius_km * asin(
-        sqrt(
-            haversine_value
-        )
-    )
+    return 2 * earth_radius_km * asin(sqrt(haversine_value))
 
-def add_duration_to_time(
-    start_time_value: time,
-    duration_hours: float
-):
-    start_datetime = datetime.combine(
-        date.today(),
-        start_time_value
-    )
 
-    end_datetime = start_datetime + timedelta(
-        hours=duration_hours
-    )
+def add_duration_to_time(start_time_value: time, duration_hours: float):
+    start_datetime = datetime.combine(get_current_local_date(), start_time_value)
+
+    end_datetime = start_datetime + timedelta(hours=duration_hours)
 
     return end_datetime.time()
 
 
-def get_booking_category(
-    booking: Booking,
-    current_datetime: datetime
-):
+def get_booking_category(booking: Booking, current_datetime: datetime):
     status = (booking.status or "").lower()
 
     if status in {"cancelled", "canceled", "payment_failed"}:
         return "cancelled"
 
-    booking_end = datetime.combine(
-        booking.booking_date,
-        booking.end_time
-    )
+    booking_end = datetime.combine(booking.booking_date, booking.end_time)
 
     if status == "completed" or booking_end < current_datetime:
         return "completed"
@@ -2182,22 +1677,14 @@ def get_booking_category(
 
 
 def serialize_amenity_tags(tags: list[str]):
-    return ",".join(
-        tag.strip()
-        for tag in tags
-        if tag.strip()
-    )
+    return ",".join(tag.strip() for tag in tags if tag.strip())
 
 
 def deserialize_amenity_tags(tags: str | None):
     if not tags:
         return []
 
-    return [
-        tag.strip()
-        for tag in tags.split(",")
-        if tag.strip()
-    ]
+    return [tag.strip() for tag in tags.split(",") if tag.strip()]
 
 
 def serialize_created_venue(venue: Venue):
@@ -2210,21 +1697,16 @@ def serialize_created_venue(venue: Venue):
         "borough": venue.borough,
         "opening_hours": venue.opening_hours,
         "seat_capacity": venue.seat_capacity,
-        "amenity_tags": deserialize_amenity_tags(
-            venue.amenity_tags
-        ),
+        "amenity_tags": deserialize_amenity_tags(venue.amenity_tags),
         "rules_text": venue.rules_text,
         "has_wifi": venue.has_wifi,
         "plug_access": venue.plug_access,
-        "hourly_price": venue.hourly_price
+        "hourly_price": venue.hourly_price,
     }
 
 
 def booking_datetime(booking: Booking):
-    return datetime.combine(
-        booking.booking_date,
-        booking.start_time
-    )
+    return datetime.combine(booking.booking_date, booking.start_time)
 
 
 def serialize_user_booking(booking: Booking, venue: Venue | None, status: str):
@@ -2240,39 +1722,25 @@ def serialize_user_booking(booking: Booking, venue: Venue | None, status: str):
         "order_id": booking.order_id,
         "payment_status": booking.payment_status,
         "lat": venue.lat if venue else None,
-        "lon": venue.lon if venue else None
+        "lon": venue.lon if venue else None,
     }
 
 
-def calculate_percentage_delta(
-    current_value: int | float,
-    previous_value: int | float
-):
+def calculate_percentage_delta(current_value: float, previous_value: float):
     if previous_value == 0:
         return None
 
-    return round(
-        ((current_value - previous_value) / previous_value) * 100,
-        2
-    )
+    return round(((current_value - previous_value) / previous_value) * 100, 2)
 
 
 def calculate_booking_duration_hours(booking: Booking):
-    start_datetime = datetime.combine(
-        booking.booking_date,
-        booking.start_time
-    )
-    end_datetime = datetime.combine(
-        booking.booking_date,
-        booking.end_time
-    )
+    start_datetime = datetime.combine(booking.booking_date, booking.start_time)
+    end_datetime = datetime.combine(booking.booking_date, booking.end_time)
 
     if end_datetime < start_datetime:
         end_datetime = end_datetime + timedelta(days=1)
 
-    return (
-        end_datetime - start_datetime
-    ).total_seconds() / 3600
+    return (end_datetime - start_datetime).total_seconds() / 3600
 
 
 def calculate_booking_revenue(booking: Booking, venue: Venue | None):
@@ -2286,31 +1754,23 @@ def calculate_booking_revenue(booking: Booking, venue: Venue | None):
     )
 
 
-def get_dashboard_kpi_values(
-    db: Session,
-    window_start: date,
-    window_end: date
-):
+def get_dashboard_kpi_values(db: Session, window_start: date, window_end: date):
     booking_rows = (
         db.query(Booking, Venue)
-        .outerjoin(
-            Venue,
-            Booking.venue_id == Venue.venue_id
-        )
+        .outerjoin(Venue, Booking.venue_id == Venue.venue_id)
         .filter(Booking.booking_date >= window_start)
         .filter(Booking.booking_date < window_end)
         .filter(
-            func.coalesce(
-                func.lower(Booking.status),
-                "confirmed"
-            ).notin_({"cancelled", "canceled"})
+            func.coalesce(func.lower(Booking.status), "confirmed").notin_(
+                {"cancelled", "canceled"}
+            )
         )
         .all()
     )
 
     active_venue_ids = [
         venue_id
-        for venue_id, in (
+        for (venue_id,) in (
             db.query(AvailabilitySlot.venue_id)
             .filter(AvailabilitySlot.date >= window_start)
             .filter(AvailabilitySlot.date < window_end)
@@ -2334,70 +1794,43 @@ def get_dashboard_kpi_values(
         "total_reservations": len(booking_rows),
         "monthly_revenue": round(
             sum(
-                calculate_booking_revenue(
-                    booking,
-                    venue
-                )
+                calculate_booking_revenue(booking, venue)
                 for booking, venue in booking_rows
             ),
-            2
+            2,
         ),
         "active_properties_count": len(active_venue_ids),
         "average_user_rating": (
-            round(
-                average_rating,
-                2
-            )
-            if average_rating is not None
-            else 0
-        )
+            round(average_rating, 2) if average_rating is not None else 0
+        ),
     }
 
 
-def build_kpi_metric(
-    current_value: int | float,
-    previous_value: int | float
-):
+def build_kpi_metric(current_value: float, previous_value: float):
     return {
         "value": current_value,
-        "delta_percent": calculate_percentage_delta(
-            current_value,
-            previous_value
-        )
+        "delta_percent": calculate_percentage_delta(current_value, previous_value),
     }
 
 
 def get_admin_completed_checkout_revenues(db: Session):
     booking_rows = (
         db.query(Booking, Venue)
-        .outerjoin(
-            Venue,
-            Booking.venue_id == Venue.venue_id
-        )
+        .outerjoin(Venue, Booking.venue_id == Venue.venue_id)
+        .filter(func.coalesce(func.lower(Booking.payment_status), "") == "paid")
         .filter(
-            func.coalesce(
-                func.lower(Booking.payment_status),
-                ""
-            ) == "paid"
-        )
-        .filter(
-            func.coalesce(
-                func.lower(Booking.status),
-                "confirmed"
-            ).notin_(["cancelled", "canceled"])
+            func.coalesce(func.lower(Booking.status), "confirmed").notin_(
+                ["cancelled", "canceled"]
+            )
         )
         .all()
     )
 
     return round(
         sum(
-            calculate_booking_revenue(
-                booking,
-                venue
-            )
-            for booking, venue in booking_rows
+            calculate_booking_revenue(booking, venue) for booking, venue in booking_rows
         ),
-        2
+        2,
     )
 
 
@@ -2405,10 +1838,9 @@ def get_admin_incident_counts(db: Session):
     cancelled_bookings = (
         db.query(func.count(Booking.id))
         .filter(
-            func.coalesce(
-                func.lower(Booking.status),
-                "confirmed"
-            ).in_(["cancelled", "canceled"])
+            func.coalesce(func.lower(Booking.status), "confirmed").in_(
+                ["cancelled", "canceled"]
+            )
         )
         .scalar()
         or 0
@@ -2416,10 +1848,7 @@ def get_admin_incident_counts(db: Session):
     refund_pending_bookings = (
         db.query(func.count(Booking.id))
         .filter(
-            func.coalesce(
-                func.lower(Booking.payment_status),
-                ""
-            ) == "refund_pending"
+            func.coalesce(func.lower(Booking.payment_status), "") == "refund_pending"
         )
         .scalar()
         or 0
@@ -2434,15 +1863,11 @@ def get_admin_incident_counts(db: Session):
     return {
         "cancelled_bookings": cancelled_bookings,
         "refund_pending_bookings": refund_pending_bookings,
-        "unavailable_slots": unavailable_slots
+        "unavailable_slots": unavailable_slots,
     }
 
 
-def serialize_provider_arrival(
-    booking: Booking,
-    user: User,
-    venue: Venue | None
-):
+def serialize_provider_arrival(booking: Booking, user: User, venue: Venue | None):
     return {
         "booking_id": booking.id,
         "client_full_name": user.full_name,
@@ -2454,20 +1879,11 @@ def serialize_provider_arrival(
         "end_time": booking.end_time,
         "seats_reserved": booking.seats_reserved,
         "space_label": venue.name if venue else None,
-        "fee_estimate": round(
-            calculate_booking_revenue(
-                booking,
-                venue
-            ),
-            2
-        )
+        "fee_estimate": round(calculate_booking_revenue(booking, venue), 2),
     }
 
 
-def slot_has_active_booking(
-    db: Session,
-    slot: AvailabilitySlot
-):
+def slot_has_active_booking(db: Session, slot: AvailabilitySlot):
     return (
         db.query(Booking)
         .filter(Booking.venue_id == slot.venue_id)
@@ -2475,10 +1891,9 @@ def slot_has_active_booking(
         .filter(Booking.start_time < slot.end_time)
         .filter(Booking.end_time > slot.start_time)
         .filter(
-            func.coalesce(
-                func.lower(Booking.status),
-                "confirmed"
-            ).notin_({"cancelled", "canceled", "completed"})
+            func.coalesce(func.lower(Booking.status), "confirmed").notin_(
+                {"cancelled", "canceled", "completed"}
+            )
         )
         .first()
         is not None
@@ -2486,27 +1901,13 @@ def slot_has_active_booking(
 
 
 def is_active_booking_status(status: str | None):
-    return (
-        status
-        or "confirmed"
-    ).lower() not in {
-        "cancelled",
-        "canceled",
-        "completed"
-    }
+    return (status or "confirmed").lower() not in {"cancelled", "canceled", "completed"}
 
 
-def get_verified_survey_metric(
-    db: Session,
-    venue_id: str,
-    metric_column
-):
+def get_verified_survey_metric(db: Session, venue_id: str, metric_column):
     metric_values = (
         db.query(metric_column)
-        .join(
-            Booking,
-            PostBookingReview.booking_id == Booking.id
-        )
+        .join(Booking, PostBookingReview.booking_id == Booking.id)
         .filter(PostBookingReview.venue_id == venue_id)
         .filter(PostBookingReview.verified.is_(True))
         .filter(func.lower(Booking.status) == "completed")
@@ -2514,28 +1915,18 @@ def get_verified_survey_metric(
         .all()
     )
 
-    values = [
-        value
-        for value, in metric_values
-    ]
+    values = [value for (value,) in metric_values]
 
     if len(values) < 3:
         return "Too few ratings"
 
-    return round(
-        sum(values) / len(values),
-        2
-    )
+    return round(sum(values) / len(values), 2)
 
 
 def calculate_review_star_rating(review: PostBookingReview):
     score_values = [
         score
-        for score in (
-            review.wifi_score,
-            review.plug_score,
-            review.quietness_score
-        )
+        for score in (review.wifi_score, review.plug_score, review.quietness_score)
         if score is not None
     ]
 
@@ -2545,16 +1936,10 @@ def calculate_review_star_rating(review: PostBookingReview):
     return sum(score_values) / len(score_values)
 
 
-def refresh_venue_rating(
-    db: Session,
-    venue_id: str
-):
+def refresh_venue_rating(db: Session, venue_id: str):
     review_rows = (
         db.query(PostBookingReview)
-        .join(
-            Booking,
-            PostBookingReview.booking_id == Booking.id
-        )
+        .join(Booking, PostBookingReview.booking_id == Booking.id)
         .filter(PostBookingReview.venue_id == venue_id)
         .filter(PostBookingReview.verified.is_(True))
         .filter(func.lower(Booking.status) == "completed")
@@ -2563,28 +1948,15 @@ def refresh_venue_rating(
 
     review_ratings = [
         rating
-        for rating in (
-            calculate_review_star_rating(review)
-            for review in review_rows
-        )
+        for rating in (calculate_review_star_rating(review) for review in review_rows)
         if rating is not None
     ]
 
     aggregate_rating = (
-        round(
-            sum(review_ratings) / len(review_ratings),
-            2
-        )
-        if review_ratings
-        else None
+        round(sum(review_ratings) / len(review_ratings), 2) if review_ratings else None
     )
 
-    venue = (
-        db.query(Venue)
-        .filter(Venue.venue_id == venue_id)
-        .with_for_update()
-        .first()
-    )
+    venue = db.query(Venue).filter(Venue.venue_id == venue_id).with_for_update().first()
 
     if venue is not None:
         venue.rating = aggregate_rating
@@ -2598,85 +1970,51 @@ def has_required_contiguous_seats(
     requested_date: date,
     requested_start_time: time,
     requested_end_time: time,
-    seats_required: int
+    seats_required: int,
 ):
     slots = (
         db.query(AvailabilitySlot)
-        .filter(
-            AvailabilitySlot.venue_id == venue_id
-        )
-        .filter(
-            AvailabilitySlot.date == requested_date
-        )
-        .filter(
-            AvailabilitySlot.available.is_(True)
-        )
-        .filter(
-            AvailabilitySlot.end_time > requested_start_time
-        )
-        .filter(
-            AvailabilitySlot.start_time < requested_end_time
-        )
+        .filter(AvailabilitySlot.venue_id == venue_id)
+        .filter(AvailabilitySlot.date == requested_date)
+        .filter(AvailabilitySlot.available.is_(True))
+        .filter(AvailabilitySlot.end_time > requested_start_time)
+        .filter(AvailabilitySlot.start_time < requested_end_time)
         .all()
     )
 
     bookings = (
         db.query(Booking)
+        .filter(Booking.venue_id == venue_id)
+        .filter(Booking.booking_date == requested_date)
+        .filter(Booking.end_time > requested_start_time)
+        .filter(Booking.start_time < requested_end_time)
         .filter(
-            Booking.venue_id == venue_id
-        )
-        .filter(
-            Booking.booking_date == requested_date
-        )
-        .filter(
-            Booking.end_time > requested_start_time
-        )
-        .filter(
-            Booking.start_time < requested_end_time
-        )
-        .filter(
-            func.coalesce(
-                func.lower(Booking.status),
-                "confirmed"
-            ).notin_({"cancelled", "canceled"})
+            func.coalesce(func.lower(Booking.status), "confirmed").notin_(
+                {"cancelled", "canceled"}
+            )
         )
         .all()
     )
 
-    boundaries = {
-        requested_start_time,
-        requested_end_time
-    }
+    boundaries = {requested_start_time, requested_end_time}
 
     for slot in slots:
         if slot.start_time > requested_start_time:
-            boundaries.add(
-                slot.start_time
-            )
+            boundaries.add(slot.start_time)
 
         if slot.end_time < requested_end_time:
-            boundaries.add(
-                slot.end_time
-            )
+            boundaries.add(slot.end_time)
 
     for booking in bookings:
         if booking.start_time > requested_start_time:
-            boundaries.add(
-                booking.start_time
-            )
+            boundaries.add(booking.start_time)
 
         if booking.end_time < requested_end_time:
-            boundaries.add(
-                booking.end_time
-            )
+            boundaries.add(booking.end_time)
 
-    sorted_boundaries = sorted(
-        boundaries
-    )
+    sorted_boundaries = sorted(boundaries)
 
-    for index in range(
-        len(sorted_boundaries) - 1
-    ):
+    for index in range(len(sorted_boundaries) - 1):
         segment_start = sorted_boundaries[index]
         segment_end = sorted_boundaries[index + 1]
 
@@ -2686,10 +2024,7 @@ def has_required_contiguous_seats(
         covering_slot = None
 
         for slot in slots:
-            if (
-                slot.start_time <= segment_start
-                and slot.end_time >= segment_end
-            ):
+            if slot.start_time <= segment_start and slot.end_time >= segment_end:
                 covering_slot = slot
                 break
 
@@ -2699,10 +2034,7 @@ def has_required_contiguous_seats(
         reserved_seats = sum(
             booking.seats_reserved
             for booking in bookings
-            if (
-                booking.start_time < segment_end
-                and booking.end_time > segment_start
-            )
+            if (booking.start_time < segment_end and booking.end_time > segment_start)
         )
 
         remaining_seats = covering_slot.available_seats - reserved_seats
@@ -2712,6 +2044,7 @@ def has_required_contiguous_seats(
 
     return True
 
+
 # CORS Whitelist
 origins = [
     # Local development ports for the frontend
@@ -2719,8 +2052,7 @@ origins = [
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    
-    # Production frontend domains 
+    # Production frontend domains
     "https://plugandwifi.xyz",
     "https://www.plugandwifi.xyz",
 ]
@@ -2728,20 +2060,21 @@ origins = [
 # Inject CORSMiddleware into the FastAPI application
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,          # Restrict cross-origin access to the specified whitelist
-    allow_credentials=True,         # Allow cookies, session headers, or Authorization headers
-    allow_methods=["*"],            # Allow all standard HTTP methods (GET, POST, PUT, DELETE, etc.)
-    allow_headers=["*"],            # Allow all incoming HTTP headers (e.g., Bearer JWT tokens)
+    allow_origins=origins,  # Restrict cross-origin access to the specified whitelist
+    allow_credentials=True,  # Allow cookies, session headers, or Authorization headers
+    allow_methods=[
+        "*"
+    ],  # Allow all standard HTTP methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],  # Allow all incoming HTTP headers (e.g., Bearer JWT tokens)
 )
+
 
 @app.get("/")
 def home():
 
-    return {
-        "message": "Let's get A+!!"
-    }
-    
-    
+    return {"message": "Let's get A+!!"}
+
+
 # =====================================================================
 # CLOUD RUN STARTUP PROBE ENDPOINT
 # =====================================================================
@@ -2751,11 +2084,9 @@ def ping():
     Lightweight startup probe endpoint.
     Returns 'healthy' status to confirm the ASGI server is live.
     """
-    return {
-        "status": "healthy"
-    }
-    
-    
+    return {"status": "healthy"}
+
+
 # =============================================
 # SYSTEM INFRASTRUCTURE MONITORING ENDPOINTS
 # =============================================
@@ -2763,19 +2094,16 @@ def ping():
 def health_check(db: Session = Depends(get_db)):
     """
     Production-ready system health check endpoint.
-    Executes a low-overhead 'SELECT 1' raw query via SQLAlchemy to explicitly 
+    Executes a low-overhead 'SELECT 1' raw query via SQLAlchemy to explicitly
     verify database instance connection boundaries.
     """
     try:
         # Perform explicit baseline relational connection execution check
         db.execute(text("SELECT 1"))
-        
+
         # Success payload confirming stable cross-tier networking operations
-        return {
-            "status": "healthy",
-            "database": "PostgreSQL connected successfully"
-        }
-    except Exception as database_error:
+        return {"status": "healthy", "database": "PostgreSQL connected successfully"}
+    except SQLAlchemyError as database_error:
         # Intercept any broken handshakes, pool starvation, or credential failures
         # Instantly raise HTTP 500 to alert cloud infrastructure runtime handlers
         raise HTTPException(
@@ -2783,66 +2111,43 @@ def health_check(db: Session = Depends(get_db)):
             detail={
                 "status": "unhealthy",
                 "error": str(database_error),
-                "message": "Critical structural failure: Cloud SQL database is unreachable."
-            }
+                "message": "Critical structural failure: Cloud SQL database is unreachable.",
+            },
         )
 
 
 @app.get("/api/diagnostics/busyness", status_code=200)
-def busyness_diagnostics(
-    sample_venue_id: str | None = None
-):
+def busyness_diagnostics(sample_venue_id: str | None = None):
     """
     Checks whether the busyness model artifact and venue-zone mapping are
     available. This is intentionally separate from /api/health because DB
     health does not prove ML prediction readiness.
     """
-    return get_busyness_diagnostics(
-        sample_venue_id
-    )
+    return get_busyness_diagnostics(sample_venue_id)
 
 
-@app.post(
-    "/api/chatbot/recommend",
-    response_model=ChatbotRecommendResponse
-)
+@app.post("/api/chatbot/recommend", response_model=ChatbotRecommendResponse)
 def recommend_workspace(
-    payload: ChatbotRecommendRequest,
-    db: Session = Depends(get_db)
+    payload: ChatbotRecommendRequest, db: Session = Depends(get_db)
 ):
     message = payload.message.strip()
-    chat_history = normalize_chatbot_history(
-        payload.chat_history
-    )
+    chat_history = normalize_chatbot_history(payload.chat_history)
 
     if not message:
-        raise HTTPException(
-            status_code=422,
-            detail="message must not be blank"
-        )
+        raise HTTPException(status_code=422, detail="message must not be blank")
 
-    search_parameters = infer_chatbot_search_parameters(
-        message,
-        chat_history
-    )
+    search_parameters = infer_chatbot_search_parameters(message, chat_history)
     if (
         not has_chatbot_search_signal(search_parameters)
         or is_chatbot_specific_venue_lookup(search_parameters)
-        or not should_ask_for_chatbot_preferences(
-            search_parameters
-        )
+        or not should_ask_for_chatbot_preferences(search_parameters)
     ):
-        venues, location_resolved = search_venues_for_chatbot(
-            search_parameters,
-            db
-        )
+        venues, location_resolved = search_venues_for_chatbot(search_parameters, db)
     else:
         venues, location_resolved = [], True
 
     chatbot_response, follow_up_question = build_chatbot_venue_response(
-        search_parameters,
-        venues,
-        location_resolved
+        search_parameters, venues, location_resolved
     )
 
     return {
@@ -2850,7 +2155,7 @@ def recommend_workspace(
         "model": get_gemini_model(),
         "search_parameters": search_parameters,
         "venues": venues,
-        "follow_up_question": follow_up_question
+        "follow_up_question": follow_up_question,
     }
 
 
@@ -2858,30 +2163,21 @@ def recommend_workspace(
 # CORE AUTHENTICATION LOGIC INTERFACES
 # ==========================================
 
+
 @app.post("/api/auth/register")
-def register_user(
-    payload: UserRegister,
-    db: Session = Depends(get_db)
-):
-    existing_user = db.query(User).filter(
-        User.email == payload.email
-    ).first()
+def register_user(payload: UserRegister, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.email == payload.email).first()
 
     if existing_user:
-        raise HTTPException(
-            status_code = 400,
-            detail = "Email already exists"
-        )
+        raise HTTPException(status_code=400, detail="Email already exists")
 
-    hashed_pw = hash_password(
-        payload.password
-    )
+    hashed_pw = hash_password(payload.password)
 
     new_user = User(
-        full_name = payload.full_name,
-        email = payload.email,
-        password_hash = hashed_pw,
-        role = payload.role
+        full_name=payload.full_name,
+        email=payload.email,
+        password_hash=hashed_pw,
+        role=payload.role,
     )
 
     db.add(new_user)
@@ -2890,83 +2186,50 @@ def register_user(
 
     db.refresh(new_user)
 
-    return {
-        "message":
-        "User created successfully"
-    }
+    return {"message": "User created successfully"}
+
 
 @app.post("/api/auth/login")
-def login_user(
-    payload: UserLogin,
-    db: Session = Depends(get_db)
-):
+def login_user(payload: UserLogin, db: Session = Depends(get_db)):
 
-    user = db.query(User).filter(
-        User.email == payload.email
-    ).first()
+    user = db.query(User).filter(User.email == payload.email).first()
 
     if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid email or password"
-        )
-
-    password_correct = verify_password(
-        payload.password,
-        user.password_hash
-    )
+    password_correct = verify_password(payload.password, user.password_hash)
 
     if not password_correct:
-
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid email or password"
-        )
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
     access_token = create_access_token(
-        {
-            "user_id": user.id,
-            "email": user.email,
-            "role": user.role
-        }
+        {"user_id": user.id, "email": user.email, "role": user.role}
     )
     refresh_token, refresh_session = issue_refresh_session(
-        user_id=user.id,
-        remember_me=payload.remember_me
+        user_id=user.id, remember_me=payload.remember_me
     )
 
     db.add(refresh_session)
     db.commit()
 
     return {
-
         "access_token": access_token,
-
         "refresh_token": refresh_token,
-
         "token_type": "bearer",
-
         "refresh_token_expires_at": refresh_session.expires_at,
-
         "user": {
             "user_id": user.id,
             "full_name": user.full_name,
             "email": user.email,
-            "role": user.role
-        }
+            "role": user.role,
+        },
     }
 
 
 @app.post("/api/auth/refresh")
-def refresh_access_token(
-    payload: RefreshTokenRequest,
-    db: Session = Depends(get_db)
-):
-    current_time = datetime.utcnow()
-    token_hash = hash_refresh_token(
-        payload.refresh_token
-    )
+def refresh_access_token(payload: RefreshTokenRequest, db: Session = Depends(get_db)):
+    current_time = get_current_utc_naive_datetime()
+    token_hash = hash_refresh_token(payload.refresh_token)
     refresh_session = (
         db.query(RefreshSession)
         .filter(RefreshSession.token_hash == token_hash)
@@ -2975,57 +2238,39 @@ def refresh_access_token(
     )
 
     if refresh_session is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid refresh token"
-        )
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
 
     if refresh_session.revoked_at is not None:
         (
             db.query(RefreshSession)
-            .filter(
-                RefreshSession.family_id
-                == refresh_session.family_id
-            )
+            .filter(RefreshSession.family_id == refresh_session.family_id)
             .filter(RefreshSession.revoked_at.is_(None))
             .update(
-                {RefreshSession.revoked_at: current_time},
-                synchronize_session=False
+                {RefreshSession.revoked_at: current_time}, synchronize_session=False
             )
         )
         db.commit()
 
-        raise HTTPException(
-            status_code=401,
-            detail="Refresh token reuse detected"
-        )
+        raise HTTPException(status_code=401, detail="Refresh token reuse detected")
 
     if refresh_session.expires_at <= current_time:
         refresh_session.revoked_at = current_time
         db.commit()
 
-        raise HTTPException(
-            status_code=401,
-            detail="Refresh token has expired"
-        )
+        raise HTTPException(status_code=401, detail="Refresh token has expired")
 
-    user = db.query(User).filter(
-        User.id == refresh_session.user_id
-    ).first()
+    user = db.query(User).filter(User.id == refresh_session.user_id).first()
 
     if user is None:
         refresh_session.revoked_at = current_time
         db.commit()
 
-        raise HTTPException(
-            status_code=401,
-            detail="Refresh token user not found"
-        )
+        raise HTTPException(status_code=401, detail="Refresh token user not found")
 
     new_refresh_token, new_session = issue_refresh_session(
         user_id=user.id,
         family_id=refresh_session.family_id,
-        expires_at=refresh_session.expires_at
+        expires_at=refresh_session.expires_at,
     )
     refresh_session.revoked_at = current_time
     refresh_session.replaced_by_token_hash = new_session.token_hash
@@ -3034,62 +2279,47 @@ def refresh_access_token(
     db.commit()
 
     access_token = create_access_token(
-        {
-            "user_id": user.id,
-            "email": user.email,
-            "role": user.role
-        }
+        {"user_id": user.id, "email": user.email, "role": user.role}
     )
 
     return {
         "access_token": access_token,
         "refresh_token": new_refresh_token,
         "token_type": "bearer",
-        "refresh_token_expires_at": new_session.expires_at
+        "refresh_token_expires_at": new_session.expires_at,
     }
 
 
 @app.post("/api/auth/logout")
-def logout_user(
-    payload: LogoutRequest | None = None,
-    db: Session = Depends(get_db)
-):
+def logout_user(payload: LogoutRequest | None = None, db: Session = Depends(get_db)):
     if payload is not None:
-        token_hash = hash_refresh_token(
-            payload.refresh_token
+        token_hash = hash_refresh_token(payload.refresh_token)
+        refresh_session = (
+            db.query(RefreshSession)
+            .filter(RefreshSession.token_hash == token_hash)
+            .first()
         )
-        refresh_session = db.query(RefreshSession).filter(
-            RefreshSession.token_hash == token_hash
-        ).first()
 
         if refresh_session is not None:
             (
                 db.query(RefreshSession)
-                .filter(
-                    RefreshSession.family_id
-                    == refresh_session.family_id
-                )
+                .filter(RefreshSession.family_id == refresh_session.family_id)
                 .filter(RefreshSession.revoked_at.is_(None))
                 .update(
-                    {RefreshSession.revoked_at: datetime.utcnow()},
-                    synchronize_session=False
+                    {RefreshSession.revoked_at: get_current_utc_naive_datetime()},
+                    synchronize_session=False,
                 )
             )
             db.commit()
 
-    return {
-        "message": "Logged out successfully"
-    }
+    return {"message": "Logged out successfully"}
 
 
-@app.post(
-    "/api/venues",
-    response_model=VenueCreateResponse
-)
+@app.post("/api/venues", response_model=VenueCreateResponse)
 def create_venue(
     payload: VenueCreate,
     current_user: User = Depends(require_roles("provider")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     venue = Venue(
         venue_id=f"provider-{uuid.uuid4().hex[:12]}",
@@ -3100,14 +2330,12 @@ def create_venue(
         borough=payload.borough,
         opening_hours=payload.opening_hours,
         seat_capacity=payload.seat_capacity,
-        amenity_tags=serialize_amenity_tags(
-            payload.amenity_tags
-        ),
+        amenity_tags=serialize_amenity_tags(payload.amenity_tags),
         rules_text=payload.rules_text,
         has_wifi=payload.has_wifi,
         plug_access=payload.plug_access,
         hourly_price=payload.hourly_price,
-        partner=current_user.id
+        partner=current_user.id,
     )
 
     db.add(venue)
@@ -3117,246 +2345,123 @@ def create_venue(
     return serialize_created_venue(venue)
 
 
-@app.get(
-    "/api/venues",
-    response_model = VenueListResponse
-)
+@app.get("/api/venues", response_model=VenueListResponse)
 def get_venues(
-
     wifi: bool | None = None,
-
     plug_access: int | None = None,
-
-    venue_type: list[str] | None = Query(
-        None
-    ),
-
+    venue_type: list[str] | None = Query(None),
     name: str | None = None,
-
     accessibility_friendly: bool | None = None,
-
     calls_allowed: bool | None = None,
-
     wbe_certified: bool | None = None,
-
     mbe_certified: bool | None = None,
-
     vbe_certified: bool | None = None,
-
     bcorp_certified: bool | None = None,
-
     lgbt_friendly: bool | None = None,
-
     max_price: float | None = None,
-
     borough: str | None = None,
-
     date: date | None = None,
-
     start_time: time | None = None,
-
     end_time: time | None = None,
-
-    duration_hours: float | None = Query(
-        None,
-        gt=0
-    ),
-
-    seats_required: int = Query(
-        1,
-        ge=1
-    ),
-
-    limit: int = Query(
-        20,
-        ge=1
-    ),
-
-    page: int = Query(
-        1,
-        ge=1
-    ),
-
-    lat: float | None = Query(
-        None,
-        ge=-90,
-        le=90
-    ),
-
-    lon: float | None = Query(
-        None,
-        ge=-180,
-        le=180
-    ),
-
-    radius: float | None = Query(
-        None,
-        ge=0
-    ),
-
-    sort: str | None = Query(
-        None
-    ),
-
-    db: Session = Depends(get_db)
+    duration_hours: float | None = Query(None, gt=0),
+    seats_required: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1),
+    page: int = Query(1, ge=1),
+    lat: float | None = Query(None, ge=-90, le=90),
+    lon: float | None = Query(None, ge=-180, le=180),
+    radius: float | None = Query(None, ge=0),
+    sort: str | None = Query(None),
+    db: Session = Depends(get_db),
 ):
     if (lat is None) != (lon is None):
         raise HTTPException(
             status_code=400,
-            detail="Both lat and lon are required for geospatial filtering"
+            detail="Both lat and lon are required for geospatial filtering",
         )
 
     if duration_hours is not None and (date is None or start_time is None):
         raise HTTPException(
             status_code=400,
-            detail="date and start_time are required when duration_hours is provided"
+            detail="date and start_time are required when duration_hours is provided",
         )
 
-    query = db.query(Venue).filter(
-        public_discovery_state_filter()
-    )
+    query = db.query(Venue).filter(public_discovery_state_filter())
 
     if duration_hours is None and date and start_time and end_time:
-
         query = (
-            query.join(
-                AvailabilitySlot,
-                Venue.venue_id == AvailabilitySlot.venue_id
-            )
-            .filter(
-                AvailabilitySlot.date == date
-            )
-            .filter(
-                AvailabilitySlot.start_time <= start_time
-            )
-            .filter(
-                AvailabilitySlot.end_time >= end_time
-            )
-            .filter(
-                AvailabilitySlot.available.is_(True)
-            )
+            query.join(AvailabilitySlot, Venue.venue_id == AvailabilitySlot.venue_id)
+            .filter(AvailabilitySlot.date == date)
+            .filter(AvailabilitySlot.start_time <= start_time)
+            .filter(AvailabilitySlot.end_time >= end_time)
+            .filter(AvailabilitySlot.available.is_(True))
         )
-    
-    if wifi is not None:
 
-        query = query.filter(
-            Venue.has_wifi == wifi
-        )
+    if wifi is not None:
+        query = query.filter(Venue.has_wifi == wifi)
 
     if plug_access is not None:
-
-        query = query.filter(
-            Venue.plug_access == plug_access
-        )
+        query = query.filter(Venue.plug_access == plug_access)
 
     if venue_type:
         normalized_types = [
-            item.strip().lower()
-            for item in venue_type
-            if item and item.strip()
+            item.strip().lower() for item in venue_type if item and item.strip()
         ]
 
         if normalized_types:
-            query = query.filter(
-                func.lower(Venue.osm_type).in_(
-                    normalized_types
-                )
-            )
+            query = query.filter(func.lower(Venue.osm_type).in_(normalized_types))
 
     if name:
         search_name = name.strip().lower()
 
         if search_name:
-            query = query.filter(
-                func.lower(Venue.name).like(
-                    f"%{search_name}%"
-                )
-            )
+            query = query.filter(func.lower(Venue.name).like(f"%{search_name}%"))
 
     if accessibility_friendly is not None:
-        query = query.filter(
-            Venue.accessibility_friendly == accessibility_friendly
-        )
+        query = query.filter(Venue.accessibility_friendly == accessibility_friendly)
 
     if calls_allowed is not None:
-        query = query.filter(
-            Venue.calls_allowed == calls_allowed
-        )
+        query = query.filter(Venue.calls_allowed == calls_allowed)
 
     if wbe_certified is not None:
-        query = query.filter(
-            Venue.wbe_certified == wbe_certified
-        )
+        query = query.filter(Venue.wbe_certified == wbe_certified)
 
     if mbe_certified is not None:
-        query = query.filter(
-            Venue.mbe_certified == mbe_certified
-        )
+        query = query.filter(Venue.mbe_certified == mbe_certified)
 
     if vbe_certified is not None:
-        query = query.filter(
-            Venue.vbe_certified == vbe_certified
-        )
+        query = query.filter(Venue.vbe_certified == vbe_certified)
 
     if bcorp_certified is not None:
-        query = query.filter(
-            Venue.bcorp_certified == bcorp_certified
-        )
+        query = query.filter(Venue.bcorp_certified == bcorp_certified)
 
     if lgbt_friendly is not None:
-        query = query.filter(
-            Venue.lgbt_friendly == lgbt_friendly
-        )
+        query = query.filter(Venue.lgbt_friendly == lgbt_friendly)
 
     if max_price is not None:
+        query = query.filter(Venue.hourly_price <= max_price)
 
-        query = query.filter(
-            Venue.hourly_price <= max_price
-        )
-    
     if borough:
-        query = query.filter(
-            Venue.borough == borough
-        )
+        query = query.filter(Venue.borough == borough)
 
     if duration_hours is not None:
-        requested_end_time = add_duration_to_time(
-            start_time,
-            duration_hours
-        )
+        requested_end_time = add_duration_to_time(start_time, duration_hours)
 
         available_venue_ids = []
 
-        for venue_id, in query.with_entities(
-            Venue.venue_id
-        ).all():
+        for (venue_id,) in query.with_entities(Venue.venue_id).all():
             if has_required_contiguous_seats(
-                db,
-                venue_id,
-                date,
-                start_time,
-                requested_end_time,
-                seats_required
+                db, venue_id, date, start_time, requested_end_time, seats_required
             ):
-                available_venue_ids.append(
-                    venue_id
-                )
+                available_venue_ids.append(venue_id)
 
-        query = query.filter(
-            Venue.venue_id.in_(
-                available_venue_ids
-            )
-        )
+        query = query.filter(Venue.venue_id.in_(available_venue_ids))
 
     if sort is not None and not is_suitability_sort(sort):
         raise HTTPException(
-            status_code=400,
-            detail="sort must be one of: recommended, suitability"
+            status_code=400, detail="sort must be one of: recommended, suitability"
         )
-    
-    offset = (
-        page - 1
-    ) * limit
+
+    offset = (page - 1) * limit
     busyness_predictions = None
 
     if lat is not None and lon is not None:
@@ -3366,31 +2471,18 @@ def get_venues(
             if venue.lat is None or venue.lon is None:
                 continue
 
-            distance_km = calculate_distance_km(
-                lat,
-                lon,
-                venue.lat,
-                venue.lon
-            )
+            distance_km = calculate_distance_km(lat, lon, venue.lat, venue.lon)
 
             if radius is not None and distance_km > radius:
                 continue
 
-            venues_with_distance.append(
-                (
-                    venue,
-                    distance_km
-                )
-            )
+            venues_with_distance.append((venue, distance_km))
 
         if is_suitability_sort(sort):
             busyness_predictions = get_busyness_predictions(
-                [
-                    venue.venue_id
-                    for venue, _ in venues_with_distance
-                ],
+                [venue.venue_id for venue, _ in venues_with_distance],
                 selected_date=date,
-                selected_time=start_time
+                selected_time=start_time,
             )
             venues_with_distance.sort(
                 key=lambda venue_with_distance: (
@@ -3399,9 +2491,9 @@ def get_venues(
                         hour=start_time.hour if start_time else None,
                         busyness=busyness_predictions.get(
                             venue_with_distance[0].venue_id
-                        )
+                        ),
                     ),
-                    venue_with_distance[1]
+                    venue_with_distance[1],
                 )
             )
         else:
@@ -3409,87 +2501,53 @@ def get_venues(
                 key=lambda venue_with_distance: venue_with_distance[1]
             )
 
-        total_items = len(
-            venues_with_distance
-        )
+        total_items = len(venues_with_distance)
 
-        total_pages = (
-            total_items + limit - 1
-        ) // limit
+        total_pages = (total_items + limit - 1) // limit
 
-        selected_venues = venues_with_distance[
-            offset: offset + limit
-        ]
+        selected_venues = venues_with_distance[offset : offset + limit]
 
         has_more = page < total_pages
     else:
         if is_suitability_sort(sort):
             venues = query.all()
             busyness_predictions = get_busyness_predictions(
-                [
-                    venue.venue_id
-                    for venue in venues
-                ],
+                [venue.venue_id for venue in venues],
                 selected_date=date,
-                selected_time=start_time
+                selected_time=start_time,
             )
             venues.sort(
                 key=lambda venue: (
                     -calculate_suitability_score(
                         venue,
                         hour=start_time.hour if start_time else None,
-                        busyness=busyness_predictions.get(
-                            venue.venue_id
-                        )
+                        busyness=busyness_predictions.get(venue.venue_id),
                     ),
-                    venue.venue_id
+                    venue.venue_id,
                 )
             )
 
-            total_items = len(
-                venues
-            )
+            total_items = len(venues)
 
-            total_pages = (
-                total_items + limit - 1
-            ) // limit
+            total_pages = (total_items + limit - 1) // limit
 
-            venues = venues[
-                offset: offset + limit
-            ]
+            venues = venues[offset : offset + limit]
         else:
             total_items = query.count()
 
-            total_pages = (
-                total_items + limit - 1
-            ) // limit
+            total_pages = (total_items + limit - 1) // limit
 
-            venues = query.order_by(
-                Venue.venue_id
-            ).offset(
-                offset
-            ).limit(
-                limit
-            ).all()
+            venues = query.order_by(Venue.venue_id).offset(offset).limit(limit).all()
 
         has_more = page < total_pages
 
-        selected_venues = [
-            (
-                venue,
-                None
-            )
-            for venue in venues
-        ]
+        selected_venues = [(venue, None) for venue in venues]
 
     if busyness_predictions is None:
         busyness_predictions = get_busyness_predictions(
-            [
-                venue.venue_id
-                for venue, _ in selected_venues
-            ],
+            [venue.venue_id for venue, _ in selected_venues],
             selected_date=date,
-            selected_time=start_time
+            selected_time=start_time,
         )
 
     items = [
@@ -3500,10 +2558,8 @@ def get_venues(
             calculate_suitability_score(
                 venue,
                 hour=start_time.hour if start_time else None,
-                busyness=busyness_predictions.get(
-                    venue.venue_id
-                )
-            )
+                busyness=busyness_predictions.get(venue.venue_id),
+            ),
         )
         for venue, distance_km in selected_venues
     ]
@@ -3514,42 +2570,26 @@ def get_venues(
         "limit": limit,
         "total_items": total_items,
         "total_pages": total_pages,
-        "has_more": has_more
+        "has_more": has_more,
     }
 
 
-@app.get(
-    "/api/venues/suggestions",
-    response_model=VenueSuggestionsResponse
-)
+@app.get("/api/venues/suggestions", response_model=VenueSuggestionsResponse)
 def get_venue_suggestions(
     q: str = Query(min_length=1),
-    limit: int = Query(
-        8,
-        ge=1,
-        le=20
-    ),
-    db: Session = Depends(get_db)
+    limit: int = Query(8, ge=1, le=20),
+    db: Session = Depends(get_db),
 ):
     search_term = q.strip().lower()
 
     if not search_term:
-        raise HTTPException(
-            status_code=422,
-            detail="q must not be blank"
-        )
+        raise HTTPException(status_code=422, detail="q must not be blank")
 
     venues = (
         db.query(Venue)
-        .filter(
-            public_discovery_state_filter()
-        )
-        .filter(
-            func.lower(Venue.name).like(f"%{search_term}%")
-        )
-        .order_by(
-            Venue.name
-        )
+        .filter(public_discovery_state_filter())
+        .filter(func.lower(Venue.name).like(f"%{search_term}%"))
+        .order_by(Venue.name)
         .limit(limit)
         .all()
     )
@@ -3562,55 +2602,33 @@ def get_venue_suggestions(
                 "lat": venue.lat,
                 "lon": venue.lon,
                 "borough": venue.borough,
-                "type": "venue"
+                "type": "venue",
             }
             for venue in venues
         ]
     }
 
 
-@app.get(
-    "/api/venues/{venue_id}",
-    response_model = VenueDetailResponse
-)
+@app.get("/api/venues/{venue_id}", response_model=VenueDetailResponse)
 def get_venue_by_id(
     venue_id: str,
     date: date | None = None,
     start_time: time | None = None,
     end_time: time | None = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    venue = (
-        db.query(Venue)
-        .filter(
-            Venue.venue_id == venue_id
-        )
-        .first()
-    )
+    venue = db.query(Venue).filter(Venue.venue_id == venue_id).first()
 
     if venue is None:
-        
-        raise HTTPException(
-            status_code = 404,
-            detail = "Venue not found"
-        )
-    
+        raise HTTPException(status_code=404, detail="Venue not found")
+
     busyness_predictions = get_busyness_predictions(
-        [
-            venue.venue_id
-        ],
-        selected_date=date,
-        selected_time=start_time
+        [venue.venue_id], selected_date=date, selected_time=start_time
     )
-    busyness_prediction = busyness_predictions.get(
-        venue.venue_id
-    )
+    busyness_prediction = busyness_predictions.get(venue.venue_id)
 
     log_busyness_prediction(
-        venue,
-        busyness_prediction,
-        selected_date=date,
-        selected_time=start_time
+        venue, busyness_prediction, selected_date=date, selected_time=start_time
     )
 
     return build_venue_detail_response(
@@ -3619,38 +2637,24 @@ def get_venue_by_id(
         calculate_suitability_score(
             venue,
             hour=start_time.hour if start_time else None,
-            busyness=busyness_prediction
-        )
+            busyness=busyness_prediction,
+        ),
     )
 
 
 @app.get(
-    "/api/venues/{venue_id}/availability",
-    response_model=VenueAvailabilityResponse
+    "/api/venues/{venue_id}/availability", response_model=VenueAvailabilityResponse
 )
-def get_venue_availability(
-    venue_id: str,
-    db: Session = Depends(get_db)
-):
-    venue = (
-        db.query(Venue)
-        .filter(Venue.venue_id == venue_id)
-        .first()
-    )
+def get_venue_availability(venue_id: str, db: Session = Depends(get_db)):
+    venue = db.query(Venue).filter(Venue.venue_id == venue_id).first()
 
     if venue is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Venue not found"
-        )
+        raise HTTPException(status_code=404, detail="Venue not found")
 
     slots = (
         db.query(AvailabilitySlot)
         .filter(AvailabilitySlot.venue_id == venue_id)
-        .order_by(
-            AvailabilitySlot.date,
-            AvailabilitySlot.start_time
-        )
+        .order_by(AvailabilitySlot.date, AvailabilitySlot.start_time)
         .all()
     )
 
@@ -3663,67 +2667,43 @@ def get_venue_availability(
                 "start_time": (
                     f"{slot.date.isoformat()}T{slot.start_time.isoformat()}"
                 ),
-                "end_time": (
-                    f"{slot.date.isoformat()}T{slot.end_time.isoformat()}"
-                ),
-                "available": (
-                    slot.available and slot.available_seats > 0
-                ),
-                "available_seats": slot.available_seats
+                "end_time": (f"{slot.date.isoformat()}T{slot.end_time.isoformat()}"),
+                "available": (slot.available and slot.available_seats > 0),
+                "available_seats": slot.available_seats,
             }
             for slot in slots
-        ]
+        ],
     }
 
 
 @app.get(
-    "/api/venues/{venue_id}/survey-metrics",
-    response_model=VenueSurveyMetricsResponse
+    "/api/venues/{venue_id}/survey-metrics", response_model=VenueSurveyMetricsResponse
 )
-def get_venue_survey_metrics(
-    venue_id: str,
-    db: Session = Depends(get_db)
-):
-    venue = (
-        db.query(Venue)
-        .filter(Venue.venue_id == venue_id)
-        .first()
-    )
+def get_venue_survey_metrics(venue_id: str, db: Session = Depends(get_db)):
+    venue = db.query(Venue).filter(Venue.venue_id == venue_id).first()
 
     if venue is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Venue not found"
-        )
+        raise HTTPException(status_code=404, detail="Venue not found")
 
     return {
         "venue_id": venue_id,
         "wifi_score": get_verified_survey_metric(
-            db,
-            venue_id,
-            PostBookingReview.wifi_score
+            db, venue_id, PostBookingReview.wifi_score
         ),
         "plug_score": get_verified_survey_metric(
-            db,
-            venue_id,
-            PostBookingReview.plug_score
+            db, venue_id, PostBookingReview.plug_score
         ),
         "quietness_score": get_verified_survey_metric(
-            db,
-            venue_id,
-            PostBookingReview.quietness_score
-        )
+            db, venue_id, PostBookingReview.quietness_score
+        ),
     }
 
 
-@app.post(
-    "/api/reviews",
-    response_model=ReviewResponse
-)
+@app.post("/api/reviews", response_model=ReviewResponse)
 def create_review(
     payload: ReviewCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     booking = (
         db.query(Booking)
@@ -3734,20 +2714,13 @@ def create_review(
     )
 
     if booking is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Booking not found"
-        )
+        raise HTTPException(status_code=404, detail="Booking not found")
 
-    booking_status = (
-        booking.status
-        or ""
-    ).lower()
+    booking_status = (booking.status or "").lower()
 
     if booking_status != "completed":
         raise HTTPException(
-            status_code=409,
-            detail="Only completed bookings can be reviewed"
+            status_code=409, detail="Only completed bookings can be reviewed"
         )
 
     existing_review = (
@@ -3758,8 +2731,7 @@ def create_review(
 
     if existing_review is not None:
         raise HTTPException(
-            status_code=409,
-            detail="Review already exists for this booking"
+            status_code=409, detail="Review already exists for this booking"
         )
 
     review = PostBookingReview(
@@ -3769,16 +2741,13 @@ def create_review(
         wifi_score=payload.wifi_score,
         plug_score=payload.plug_score,
         quietness_score=payload.quietness_score,
-        verified=True
+        verified=True,
     )
 
     db.add(review)
     db.flush()
 
-    venue_rating = refresh_venue_rating(
-        db,
-        booking.venue_id
-    )
+    venue_rating = refresh_venue_rating(db, booking.venue_id)
 
     db.commit()
     db.refresh(review)
@@ -3792,93 +2761,64 @@ def create_review(
         "plug_score": review.plug_score,
         "quietness_score": review.quietness_score,
         "verified": review.verified,
-        "venue_rating": venue_rating
+        "venue_rating": venue_rating,
     }
 
 
-@app.post(
-    "/api/bookings",
-    response_model = BookingResponse
-)
+@app.post("/api/bookings", response_model=BookingResponse)
 def create_booking(
     payload: BookingCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    venue = db.query(Venue).filter(
-        Venue.venue_id == payload.venue_id
-    ).first()
+    venue = db.query(Venue).filter(Venue.venue_id == payload.venue_id).first()
 
     if not venue:
-        raise HTTPException(
-            status_code=404,
-            detail="Venue not found"
-        )
+        raise HTTPException(status_code=404, detail="Venue not found")
 
     slot = (
-    db.query(AvailabilitySlot)
-    .filter(
-        AvailabilitySlot.venue_id == payload.venue_id
-    )
-    .filter(
-        AvailabilitySlot.date == payload.booking_date
-    )
-    .filter(
-        AvailabilitySlot.start_time <= payload.start_time
-    )
-    .filter(
-        AvailabilitySlot.end_time >= payload.end_time
-    )
-    .filter(
-        AvailabilitySlot.available.is_(True)
-    )
-    .with_for_update()
-    .first()
+        db.query(AvailabilitySlot)
+        .filter(AvailabilitySlot.venue_id == payload.venue_id)
+        .filter(AvailabilitySlot.date == payload.booking_date)
+        .filter(AvailabilitySlot.start_time <= payload.start_time)
+        .filter(AvailabilitySlot.end_time >= payload.end_time)
+        .filter(AvailabilitySlot.available.is_(True))
+        .with_for_update()
+        .first()
     )
 
     if not slot:
-        raise HTTPException(
-            status_code=400,
-            detail="Requested time slot not available"
-        )
+        raise HTTPException(status_code=400, detail="Requested time slot not available")
 
     reserved_seats = (
-        db.query(
-            func.coalesce(
-                func.sum(Booking.seats_reserved),
-                0
-            )
-        )
+        db.query(func.coalesce(func.sum(Booking.seats_reserved), 0))
         .filter(Booking.venue_id == payload.venue_id)
         .filter(Booking.booking_date == payload.booking_date)
         .filter(Booking.start_time < payload.end_time)
         .filter(Booking.end_time > payload.start_time)
         .filter(
-            func.coalesce(
-                func.lower(Booking.status),
-                "confirmed"
-            ).notin_({"cancelled", "canceled", "payment_failed"})
+            func.coalesce(func.lower(Booking.status), "confirmed").notin_(
+                {"cancelled", "canceled", "payment_failed"}
+            )
         )
         .scalar()
     )
 
     if reserved_seats + payload.seats_reserved > slot.available_seats:
         raise HTTPException(
-            status_code=409,
-            detail="Venue capacity exceeded for the requested time"
+            status_code=409, detail="Venue capacity exceeded for the requested time"
         )
-    
+
     booking = Booking(
         order_id=f"ORD-{uuid.uuid4().hex[:8]}",
         payment_status="pending",
         status="pending_payment",
-
         user_id=current_user.id,
         venue_id=payload.venue_id,
         booking_date=payload.booking_date,
         start_time=payload.start_time,
         end_time=payload.end_time,
-        seats_reserved=payload.seats_reserved
+        seats_reserved=payload.seats_reserved,
     )
 
     db.add(booking)
@@ -3890,14 +2830,11 @@ def create_booking(
     return booking
 
 
-@app.post(
-    "/api/payments/mock-confirm",
-    response_model=MockPaymentResponse
-)
+@app.post("/api/payments/mock-confirm", response_model=MockPaymentResponse)
 def confirm_mock_payment(
     payload: MockPaymentConfirmRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     booking = (
         db.query(Booking)
@@ -3908,16 +2845,9 @@ def confirm_mock_payment(
     )
 
     if booking is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Booking not found"
-        )
+        raise HTTPException(status_code=404, detail="Booking not found")
 
-    normalized_card = re.sub(
-        r"\D",
-        "",
-        payload.card_number
-    )
+    normalized_card = re.sub(r"\D", "", payload.card_number)
 
     if normalized_card == "4242424242424242":
         booking.payment_status = "paid"
@@ -3930,7 +2860,7 @@ def confirm_mock_payment(
     else:
         raise HTTPException(
             status_code=400,
-            detail="Use mock card 4242 4242 4242 4242 for success or 4000 0000 0000 0002 for failure"
+            detail="Use mock card 4242 4242 4242 4242 for success or 4000 0000 0000 0002 for failure",
         )
 
     db.commit()
@@ -3941,18 +2871,17 @@ def confirm_mock_payment(
         "order_id": booking.order_id,
         "status": booking.status,
         "payment_status": booking.payment_status,
-        "message": message
+        "message": message,
     }
 
 
 @app.patch(
-    "/api/bookings/{booking_id}/cancel",
-    response_model=BookingCancellationResponse
+    "/api/bookings/{booking_id}/cancel", response_model=BookingCancellationResponse
 )
 def cancel_booking(
     booking_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     booking = (
         db.query(Booking)
@@ -3963,40 +2892,28 @@ def cancel_booking(
     )
 
     if booking is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Booking not found"
-        )
+        raise HTTPException(status_code=404, detail="Booking not found")
 
     current_status = (booking.status or "").lower()
 
     if current_status in {"cancelled", "canceled"}:
-        raise HTTPException(
-            status_code=409,
-            detail="Booking is already cancelled"
-        )
+        raise HTTPException(status_code=409, detail="Booking is already cancelled")
 
     if current_status == "completed":
         raise HTTPException(
-            status_code=409,
-            detail="Completed bookings cannot be cancelled"
+            status_code=409, detail="Completed bookings cannot be cancelled"
         )
 
-    booking_start = datetime.combine(
-        booking.booking_date,
-        booking.start_time
-    )
-    cancellation_deadline = booking_start - timedelta(
-        hours=FREE_CANCELLATION_HOURS
-    )
+    booking_start = datetime.combine(booking.booking_date, booking.start_time)
+    cancellation_deadline = booking_start - timedelta(hours=FREE_CANCELLATION_HOURS)
 
-    if datetime.now() > cancellation_deadline:
+    if get_current_local_datetime() > cancellation_deadline:
         raise HTTPException(
             status_code=409,
             detail=(
                 "Booking can only be cancelled at least "
                 f"{FREE_CANCELLATION_HOURS} hours before the start time"
-            )
+            ),
         )
 
     slot = (
@@ -4011,8 +2928,7 @@ def cancel_booking(
 
     if slot is None:
         raise HTTPException(
-            status_code=409,
-            detail="Booking inventory slot could not be restored"
+            status_code=409, detail="Booking inventory slot could not be restored"
         )
 
     booking.status = "cancelled"
@@ -4026,49 +2942,31 @@ def cancel_booking(
         "status": booking.status,
         "payment_status": booking.payment_status,
         "released_seats": booking.seats_reserved,
-        "message": "Booking cancelled successfully"
+        "message": "Booking cancelled successfully",
     }
+
 
 @app.get("/api/users/me")
-def get_me(
-    current_user: User = Depends(
-        get_current_user
-    )
-):
-    
+def get_me(current_user: User = Depends(get_current_user)):
+
     return {
-
         "user_id": current_user.id,
-
         "full_name": current_user.full_name,
-
         "email": current_user.email,
-
-        "role": current_user.role
+        "role": current_user.role,
     }
 
 
-@app.post(
-    "/api/favorites/{venue_id}",
-    response_model=FavoriteResponse,
-    status_code=201
-)
+@app.post("/api/favorites/{venue_id}", response_model=FavoriteResponse, status_code=201)
 def create_favorite(
     venue_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    venue = (
-        db.query(Venue)
-        .filter(Venue.venue_id == venue_id)
-        .first()
-    )
+    venue = db.query(Venue).filter(Venue.venue_id == venue_id).first()
 
     if venue is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Venue not found"
-        )
+        raise HTTPException(status_code=404, detail="Venue not found")
 
     existing_favorite = (
         db.query(Favorite)
@@ -4078,22 +2976,16 @@ def create_favorite(
     )
 
     if existing_favorite is not None:
-        raise HTTPException(
-            status_code=409,
-            detail="Favorite already exists"
-        )
+        raise HTTPException(status_code=409, detail="Favorite already exists")
 
-    favorite = Favorite(
-        user_id=current_user.id,
-        venue_id=venue_id
-    )
+    favorite = Favorite(user_id=current_user.id, venue_id=venue_id)
     db.add(favorite)
     db.commit()
 
     return {
         "user_id": current_user.id,
         "venue_id": venue_id,
-        "message": "Favorite created successfully"
+        "message": "Favorite created successfully",
     }
 
 
@@ -4101,7 +2993,7 @@ def create_favorite(
 def delete_favorite(
     venue_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     favorite = (
         db.query(Favorite)
@@ -4111,86 +3003,58 @@ def delete_favorite(
     )
 
     if favorite is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Favorite not found"
-        )
+        raise HTTPException(status_code=404, detail="Favorite not found")
 
     db.delete(favorite)
     db.commit()
 
-    return {
-        "message": "Favorite removed successfully"
-    }
+    return {"message": "Favorite removed successfully"}
 
 
-@app.get(
-    "/api/provider/dashboard/kpis",
-    response_model=ProviderDashboardKPIsResponse
-)
+@app.get("/api/provider/dashboard/kpis", response_model=ProviderDashboardKPIsResponse)
 def get_provider_dashboard_kpis(
     current_user: User = Depends(require_roles("provider")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     window_days = 30
-    today = date.today()
-    current_window_start = today - timedelta(
-        days=window_days - 1
-    )
-    current_window_end = today + timedelta(
-        days=1
-    )
-    previous_window_start = current_window_start - timedelta(
-        days=window_days
-    )
+    today = get_current_local_date()
+    current_window_start = today - timedelta(days=window_days - 1)
+    current_window_end = today + timedelta(days=1)
+    previous_window_start = current_window_start - timedelta(days=window_days)
     previous_window_end = current_window_start
 
     current_values = get_dashboard_kpi_values(
-        db,
-        current_window_start,
-        current_window_end
+        db, current_window_start, current_window_end
     )
     previous_values = get_dashboard_kpi_values(
-        db,
-        previous_window_start,
-        previous_window_end
+        db, previous_window_start, previous_window_end
     )
 
     return {
         "window_days": window_days,
         "total_reservations": build_kpi_metric(
-            current_values["total_reservations"],
-            previous_values["total_reservations"]
+            current_values["total_reservations"], previous_values["total_reservations"]
         ),
         "monthly_revenue": build_kpi_metric(
-            current_values["monthly_revenue"],
-            previous_values["monthly_revenue"]
+            current_values["monthly_revenue"], previous_values["monthly_revenue"]
         ),
         "active_properties_count": build_kpi_metric(
             current_values["active_properties_count"],
-            previous_values["active_properties_count"]
+            previous_values["active_properties_count"],
         ),
         "average_user_rating": build_kpi_metric(
             current_values["average_user_rating"],
-            previous_values["average_user_rating"]
-        )
+            previous_values["average_user_rating"],
+        ),
     }
 
 
-@app.get(
-    "/api/admin/dashboard/overview",
-    response_model=AdminDashboardOverviewResponse
-)
+@app.get("/api/admin/dashboard/overview", response_model=AdminDashboardOverviewResponse)
 def get_admin_dashboard_overview(
-    current_user: User = Depends(require_roles("admin")),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(require_roles("admin")), db: Session = Depends(get_db)
 ):
     global_active_properties = (
-        db.query(
-            func.count(
-                func.distinct(AvailabilitySlot.venue_id)
-            )
-        )
+        db.query(func.count(func.distinct(AvailabilitySlot.venue_id)))
         .filter(AvailabilitySlot.available.is_(True))
         .scalar()
         or 0
@@ -4201,32 +3065,23 @@ def get_admin_dashboard_overview(
         "total_completed_checkout_revenues": (
             get_admin_completed_checkout_revenues(db)
         ),
-        "system_incident_counts": get_admin_incident_counts(db)
+        "system_incident_counts": get_admin_incident_counts(db),
     }
 
 
 @app.patch(
-    "/api/admin/venues/{venue_id}/suspension",
-    response_model=VenueSuspensionResponse
+    "/api/admin/venues/{venue_id}/suspension", response_model=VenueSuspensionResponse
 )
 def suspend_venue(
     venue_id: str,
     payload: VenueSuspensionRequest,
     current_user: User = Depends(require_roles("admin")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    venue = (
-        db.query(Venue)
-        .filter(Venue.venue_id == venue_id)
-        .with_for_update()
-        .first()
-    )
+    venue = db.query(Venue).filter(Venue.venue_id == venue_id).with_for_update().first()
 
     if venue is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Venue not found"
-        )
+        raise HTTPException(status_code=404, detail="Venue not found")
 
     active_bookings = []
     released_seats = 0
@@ -4263,79 +3118,54 @@ def suspend_venue(
             "Venue suspended successfully"
             if payload.state == "Suspended"
             else "Venue activated successfully"
-        )
+        ),
     }
 
 
-@app.get(
-    "/api/provider/dashboard/arrivals",
-    response_model=ProviderArrivalsResponse
-)
+@app.get("/api/provider/dashboard/arrivals", response_model=ProviderArrivalsResponse)
 def get_provider_dashboard_arrivals(
     current_user: User = Depends(require_roles("provider")),
-    limit: int = Query(
-        20,
-        ge=1
-    ),
-    db: Session = Depends(get_db)
+    limit: int = Query(20, ge=1),
+    db: Session = Depends(get_db),
 ):
-    current_datetime = datetime.now()
+    current_datetime = get_current_local_datetime()
 
     arrival_rows = (
         db.query(Booking, User, Venue)
-        .join(
-            User,
-            Booking.user_id == User.id
-        )
-        .outerjoin(
-            Venue,
-            Booking.venue_id == Venue.venue_id
-        )
+        .join(User, Booking.user_id == User.id)
+        .outerjoin(Venue, Booking.venue_id == Venue.venue_id)
         .filter(Booking.booking_date >= current_datetime.date())
         .filter(
-            func.coalesce(
-                func.lower(Booking.status),
-                "confirmed"
-            ).notin_({"cancelled", "canceled", "completed"})
+            func.coalesce(func.lower(Booking.status), "confirmed").notin_(
+                {"cancelled", "canceled", "completed"}
+            )
         )
-        .order_by(
-            Booking.booking_date,
-            Booking.start_time
-        )
+        .order_by(Booking.booking_date, Booking.start_time)
         .all()
     )
 
     upcoming_rows = [
-        (
-            booking,
-            user,
-            venue
-        )
+        (booking, user, venue)
         for booking, user, venue in arrival_rows
         if booking_datetime(booking) >= current_datetime
     ][:limit]
 
     return {
         "items": [
-            serialize_provider_arrival(
-                booking,
-                user,
-                venue
-            )
+            serialize_provider_arrival(booking, user, venue)
             for booking, user, venue in upcoming_rows
         ]
     }
 
 
 @app.delete(
-    "/api/venues/{venue_id}/slots/{slot_id}",
-    response_model=SlotDeactivationResponse
+    "/api/venues/{venue_id}/slots/{slot_id}", response_model=SlotDeactivationResponse
 )
 def deactivate_availability_slot(
     venue_id: str,
     slot_id: int,
     current_user: User = Depends(require_roles("provider")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     slot = (
         db.query(AvailabilitySlot)
@@ -4346,18 +3176,11 @@ def deactivate_availability_slot(
     )
 
     if slot is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Availability slot not found"
-        )
+        raise HTTPException(status_code=404, detail="Availability slot not found")
 
-    if slot_has_active_booking(
-        db,
-        slot
-    ):
+    if slot_has_active_booking(db, slot):
         raise HTTPException(
-            status_code=409,
-            detail="An active booking exists during this time."
+            status_code=409, detail="An active booking exists during this time."
         )
 
     slot.available = False
@@ -4371,64 +3194,39 @@ def deactivate_availability_slot(
         "venue_id": slot.venue_id,
         "available": slot.available,
         "available_seats": slot.available_seats,
-        "message": "Slot deactivated successfully"
+        "message": "Slot deactivated successfully",
     }
 
 
-@app.get(
-    "/api/users/me/bookings",
-    response_model=UserBookingsResponse
-)
+@app.get("/api/users/me/bookings", response_model=UserBookingsResponse)
 def get_user_bookings(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     booking_rows = (
         db.query(Booking, Venue)
-        .outerjoin(
-            Venue,
-            Booking.venue_id == Venue.venue_id
-        )
+        .outerjoin(Venue, Booking.venue_id == Venue.venue_id)
         .filter(Booking.user_id == current_user.id)
         .all()
     )
 
-    current_datetime = datetime.now()
-    grouped_rows = {
-        "upcoming": [],
-        "completed": [],
-        "cancelled": []
-    }
+    current_datetime = get_current_local_datetime()
+    grouped_rows = {"upcoming": [], "completed": [], "cancelled": []}
 
     for booking, venue in booking_rows:
-        category = get_booking_category(
-            booking,
-            current_datetime
-        )
-        grouped_rows[category].append(
-            (booking, venue)
-        )
+        category = get_booking_category(booking, current_datetime)
+        grouped_rows[category].append((booking, venue))
 
-    grouped_rows["upcoming"].sort(
-        key=lambda row: booking_datetime(row[0])
-    )
+    grouped_rows["upcoming"].sort(key=lambda row: booking_datetime(row[0]))
     grouped_rows["completed"].sort(
-        key=lambda row: booking_datetime(row[0]),
-        reverse=True
+        key=lambda row: booking_datetime(row[0]), reverse=True
     )
     grouped_rows["cancelled"].sort(
-        key=lambda row: booking_datetime(row[0]),
-        reverse=True
+        key=lambda row: booking_datetime(row[0]), reverse=True
     )
 
     return {
         category: [
-            serialize_user_booking(
-                booking,
-                venue,
-                category
-            )
-            for booking, venue in rows
+            serialize_user_booking(booking, venue, category) for booking, venue in rows
         ]
         for category, rows in grouped_rows.items()
     }

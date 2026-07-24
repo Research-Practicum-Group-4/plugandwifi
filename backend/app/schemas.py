@@ -1,35 +1,21 @@
-from pydantic import (
-    BaseModel,
-    EmailStr,
-    Field
-)
-
-from datetime import (
-    date as date_type,
-    time as time_type
-)
+from datetime import date as date_type
+from datetime import time as time_type
 from typing import Literal
 
+from pydantic import BaseModel, EmailStr, Field
 
-class UserRegister(
-    BaseModel
-):
 
+class UserRegister(BaseModel):
     full_name: str
 
     email: EmailStr
 
-    password: str = Field(
-        min_length=8
-    )
+    password: str = Field(min_length=8)
 
     role: Literal["user", "provider"] = "user"
 
 
-class UserLogin(
-    BaseModel
-):
-
+class UserLogin(BaseModel):
     email: EmailStr
 
     password: str
@@ -38,41 +24,29 @@ class UserLogin(
 
 
 class RefreshTokenRequest(BaseModel):
-
     refresh_token: str = Field(min_length=32)
 
 
 class LogoutRequest(BaseModel):
-
     refresh_token: str = Field(min_length=32)
 
 
 class ChatbotRecommendRequest(BaseModel):
-
     message: str = Field(min_length=1)
 
-    chat_history: list["ChatbotHistoryMessage"] = Field(
-        default_factory=list
-    )
+    chat_history: list["ChatbotHistoryMessage"] = Field(default_factory=list)
 
 
 class ChatbotHistoryMessage(BaseModel):
-
     role: Literal["user", "assistant"]
 
-    message: str = Field(
-        min_length=1,
-        max_length=500
-    )
+    message: str = Field(min_length=1, max_length=500)
 
 
 class ChatbotSearchParameters(BaseModel):
-
     venue_name: str | None = None
 
-    candidate_venue_names: list[str] = Field(
-        default_factory=list
-    )
+    candidate_venue_names: list[str] = Field(default_factory=list)
 
     location: str | None = None
 
@@ -110,7 +84,6 @@ class ChatbotSearchParameters(BaseModel):
 
 
 class ChatbotRecommendResponse(BaseModel):
-
     response: str
 
     model: str
@@ -123,14 +96,12 @@ class ChatbotRecommendResponse(BaseModel):
 
 
 class VenueResponse(BaseModel):
-
     venue_id: str
     name: str
     state: str | None = None
     lat: float
     lon: float
     borough: str
-
 
     cuisine_type: str | None = None
     has_wifi: bool | None = None
@@ -144,10 +115,8 @@ class VenueResponse(BaseModel):
     lgbt_friendly: bool = False
 
     rating: float | None = None
-    
 
     plug_access: int | None = None
-    
 
     hourly_price: float | None = None
 
@@ -170,7 +139,6 @@ class VenueResponse(BaseModel):
 
 
 class VenueListResponse(BaseModel):
-
     items: list[VenueResponse]
 
     page: int
@@ -185,7 +153,6 @@ class VenueListResponse(BaseModel):
 
 
 class VenueSuggestion(BaseModel):
-
     venue_id: str
 
     name: str
@@ -200,23 +167,15 @@ class VenueSuggestion(BaseModel):
 
 
 class VenueSuggestionsResponse(BaseModel):
-
     items: list[VenueSuggestion]
 
 
 class VenueCreate(BaseModel):
-
     name: str = Field(min_length=1)
 
-    lat: float = Field(
-        ge=-90,
-        le=90
-    )
+    lat: float = Field(ge=-90, le=90)
 
-    lon: float = Field(
-        ge=-180,
-        le=180
-    )
+    lon: float = Field(ge=-180, le=180)
 
     borough: str = Field(min_length=1)
 
@@ -230,19 +189,12 @@ class VenueCreate(BaseModel):
 
     has_wifi: bool | None = None
 
-    plug_access: int | None = Field(
-        None,
-        ge=0
-    )
+    plug_access: int | None = Field(None, ge=0)
 
-    hourly_price: float | None = Field(
-        None,
-        ge=0
-    )
+    hourly_price: float | None = Field(None, ge=0)
 
 
 class VenueCreateResponse(BaseModel):
-
     venue_id: str
 
     name: str
@@ -338,7 +290,7 @@ class VenueDetailResponse(BaseModel):
     rating_user_reported: float | None = None
 
     hourly_price: float | None = None
-    
+
     actual_hourly_price: float | None = None
 
     busyness_score: int | None = None
@@ -360,7 +312,6 @@ class VenueDetailResponse(BaseModel):
 
 
 class AvailabilitySlotResponse(BaseModel):
-
     slot_id: int
 
     date: date_type
@@ -375,14 +326,12 @@ class AvailabilitySlotResponse(BaseModel):
 
 
 class VenueAvailabilityResponse(BaseModel):
-
     venue_id: str
 
     available_slots: list[AvailabilitySlotResponse]
 
 
 class BookingCreate(BaseModel):
-
     venue_id: str
 
     booking_date: date_type
@@ -395,7 +344,6 @@ class BookingCreate(BaseModel):
 
 
 class BookingResponse(BaseModel):
-
     id: int
 
     user_id: int
@@ -417,19 +365,16 @@ class BookingResponse(BaseModel):
     payment_status: str
 
     class Config:
-
         from_attributes = True
 
 
 class MockPaymentConfirmRequest(BaseModel):
-
     booking_id: int
 
     card_number: str = Field(min_length=12)
 
 
 class MockPaymentResponse(BaseModel):
-
     booking_id: int
 
     order_id: str
@@ -442,27 +387,16 @@ class MockPaymentResponse(BaseModel):
 
 
 class ReviewCreate(BaseModel):
-
     booking_id: int
 
-    wifi_score: float = Field(
-        ge=1,
-        le=5
-    )
+    wifi_score: float = Field(ge=1, le=5)
 
-    plug_score: float = Field(
-        ge=1,
-        le=5
-    )
+    plug_score: float = Field(ge=1, le=5)
 
-    quietness_score: float = Field(
-        ge=1,
-        le=5
-    )
+    quietness_score: float = Field(ge=1, le=5)
 
 
 class ReviewResponse(BaseModel):
-
     id: int
 
     booking_id: int
@@ -483,7 +417,6 @@ class ReviewResponse(BaseModel):
 
 
 class UserBookingItem(BaseModel):
-
     booking_id: int
 
     venue_id: str
@@ -510,7 +443,6 @@ class UserBookingItem(BaseModel):
 
 
 class UserBookingsResponse(BaseModel):
-
     upcoming: list[UserBookingItem]
 
     completed: list[UserBookingItem]
@@ -519,7 +451,6 @@ class UserBookingsResponse(BaseModel):
 
 
 class BookingCancellationResponse(BaseModel):
-
     booking_id: int
 
     status: str
@@ -532,7 +463,6 @@ class BookingCancellationResponse(BaseModel):
 
 
 class FavoriteResponse(BaseModel):
-
     user_id: int
 
     venue_id: str
@@ -541,7 +471,6 @@ class FavoriteResponse(BaseModel):
 
 
 class SlotDeactivationResponse(BaseModel):
-
     slot_id: int
 
     venue_id: str
@@ -554,14 +483,12 @@ class SlotDeactivationResponse(BaseModel):
 
 
 class KPIMetric(BaseModel):
-
     value: int | float
 
     delta_percent: float | None = None
 
 
 class ProviderDashboardKPIsResponse(BaseModel):
-
     window_days: int
 
     total_reservations: KPIMetric
@@ -574,7 +501,6 @@ class ProviderDashboardKPIsResponse(BaseModel):
 
 
 class ProviderArrivalItem(BaseModel):
-
     booking_id: int
 
     client_full_name: str
@@ -599,12 +525,10 @@ class ProviderArrivalItem(BaseModel):
 
 
 class ProviderArrivalsResponse(BaseModel):
-
     items: list[ProviderArrivalItem]
 
 
 class VenueSurveyMetricsResponse(BaseModel):
-
     venue_id: str
 
     wifi_score: float | str
@@ -615,7 +539,6 @@ class VenueSurveyMetricsResponse(BaseModel):
 
 
 class AdminIncidentCounts(BaseModel):
-
     cancelled_bookings: int
 
     refund_pending_bookings: int
@@ -624,7 +547,6 @@ class AdminIncidentCounts(BaseModel):
 
 
 class AdminDashboardOverviewResponse(BaseModel):
-
     global_active_properties: int
 
     total_completed_checkout_revenues: float
@@ -633,12 +555,10 @@ class AdminDashboardOverviewResponse(BaseModel):
 
 
 class VenueSuspensionRequest(BaseModel):
-
     state: Literal["Active", "Suspended"] = "Suspended"
 
 
 class VenueSuspensionResponse(BaseModel):
-
     venue_id: str
 
     state: str

@@ -1,96 +1,52 @@
+from datetime import datetime
+
 from sqlalchemy import (
+    Boolean,
     Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
     Integer,
     String,
-    Float,
-    Boolean,
     Text,
-    ForeignKey,
-    Date,
     Time,
-    DateTime,
-    UniqueConstraint
+    UniqueConstraint,
 )
-
-from datetime import datetime
 
 from .database import Base
 
 
 class User(Base):
-
     __tablename__ = "users"
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True
-    )
+    id = Column(Integer, primary_key=True, index=True)
 
-    full_name = Column(
-        String,
-        nullable=False
-    )
+    full_name = Column(String, nullable=False)
 
-    email = Column(
-        String,
-        unique=True,
-        nullable=False
-    )
+    email = Column(String, unique=True, nullable=False)
 
-    password_hash = Column(
-        String,
-        nullable=False
-    )
+    password_hash = Column(String, nullable=False)
 
-    role = Column(
-        String,
-        nullable=False,
-        default="user",
-        server_default="user"
-    )
+    role = Column(String, nullable=False, default="user", server_default="user")
 
 
 class RefreshSession(Base):
-
     __tablename__ = "refresh_sessions"
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True
-    )
+    id = Column(Integer, primary_key=True, index=True)
 
     user_id = Column(
-        Integer,
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
-    token_hash = Column(
-        String(64),
-        unique=True,
-        nullable=False,
-        index=True
-    )
+    token_hash = Column(String(64), unique=True, nullable=False, index=True)
 
-    family_id = Column(
-        String(36),
-        nullable=False,
-        index=True
-    )
+    family_id = Column(String(36), nullable=False, index=True)
 
-    expires_at = Column(
-        DateTime,
-        nullable=False
-    )
+    expires_at = Column(DateTime, nullable=False)
 
-    created_at = Column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow
-    )
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     revoked_at = Column(DateTime)
 
@@ -98,22 +54,13 @@ class RefreshSession(Base):
 
 
 class Venue(Base):
-
     __tablename__ = "venues"
 
-    venue_id = Column(
-        String,
-        primary_key=True
-    )
+    venue_id = Column(String, primary_key=True)
 
     name = Column(String)
 
-    state = Column(
-        String,
-        nullable=False,
-        default="Active",
-        server_default="Active"
-    )
+    state = Column(String, nullable=False, default="Active", server_default="Active")
 
     osm_type = Column(String)
 
@@ -146,53 +93,20 @@ class Venue(Base):
     has_wifi = Column(Boolean)
 
     accessibility_friendly = Column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="0"
+        Boolean, nullable=False, default=False, server_default="0"
     )
 
-    calls_allowed = Column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="0"
-    )
+    calls_allowed = Column(Boolean, nullable=False, default=False, server_default="0")
 
-    wbe_certified = Column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="0"
-    )
+    wbe_certified = Column(Boolean, nullable=False, default=False, server_default="0")
 
-    mbe_certified = Column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="0"
-    )
+    mbe_certified = Column(Boolean, nullable=False, default=False, server_default="0")
 
-    vbe_certified = Column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="0"
-    )
+    vbe_certified = Column(Boolean, nullable=False, default=False, server_default="0")
 
-    bcorp_certified = Column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="0"
-    )
+    bcorp_certified = Column(Boolean, nullable=False, default=False, server_default="0")
 
-    lgbt_friendly = Column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="0"
-    )
+    lgbt_friendly = Column(Boolean, nullable=False, default=False, server_default="0")
 
     noise_level = Column(String)
 
@@ -242,175 +156,93 @@ class Venue(Base):
 
 
 class AvailabilitySlot(Base):
-
     __tablename__ = "availability_slots"
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True
-    )
+    id = Column(Integer, primary_key=True, index=True)
 
-    venue_id = Column(
-        String,
-        ForeignKey("venues.venue_id"),
-        nullable=False
-    )
+    venue_id = Column(String, ForeignKey("venues.venue_id"), nullable=False)
 
-    date = Column(
-        Date,
-        nullable=False
-    )
+    date = Column(Date, nullable=False)
 
-    start_time = Column(
-        Time,
-        nullable=False
-    )
+    start_time = Column(Time, nullable=False)
 
-    end_time = Column(
-        Time,
-        nullable=False
-    )
+    end_time = Column(Time, nullable=False)
 
-    available = Column(
-        Boolean,
-        nullable=False
-    )
+    available = Column(Boolean, nullable=False)
 
-    available_seats = Column(
-        Integer,
-        nullable=False
-    )
+    available_seats = Column(Integer, nullable=False)
 
 
 class Favorite(Base):
-
     __tablename__ = "favorites"
 
     __table_args__ = (
-        UniqueConstraint(
-            "user_id",
-            "venue_id",
-            name="uq_favorites_user_venue"
-        ),
+        UniqueConstraint("user_id", "venue_id", name="uq_favorites_user_venue"),
     )
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True
-    )
+    id = Column(Integer, primary_key=True, index=True)
 
     user_id = Column(
-        Integer,
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
     venue_id = Column(
         String,
         ForeignKey("venues.venue_id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
 
 
 class Booking(Base):
-
     __tablename__ = "bookings"
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True
-    )
+    id = Column(Integer, primary_key=True, index=True)
 
-    user_id = Column(
-        Integer,
-        ForeignKey("users.id"),
-        nullable=False
-    )
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    venue_id = Column(
-        String,
-        ForeignKey("venues.venue_id"),
-        nullable=False
-    )
+    venue_id = Column(String, ForeignKey("venues.venue_id"), nullable=False)
 
-    booking_date = Column(
-        Date,
-        nullable=False
-    )
+    booking_date = Column(Date, nullable=False)
 
-    start_time = Column(
-        Time,
-        nullable=False
-    )
+    start_time = Column(Time, nullable=False)
 
-    end_time = Column(
-        Time,
-        nullable=False
-    )
+    end_time = Column(Time, nullable=False)
 
-    seats_reserved = Column(
-        Integer,
-        nullable=False
-    )
+    seats_reserved = Column(Integer, nullable=False)
 
-    status = Column(
-        String,
-        default="confirmed"
-    )
+    status = Column(String, default="confirmed")
 
-    order_id = Column(
-        String,
-        unique = True,
-        nullable = False
-    )
+    order_id = Column(String, unique=True, nullable=False)
 
-    payment_status = Column(
-        String,
-        default = "paid"
-    )
+    payment_status = Column(String, default="paid")
 
 
 class PostBookingReview(Base):
-
     __tablename__ = "post_booking_reviews"
 
     __table_args__ = (
-        UniqueConstraint(
-            "booking_id",
-            name="uq_post_booking_reviews_booking"
-        ),
+        UniqueConstraint("booking_id", name="uq_post_booking_reviews_booking"),
     )
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True
-    )
+    id = Column(Integer, primary_key=True, index=True)
 
     booking_id = Column(
         Integer,
         ForeignKey("bookings.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     user_id = Column(
-        Integer,
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
     venue_id = Column(
         String,
         ForeignKey("venues.venue_id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     wifi_score = Column(Float)
@@ -419,15 +251,6 @@ class PostBookingReview(Base):
 
     quietness_score = Column(Float)
 
-    verified = Column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="false"
-    )
+    verified = Column(Boolean, nullable=False, default=False, server_default="false")
 
-    created_at = Column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow
-    )
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
