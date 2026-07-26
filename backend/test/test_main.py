@@ -186,6 +186,49 @@ def test_get_busyness_predictions_uses_zone_model_contract(monkeypatch):
     main_module.BUSYNESS_PREDICTION_CACHE.clear()
 
 
+def test_busyness_predictions_infer_zone_for_provider_venue(monkeypatch):
+    main_module.BUSYNESS_PREDICTION_CACHE.clear()
+
+    class FakeZonePredictor:
+        def predict_many(self, venues, date, hour):
+            assert list(venues["venue_id"]) == ["provider-test-zone"]
+            assert list(venues["zone_id"]) == [101]
+            return [
+                {
+                    "venue_id": "provider-test-zone",
+                    "busyness_score": 44,
+                    "busyness_label": "Medium",
+                }
+            ]
+
+    pd = __import__("pandas")
+    venue_rows = pd.DataFrame(
+        [
+            {"venue_id": "osm-near", "lat": 40.7501, "lon": -73.9901, "zone_id": 101},
+            {"venue_id": "osm-far", "lat": 40.6, "lon": -73.8, "zone_id": 202},
+        ]
+    )
+
+    monkeypatch.setattr(
+        main_module, "get_zone_busyness_predictor", lambda: FakeZonePredictor()
+    )
+    monkeypatch.setattr(
+        main_module, "get_busyness_venues_dataframe", lambda: venue_rows
+    )
+
+    predictions = main_module.get_busyness_predictions(
+        ["provider-test-zone"],
+        selected_date="2026-08-03",
+        selected_time=time(9, 0),
+        venue_locations={"provider-test-zone": (40.7502, -73.9902)},
+    )
+
+    assert predictions["provider-test-zone"]["busyness_score"] == 44
+    assert predictions["provider-test-zone"]["busyness_label"] == "Medium"
+
+    main_module.BUSYNESS_PREDICTION_CACHE.clear()
+
+
 def test_busyness_diagnostics_reports_ready_with_sample_prediction(
     monkeypatch, tmp_path
 ):
@@ -2429,6 +2472,130 @@ def test_create_venue_rejects_invalid_payload():
     )
 
     assert response.status_code == 422
+
+
+def test_provider_submission_admin_review_and_public_search_flow(monkeypatch):
+    monkeypatch.setattr(main_module, "get_current_local_date", lambda: date(2026, 8, 3))
+    provider_payload = {
+        "full_name": "End To End Provider",
+        "email": "end-to-end-provider@ucd.ie",
+        "password": "password123",
+        "role": "provider",
+    }
+    assert client.post("/api/auth/register", json=provider_payload).status_code == 200
+    provider_login = client.post(
+        "/api/auth/login",
+        json={
+            "email": provider_payload["email"],
+            "password": provider_payload["password"],
+        },
+    )
+    provider_headers = {
+        "Authorization": f"Bearer {provider_login.json()['access_token']}"
+    }
+
+    create_response = client.post(
+        "/api/venues",
+        headers=provider_headers,
+        json={
+            "name": "Approval Flow Workspace",
+            "osm_type": "cafe",
+            "street": "350 5th Avenue",
+            "zipcode": "NY 10001",
+            "lat": 40.7484,
+            "lon": -73.9857,
+            "borough": "Manhattan",
+            "opening_hours": "Mon, Wed, Fri 09:00-17:00",
+            "seat_capacity": 8,
+            "amenity_tags": ["wifi", "power outlets"],
+            "rules_text": "Keep calls brief.",
+            "has_wifi": True,
+            "plug_access": 8,
+            "hourly_price": 4.5,
+            "accessibility_friendly": True,
+            "wbe_certified": True,
+            "availability_days": [0, 2, 4],
+            "availability_start_time": "09:00:00",
+            "availability_end_time": "17:00:00",
+        },
+    )
+    assert create_response.status_code == 200
+    venue_id = create_response.json()["venue_id"]
+    assert create_response.json()["state"] == "Pending Approval"
+
+    provider_venues = client.get("/api/provider/venues", headers=provider_headers)
+    assert provider_venues.status_code == 200
+    assert venue_id in [item["venue_id"] for item in provider_venues.json()["items"]]
+
+    db = TestingSessionLocal()
+    try:
+        slots = (
+            db.query(AvailabilitySlot)
+            .filter(AvailabilitySlot.venue_id == venue_id)
+            .order_by(AvailabilitySlot.date)
+            .all()
+        )
+        assert len(slots) == 13
+        assert slots[0].date == date(2026, 8, 3)
+        assert slots[1].date == date(2026, 8, 5)
+        assert slots[2].date == date(2026, 8, 7)
+        assert {slot.start_time for slot in slots} == {time(9, 0)}
+        assert {slot.end_time for slot in slots} == {time(17, 0)}
+        assert {slot.available_seats for slot in slots} == {8}
+    finally:
+        db.close()
+
+    hidden_search = client.get("/api/venues?name=Approval Flow Workspace")
+    assert hidden_search.status_code == 200
+    assert venue_id not in [item["venue_id"] for item in hidden_search.json()["items"]]
+
+    admin_payload = {
+        "full_name": "End To End Admin",
+        "email": "end-to-end-admin@ucd.ie",
+        "password": "password123",
+        "role": "user",
+    }
+    assert client.post("/api/auth/register", json=admin_payload).status_code == 200
+    db = TestingSessionLocal()
+    try:
+        admin = db.query(User).filter(User.email == admin_payload["email"]).one()
+        admin.role = "admin"
+        db.commit()
+    finally:
+        db.close()
+    admin_login = client.post(
+        "/api/auth/login",
+        json={"email": admin_payload["email"], "password": admin_payload["password"]},
+    )
+    admin_headers = {
+        "Authorization": f"Bearer {admin_login.json()['access_token']}"
+    }
+
+    pending_response = client.get(
+        "/api/admin/venues/pending", headers=admin_headers
+    )
+    assert pending_response.status_code == 200
+    pending_item = next(
+        item for item in pending_response.json()["items"] if item["venue_id"] == venue_id
+    )
+    assert pending_item["provider_email"] == provider_payload["email"]
+    assert pending_item["availability_date"] == "2026-08-03"
+    assert pending_item["availability_start_time"] == "09:00:00"
+
+    review_response = client.patch(
+        f"/api/admin/venues/{venue_id}/review",
+        headers=admin_headers,
+        json={"decision": "approve"},
+    )
+    assert review_response.status_code == 200
+    assert review_response.json()["state"] == "Active"
+
+    visible_search = client.get(
+        "/api/venues?name=Approval Flow Workspace"
+        "&date=2026-08-03&start_time=09:00:00&duration_hours=2&seats_required=1"
+    )
+    assert visible_search.status_code == 200
+    assert venue_id in [item["venue_id"] for item in visible_search.json()["items"]]
 
 
 def test_provider_dashboard_kpis_requires_authentication():

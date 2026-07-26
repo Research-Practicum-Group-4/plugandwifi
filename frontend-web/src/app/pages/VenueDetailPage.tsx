@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -9,7 +9,7 @@ import { Separator } from "../components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Label } from "../components/ui/label";
-import { Star, MapPin, Wifi, Zap, Clock, Heart, Share2, LogIn } from "lucide-react";
+import { Star, MapPin, Wifi, Zap, Clock, Heart, Share2, LogIn, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../services/api";
 import { VenueDetail, AvailabilitySlot } from "../../types/api";
@@ -26,6 +26,169 @@ const EDI_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
   "VBE-Certified":    { bg: "bg-blue-100",   text: "text-blue-700"   },
 };
 
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+type HourlyAvailabilityBlock = {
+  id: string;
+  dateKey: string;
+  startTime: string;
+  endTime: string;
+  available: boolean;
+  availableSeats: number;
+};
+
+type BookingTimeOption = {
+  id: string;
+  startTime: string;
+  endTime: string;
+  availableSeats: number;
+};
+
+function getDateKeyFromSlotTime(value: string): string {
+  return value.includes("T") ? value.split("T")[0] : value.split(" ")[0];
+}
+
+function getTimeFromSlotTime(value: string): string {
+  if (value.includes("T")) return value.split("T")[1].substring(0, 5);
+  if (value.includes(" ")) return value.split(" ")[1].substring(0, 5);
+  return value.substring(0, 5);
+}
+
+function parseDateKey(dateKey: string): Date {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatExactDate(dateKey: string): string {
+  return parseDateKey(dateKey).toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function formatMonthLabel(date: Date): string {
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+  });
+}
+
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function buildCalendarDays(monthDate: Date): Array<{ dateKey: string; dayNumber: number; inMonth: boolean }> {
+  const year = monthDate.getFullYear();
+  const month = monthDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const startDate = new Date(firstDay);
+  startDate.setDate(firstDay.getDate() - firstDay.getDay());
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(startDate);
+    date.setDate(startDate.getDate() + index);
+    return {
+      dateKey: formatDateKey(date),
+      dayNumber: date.getDate(),
+      inMonth: date.getMonth() === month,
+    };
+  });
+}
+
+function timeToMinutes(value: string): number {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function minutesToTime(value: number): string {
+  const hour = Math.floor(value / 60);
+  const minute = value % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function getHourlyAvailabilityBlocks(slot: AvailabilitySlot): HourlyAvailabilityBlock[] {
+  const dateKey = getDateKeyFromSlotTime(slot.start_time);
+  const startMinutes = timeToMinutes(getTimeFromSlotTime(slot.start_time));
+  const endMinutes = timeToMinutes(getTimeFromSlotTime(slot.end_time));
+
+  if (endMinutes <= startMinutes) {
+    return [
+      {
+        id: `${slot.slot_id}-${getTimeFromSlotTime(slot.start_time)}`,
+        dateKey,
+        startTime: getTimeFromSlotTime(slot.start_time),
+        endTime: getTimeFromSlotTime(slot.end_time),
+        available: slot.available,
+        availableSeats: slot.available_seats ?? 1,
+      },
+    ];
+  }
+
+  const blocks: HourlyAvailabilityBlock[] = [];
+  for (let current = startMinutes; current < endMinutes; current += 60) {
+    const next = Math.min(current + 60, endMinutes);
+    blocks.push({
+      id: `${slot.slot_id}-${current}`,
+      dateKey,
+      startTime: minutesToTime(current),
+      endTime: minutesToTime(next),
+      available: slot.available,
+      availableSeats: slot.available_seats ?? 1,
+    });
+  }
+
+  return blocks;
+}
+
+function getBookingTimeOptions(
+  blocks: HourlyAvailabilityBlock[],
+  durationHours: number,
+): BookingTimeOption[] {
+  if (durationHours <= 0) return [];
+
+  const availableBlocks = blocks
+    .filter((block) => block.available)
+    .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+  const options: BookingTimeOption[] = [];
+
+  for (const block of availableBlocks) {
+    const startMinutes = timeToMinutes(block.startTime);
+    const endMinutes = startMinutes + durationHours * 60;
+    let cursor = startMinutes;
+    let availableSeats = block.availableSeats;
+
+    while (cursor < endMinutes) {
+      const next = cursor + 60;
+      const matchingBlock = availableBlocks.find(
+        (candidate) =>
+          timeToMinutes(candidate.startTime) === cursor &&
+          timeToMinutes(candidate.endTime) === next,
+      );
+
+      if (!matchingBlock) break;
+      availableSeats = Math.min(availableSeats, matchingBlock.availableSeats);
+      cursor = next;
+    }
+
+    if (cursor === endMinutes) {
+      const endTime = minutesToTime(endMinutes);
+      options.push({
+        id: `${block.dateKey}-${block.startTime}-${endTime}`,
+        startTime: block.startTime,
+        endTime,
+        availableSeats,
+      });
+    }
+  }
+
+  return options;
+}
+
 export function VenueDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -35,7 +198,7 @@ export function VenueDetailPage() {
   const stateParams = location.state || {};
   const stateLandmark = stateParams.landmark as LandmarkContext | undefined;
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = formatDateKey(new Date());
 
   const [bookingDate, setBookingDate] = useState(
     stateParams.searchDate || sessionStorage.getItem("searchDate") || todayStr
@@ -58,6 +221,8 @@ export function VenueDetailPage() {
   const [loading, setLoading] = useState(true);
   const [storedLandmark, setStoredLandmark] = useState<LandmarkContext | null>(null);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => parseDateKey(bookingDate));
+  const [selectedAvailabilityDate, setSelectedAvailabilityDate] = useState<string | null>(null);
 
   const getDurationHours = (start: string, end: string) => {
     try {
@@ -112,11 +277,112 @@ export function VenueDetailPage() {
   const displayedDistance = venue && activeLandmark
     ? formatDistance(calculateDistanceKm(activeLandmark.lat, activeLandmark.lon, venue.lat, venue.lon))
     : formatDistance(venue?.distance_km);
+  const hourlyAvailabilityBlocks = useMemo(
+    () => slots.flatMap(getHourlyAvailabilityBlocks).sort((a, b) => {
+      const dateDiff = a.dateKey.localeCompare(b.dateKey);
+      if (dateDiff !== 0) return dateDiff;
+      return a.startTime.localeCompare(b.startTime);
+    }),
+    [slots],
+  );
+  const availabilityByDate = useMemo(() => {
+    const grouped = new Map<string, HourlyAvailabilityBlock[]>();
+    hourlyAvailabilityBlocks.forEach((block) => {
+      const existing = grouped.get(block.dateKey) ?? [];
+      existing.push(block);
+      grouped.set(block.dateKey, existing);
+    });
+    return grouped;
+  }, [hourlyAvailabilityBlocks]);
+  const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
+  const selectedDateBlocks = selectedAvailabilityDate
+    ? availabilityByDate.get(selectedAvailabilityDate) ?? []
+    : [];
+  const availableDateCount = Array.from(availabilityByDate.entries()).filter(([dateKey, dayBlocks]) =>
+    dateKey >= todayStr && dayBlocks.some((block) => block.available)
+  ).length;
+  const availableDateKeys = useMemo(
+    () =>
+      Array.from(availabilityByDate.entries())
+        .filter(([dateKey, dayBlocks]) =>
+          dateKey >= todayStr && dayBlocks.some((block) => block.available)
+        )
+        .map(([dateKey]) => dateKey)
+        .sort(),
+    [availabilityByDate, todayStr],
+  );
+  const selectedDurationHours = Number(selectedDuration);
+  const bookingDateBlocks = availabilityByDate.get(bookingDate) ?? [];
+  const bookingTimeOptions = useMemo(
+    () => getBookingTimeOptions(bookingDateBlocks, selectedDurationHours),
+    [bookingDateBlocks, selectedDurationHours],
+  );
+  const selectedTimeIsBookable = bookingTimeOptions.some(
+    (option) => option.startTime === startTime && option.endTime === endTime,
+  );
+  const selectedBookingOption = bookingTimeOptions.find(
+    (option) => option.startTime === startTime && option.endTime === endTime,
+  );
+  const maxBookableSeats = selectedBookingOption?.availableSeats ?? 0;
+  const seatOptions = Array.from(
+    { length: Math.min(Math.max(maxBookableSeats, 0), 10) },
+    (_, index) => index + 1,
+  );
+
+  useEffect(() => {
+    if (hourlyAvailabilityBlocks.length === 0) {
+      setSelectedAvailabilityDate(null);
+      return;
+    }
+
+    const bookingDateHasBookableSlots =
+      bookingDate >= todayStr &&
+      (availabilityByDate.get(bookingDate) ?? []).some((block) => block.available);
+    const firstAvailableBlock =
+      hourlyAvailabilityBlocks.find((block) => block.dateKey >= todayStr && block.available) ?? null;
+
+    if (!bookingDateHasBookableSlots && !firstAvailableBlock) {
+      setSelectedAvailabilityDate(null);
+      return;
+    }
+
+    const nextDate = bookingDateHasBookableSlots ? bookingDate : firstAvailableBlock!.dateKey;
+
+    setSelectedAvailabilityDate(nextDate);
+    setCalendarMonth(parseDateKey(nextDate));
+  }, [availabilityByDate, bookingDate, hourlyAvailabilityBlocks, todayStr]);
+
+  useEffect(() => {
+    if (availableDateKeys.length === 0) return;
+    if (!availableDateKeys.includes(bookingDate)) {
+      setBookingDate(availableDateKeys[0]);
+    }
+  }, [availableDateKeys, bookingDate]);
+
+  useEffect(() => {
+    if (bookingTimeOptions.length === 0) return;
+    if (!selectedTimeIsBookable) {
+      const firstOption = bookingTimeOptions[0];
+      setStartTime(firstOption.startTime);
+      setEndTime(firstOption.endTime);
+    }
+  }, [bookingTimeOptions, selectedTimeIsBookable]);
+
+  useEffect(() => {
+    if (maxBookableSeats <= 0) return;
+    if (seatsReserved > maxBookableSeats) {
+      setSeatsReserved(maxBookableSeats);
+    }
+  }, [maxBookableSeats, seatsReserved]);
 
   const handleBooking = () => {
     if (!venue) return;
     if (!bookingDate) {
       toast.error("Please select a booking date.");
+      return;
+    }
+    if (bookingDate < todayStr) {
+      toast.error("Please select today or a future date.");
       return;
     }
     if (!startTime || !endTime) {
@@ -125,6 +391,14 @@ export function VenueDetailPage() {
     }
     if (duration <= 0) {
       toast.error("End time must be after start time.");
+      return;
+    }
+    if (!selectedTimeIsBookable) {
+      toast.error("Please select an available time slot.");
+      return;
+    }
+    if (seatsReserved > maxBookableSeats) {
+      toast.error("Not enough seats are available for this time slot.");
       return;
     }
 
@@ -393,26 +667,149 @@ export function VenueDetailPage() {
             </TabsContent>
 
             <TabsContent value="availability" className="mt-6">
-              <div className="space-y-2">
+              <div className="rounded-lg border bg-card">
+                <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h4 className="mb-1">Availability calendar</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {availableDateCount} days with available hourly slots
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="size-9 cursor-pointer"
+                      onClick={() => {
+                        setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1));
+                      }}
+                      aria-label="Previous month"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </Button>
+                    <div className="min-w-36 text-center font-medium">
+                      {formatMonthLabel(calendarMonth)}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="size-9 cursor-pointer"
+                      onClick={() => {
+                        setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1));
+                      }}
+                      aria-label="Next month"
+                    >
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+
                 {slots.length === 0 ? (
                   <p className="text-muted-foreground text-center py-4">
                     No available time slots for today.
                   </p>
                 ) : (
-                  slots.map((slot) => (
-                    <div
-                      key={slot.slot_id}
-                      className={`flex items-center justify-between p-4 rounded-lg border ${slot.available ? "bg-card" : "bg-muted opacity-50"}`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Clock className="size-4" />
-                        <span>{formatSlotTime(slot.start_time, slot.end_time)}</span>
+                  <div className="grid gap-6 p-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                    <div>
+                      <div className="mb-2 grid grid-cols-7 gap-2 text-center text-xs font-medium text-muted-foreground">
+                        {WEEKDAY_LABELS.map((day) => (
+                          <div key={day}>{day}</div>
+                        ))}
                       </div>
-                      <Badge variant={slot.available ? "default" : "secondary"}>
-                        {slot.available ? "Available" : "Booked"}
-                      </Badge>
+                      <div className="grid grid-cols-7 gap-2">
+                        {calendarDays.map((day) => {
+                          const dayBlocks = availabilityByDate.get(day.dateKey) ?? [];
+                          const availableCount = dayBlocks.filter((block) => block.available).length;
+                          const hasSlots = dayBlocks.length > 0;
+                          const isPastDate = day.dateKey < todayStr;
+                          const hasBookableSlots = availableCount > 0 && !isPastDate;
+                          const isSelected = selectedAvailabilityDate === day.dateKey;
+
+                          return (
+                            <button
+                              key={day.dateKey}
+                              type="button"
+                              disabled={!hasBookableSlots}
+                              onClick={() => {
+                                setSelectedAvailabilityDate(day.dateKey);
+                                setBookingDate(day.dateKey);
+                              }}
+                              className={`min-h-24 rounded-lg border p-2 text-left transition-colors ${isSelected ? "border-emerald-600 bg-emerald-50" : "bg-background hover:bg-muted/40"} ${!day.inMonth ? "text-muted-foreground/60" : ""} ${!hasBookableSlots ? "cursor-not-allowed bg-muted/50 text-muted-foreground opacity-60 hover:bg-muted/50" : "cursor-pointer"}`}
+                            >
+                              <div className="flex items-start justify-between gap-1">
+                                <span className="font-medium">{day.dayNumber}</span>
+                                {availableCount > 0 && !isPastDate && (
+                                  <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[11px] font-medium text-white">
+                                    {availableCount}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="mt-3 text-[11px] leading-tight text-muted-foreground">
+                                {formatExactDate(day.dateKey)}
+                              </div>
+                              {isPastDate && hasSlots && (
+                                <div className="mt-2 text-[11px] font-medium text-muted-foreground">
+                                  Past date
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  ))
+
+                    <div className="rounded-lg border bg-background">
+                      <div className="border-b p-4">
+                        <h4 className="mb-1">
+                          {selectedAvailabilityDate ? formatExactDate(selectedAvailabilityDate) : "Select a date"}
+                        </h4>
+                        <p className="text-sm text-muted-foreground">
+                          {selectedDateBlocks.filter((block) => block.available && block.dateKey >= todayStr).length} available hourly blocks
+                        </p>
+                      </div>
+                      <div className="max-h-[460px] space-y-2 overflow-y-auto p-4">
+                        {selectedDateBlocks.length === 0 ? (
+                          <p className="py-8 text-center text-sm text-muted-foreground">
+                            No slots listed for this date.
+                          </p>
+                        ) : (
+                          selectedDateBlocks.map((block) => {
+                            const isBookable = block.available && block.dateKey >= todayStr;
+
+                            return (
+                              <button
+                                key={block.id}
+                                type="button"
+                                disabled={!isBookable}
+                                onClick={() => {
+                                  setBookingDate(block.dateKey);
+                                  setStartTime(block.startTime);
+                                  setEndTime(block.endTime);
+                                  setSelectedDuration(String(getDurationHours(block.startTime, block.endTime) || 1));
+                                }}
+                                className={`flex w-full items-center justify-between rounded-lg border p-4 text-left transition-colors ${isBookable ? "cursor-pointer border-emerald-200 bg-card hover:bg-emerald-50" : "cursor-not-allowed bg-muted opacity-60"}`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className={`flex size-9 items-center justify-center rounded-full ${isBookable ? "bg-emerald-100 text-emerald-700" : "bg-background text-muted-foreground"}`}>
+                                    <Clock className="size-4" />
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">{block.startTime} - {block.endTime}</div>
+                                    <div className="text-xs text-muted-foreground">{formatExactDate(block.dateKey)}</div>
+                                  </div>
+                                </div>
+                                <Badge variant={isBookable ? "default" : "secondary"} className={isBookable ? "bg-emerald-500 text-white hover:bg-emerald-500" : ""}>
+                                  {isBookable ? "Available" : block.dateKey < todayStr ? "Past date" : "Booked"}
+                                </Badge>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </TabsContent>
@@ -468,58 +865,60 @@ export function VenueDetailPage() {
 
                 <Separator className="my-4" />
 
-                {/* Date/time selectors (keep for API integration) */}
+                {/* Date/time selectors are derived from live availability slots. */}
                 <div className="space-y-4">
                   <div className="space-y-1">
                     <Label htmlFor="bookingDate">Date</Label>
-                    <Input
+                    <select
                       id="bookingDate"
-                      type="date"
                       value={bookingDate}
-                      onChange={(e) => setBookingDate(e.target.value)}
-                      className="w-full bg-background" />
+                      onChange={(e) => {
+                        setBookingDate(e.target.value);
+                        setSelectedAvailabilityDate(e.target.value);
+                      }}
+                      disabled={availableDateKeys.length === 0}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {availableDateKeys.length === 0 ? (
+                        <option value={bookingDate}>No available dates</option>
+                      ) : (
+                        availableDateKeys.map((dateKey) => (
+                          <option key={dateKey} value={dateKey}>
+                            {formatExactDate(dateKey)}
+                          </option>
+                        ))
+                      )}
+                    </select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="startTime">Start Time</Label>
-                      <select
-                        id="startTime"
-                        value={startTime}
-                        onChange={(e) => setStartTime(e.target.value)}
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        {Array.from({ length: 15 }, (_, i) => {
-                          const hour = i + 8;
-                          const str = hour < 10 ? `0${hour}:00` : `${hour}:00`;
-                          return (
-                            <option key={str} value={str}>
-                              {hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label htmlFor="endTime">End Time</Label>
-                      <select
-                        id="endTime"
-                        value={endTime}
-                        onChange={(e) => setEndTime(e.target.value)}
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        {Array.from({ length: 15 }, (_, i) => {
-                          const hour = i + 9;
-                          const str = hour < 10 ? `0${hour}:00` : `${hour}:00`;
-                          return (
-                            <option key={str} value={str}>
-                              {hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="bookingTime">Available Time</Label>
+                    <select
+                      id="bookingTime"
+                      value={`${startTime}-${endTime}`}
+                      onChange={(e) => {
+                        const [nextStartTime, nextEndTime] = e.target.value.split("-");
+                        setStartTime(nextStartTime);
+                        setEndTime(nextEndTime);
+                      }}
+                      disabled={bookingTimeOptions.length === 0}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {bookingTimeOptions.length === 0 ? (
+                        <option value={`${startTime}-${endTime}`}>
+                          No available {selectedDurationHours}h slots
+                        </option>
+                      ) : (
+                        bookingTimeOptions.map((option) => (
+                          <option
+                            key={option.id}
+                            value={`${option.startTime}-${option.endTime}`}
+                          >
+                            {option.startTime} - {option.endTime}
+                          </option>
+                        ))
+                      )}
+                    </select>
                   </div>
 
                   <div className="space-y-1">
@@ -528,14 +927,26 @@ export function VenueDetailPage() {
                       id="seatsReserved"
                       value={seatsReserved}
                       onChange={(e) => setSeatsReserved(parseInt(e.target.value))}
-                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      disabled={seatOptions.length === 0}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {[1, 2, 3, 4, 5, 6, 8, 10].map((num) => (
-                        <option key={num} value={num}>
-                          {num} {num === 1 ? "seat" : "seats"}
-                        </option>
-                      ))}
+                      {seatOptions.length === 0 ? (
+                        <option value={seatsReserved}>No seats available</option>
+                      ) : (
+                        seatOptions.map((num) => (
+                          <option key={num} value={num}>
+                            {num} {num === 1 ? "seat" : "seats"}
+                          </option>
+                        ))
+                      )}
                     </select>
+                    {selectedBookingOption && (
+                      <p className="text-xs text-muted-foreground">
+                        {selectedBookingOption.availableSeats}{" "}
+                        {selectedBookingOption.availableSeats === 1 ? "seat" : "seats"} available
+                        for this time.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -556,9 +967,20 @@ export function VenueDetailPage() {
                 size="lg"
                 onClick={handleBooking}
                 style={{ backgroundColor: "#253c50" }}
-                disabled={duration <= 0}
+                disabled={
+                  duration <= 0 ||
+                  bookingTimeOptions.length === 0 ||
+                  !selectedTimeIsBookable ||
+                  seatsReserved > maxBookableSeats
+                }
               >
-                {duration <= 0 ? "Invalid Time Range" : "Continue to Checkout"}
+                {bookingTimeOptions.length === 0
+                  ? "No Available Time"
+                  : seatsReserved > maxBookableSeats
+                    ? "Not Enough Seats"
+                  : duration <= 0 || !selectedTimeIsBookable
+                    ? "Invalid Time Range"
+                    : "Continue to Checkout"}
               </Button>
 
               <p className="text-sm text-muted-foreground text-center">

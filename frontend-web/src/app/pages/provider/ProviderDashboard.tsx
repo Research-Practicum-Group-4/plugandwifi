@@ -6,12 +6,17 @@ import { Badge } from "../../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Plus, Calendar, DollarSign, Users, TrendingUp, Loader2 } from "lucide-react";
 import { api } from "../../../services/api";
-import { ProviderDashboardKPIsResponse, ProviderArrivalItem } from "../../../types/api";
+import {
+  ProviderDashboardKPIsResponse,
+  ProviderArrivalItem,
+  VenueCreateResponse,
+} from "../../../types/api";
 import { toast } from "sonner";
 
 export function ProviderDashboard() {
   const [kpis, setKpis] = useState<ProviderDashboardKPIsResponse | null>(null);
   const [arrivals, setArrivals] = useState<ProviderArrivalItem[]>([]);
+  const [spaces, setSpaces] = useState<VenueCreateResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,12 +26,14 @@ export function ProviderDashboard() {
       }
       try {
         setLoading(true);
-        const [kpiData, arrivalData] = await Promise.all([
+        const [kpiData, arrivalData, venueData] = await Promise.all([
           api.getProviderKPIs(),
           api.getProviderArrivals(),
+          api.getProviderVenues(),
         ]);
         setKpis(kpiData);
         setArrivals(arrivalData.items);
+        setSpaces(venueData.items);
       } catch (err: any) {
         console.error("Failed to load provider dashboard stats:", err);
         toast.error("Failed to sync dashboard metrics.");
@@ -81,27 +88,6 @@ export function ProviderDashboard() {
   };
 
   const stats = getKPIStatsList();
-
-  const spaces = [
-    {
-      id: 1,
-      name: "Grand Hotel Lobby",
-      type: "Hotel Lobby",
-      capacity: "8 tables",
-      availability: "2 PM - 5 PM",
-      status: "active",
-      bookingsToday: 5,
-    },
-    {
-      id: 2,
-      name: "Business Lounge",
-      type: "Business Lounge",
-      capacity: "12 desks",
-      availability: "9 AM - 6 PM",
-      status: "active",
-      bookingsToday: 8,
-    },
-  ];
 
   const formatDate = (dateStr: string) => {
     try {
@@ -217,29 +203,31 @@ export function ProviderDashboard() {
 
             <TabsContent value="spaces" className="mt-6">
               <div className="grid md:grid-cols-2 gap-6">
-                {spaces.map((space) => (
-                  <Card key={space.id}>
+                {spaces.length > 0 ? spaces.map((space) => (
+                  <Card key={space.venue_id}>
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div>
                           <CardTitle>{space.name}</CardTitle>
-                          <p className="text-muted-foreground mt-1">{space.type}</p>
+                          <p className="text-muted-foreground mt-1">{space.borough}</p>
                         </div>
-                        <Badge>{space.status}</Badge>
+                        <Badge variant={space.state === "Active" ? "default" : "secondary"}>
+                          {space.state}
+                        </Badge>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Capacity</span>
-                        <span>{space.capacity}</span>
+                        <span>{space.seat_capacity} seats</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Availability</span>
-                        <span>{space.availability}</span>
+                        <span>{space.opening_hours || "Not specified"}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Today's Bookings</span>
-                        <span>{space.bookingsToday}</span>
+                        <span className="text-muted-foreground">Hourly price</span>
+                        <span>${(space.hourly_price ?? 0).toFixed(2)}</span>
                       </div>
                       <div className="pt-3 flex gap-2">
                         <Button variant="outline" className="flex-1">
@@ -251,7 +239,11 @@ export function ProviderDashboard() {
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                )) : (
+                  <div className="md:col-span-2 py-10 text-center text-sm text-muted-foreground">
+                    No spaces submitted yet.
+                  </div>
+                )}
               </div>
             </TabsContent>
           </Tabs>

@@ -29,36 +29,42 @@ const BASE_VENUE: Venue = {
 };
 
 describe("enrichVenue enrichedPrice", () => {
-  it("always falls within the $3-7 range", () => {
+  it("uses the backend hourly_price when present", () => {
     const { enrichedPrice } = enrichVenue(BASE_VENUE);
+    expect(enrichedPrice).toBe(3.5);
+  });
+
+  it("falls back to the generated $3-7 range when hourly_price is missing", () => {
+    const { enrichedPrice } = enrichVenue({ ...BASE_VENUE, hourly_price: null });
     expect(enrichedPrice).toBeGreaterThanOrEqual(3);
     expect(enrichedPrice).toBeLessThanOrEqual(7);
   });
 
-  it("is always a whole dollar (integer)", () => {
-    const { enrichedPrice } = enrichVenue(BASE_VENUE);
+  it("fallback price is always a whole dollar (integer)", () => {
+    const { enrichedPrice } = enrichVenue({ ...BASE_VENUE, hourly_price: null });
     expect(Number.isInteger(enrichedPrice)).toBe(true);
   });
 
-  it("is deterministic for the same venue_id", () => {
-    const a = enrichVenue(BASE_VENUE).enrichedPrice;
-    const b = enrichVenue(BASE_VENUE).enrichedPrice;
+  it("fallback price is deterministic for the same venue_id", () => {
+    const venue = { ...BASE_VENUE, hourly_price: null };
+    const a = enrichVenue(venue).enrichedPrice;
+    const b = enrichVenue(venue).enrichedPrice;
     expect(a).toBe(b);
   });
 
-  it("produces different prices for different venue_ids", () => {
+  it("fallback price produces different prices for different venue_ids", () => {
     const prices = new Set(
       Array.from({ length: 50 }, (_, i) => `id_${i}`).map((id) =>
-        enrichVenue({ ...BASE_VENUE, venue_id: id }).enrichedPrice,
+        enrichVenue({ ...BASE_VENUE, venue_id: id, hourly_price: null }).enrichedPrice,
       ),
     );
     expect(prices.size).toBeGreaterThan(1);
   });
 
-  it("$5 is the most common outcome over many distinct IDs", () => {
+  it("fallback $5 is the most common outcome over many distinct IDs", () => {
     const counts: Record<number, number> = { 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
     for (let i = 0; i < 1000; i++) {
-      const price = enrichVenue({ ...BASE_VENUE, venue_id: `id_${i}` }).enrichedPrice;
+      const price = enrichVenue({ ...BASE_VENUE, venue_id: `id_${i}`, hourly_price: null }).enrichedPrice;
       counts[price]++;
     }
     expect(counts[5]).toBeGreaterThan(counts[3]);

@@ -121,10 +121,10 @@ describe('HomePage – venue cards', () => {
     }, { timeout: 3000 });
   });
 
-  it('shows enriched price with $/hour format on each card', async () => {
+  it('shows backend hourly price with $/hour format on each card', async () => {
     renderHomePage();
     await waitFor(() => {
-      const priceEls = screen.queryAllByText(/\$[3-7]\/hour/);
+      const priceEls = screen.queryAllByText(/\$\d+(\.\d+)?\/hour/);
       expect(priceEls.length).toBeGreaterThan(0);
     }, { timeout: 3000 });
   });

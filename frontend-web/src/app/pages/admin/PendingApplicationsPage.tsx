@@ -1,50 +1,69 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Separator } from "../../components/ui/separator";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "../../components/ui/dialog";
-import { CheckCircle2, XCircle, Eye } from "lucide-react";
-
-interface Application {
-  id: number;
-  providerName: string;
-  email: string;
-  venueName: string;
-  venueType: string;
-  submittedAt: string;
-  status: "pending" | "approved" | "rejected";
-  notes?: string;
-}
-
-const INITIAL_APPS: Application[] = [
-  { id: 1, providerName: "Maria Chen", email: "maria@grandhotel.com", venueName: "The Grand Hotel Lobby", venueType: "Hotel Lobby", submittedAt: "2026-07-10", status: "pending", notes: "Includes photos and floor plan." },
-  { id: 2, providerName: "James O'Brien", email: "james@tribecacowork.com", venueName: "Tribeca Co-work Hub", venueType: "Coworking Space", submittedAt: "2026-07-12", status: "pending" },
-  { id: 3, providerName: "Priya Sharma", email: "priya@uptown.cafe", venueName: "Uptown Cafe & Work", venueType: "Cafe", submittedAt: "2026-07-14", status: "pending", notes: "WBE certified, documents attached." },
-  { id: 4, providerName: "Tom Wilson", email: "tom@soholounge.com", venueName: "SoHo Business Lounge", venueType: "Business Lounge", submittedAt: "2026-07-15", status: "pending" },
-];
+import { CheckCircle2, XCircle, Eye, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { api } from "../../../services/api";
+import { AdminPendingVenue } from "../../../types/api";
 
 export function PendingApplicationsPage() {
-  const [apps, setApps] = useState<Application[]>(INITIAL_APPS);
-  const [selected, setSelected] = useState<Application | null>(null);
+  const [applications, setApplications] = useState<AdminPendingVenue[]>([]);
+  const [selected, setSelected] = useState<AdminPendingVenue | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionVenueId, setActionVenueId] = useState<string | null>(null);
 
-  const approve = (id: number) => {
-    setApps((prev) => prev.map((a) => (a.id === id ? { ...a, status: "approved" } : a)));
-    setSelected(null);
+  useEffect(() => {
+    const loadApplications = async () => {
+      try {
+        const response = await api.getPendingVenues();
+        setApplications(response.items);
+      } catch (err: any) {
+        const message =
+          err.response?.data?.detail || err.message || "Could not load pending venues.";
+        toast.error("Failed to load applications", { description: message });
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadApplications();
+  }, []);
+
+  const review = async (
+    application: AdminPendingVenue,
+    decision: "approve" | "reject"
+  ) => {
+    try {
+      setActionVenueId(application.venue_id);
+      await api.reviewVenue(application.venue_id, decision);
+      setApplications((current) =>
+        current.filter((item) => item.venue_id !== application.venue_id)
+      );
+      setSelected(null);
+      toast.success(decision === "approve" ? "Venue approved" : "Venue rejected", {
+        description:
+          decision === "approve"
+            ? "The venue is now visible in public search."
+            : "The venue will remain hidden from public search.",
+      });
+    } catch (err: any) {
+      const message =
+        err.response?.data?.detail || err.message || "Could not review this venue.";
+      toast.error("Review failed", { description: message });
+    } finally {
+      setActionVenueId(null);
+    }
   };
 
-  const reject = (id: number) => {
-    setApps((prev) => prev.map((a) => (a.id === id ? { ...a, status: "rejected" } : a)));
-    setSelected(null);
-  };
-
-  const statusColor: Record<Application["status"], string> = {
-    pending: "bg-amber-100 text-amber-800 border-amber-200",
-    approved: "bg-green-100 text-green-800 border-green-200",
-    rejected: "bg-red-100 text-red-800 border-red-200",
-  };
+  const formatTime = (value: string | null) => value?.slice(0, 5) || "Not specified";
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -55,111 +74,165 @@ export function PendingApplicationsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Applications ({apps.filter((a) => a.status === "pending").length} pending)</CardTitle>
+          <CardTitle>Applications ({applications.length} pending)</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="divide-y">
-            {apps.map((app) => (
-              <div key={app.id} className="flex items-center justify-between px-6 py-4 gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-medium">{app.venueName}</p>
-                    <Badge className={`text-xs capitalize ${statusColor[app.status]}`}>
-                      {app.status}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {app.providerName} • {app.email} • {app.venueType}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Submitted {app.submittedAt}</p>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-1"
-                    onClick={() => setSelected(app)}
+          {loading ? (
+            <div className="flex min-h-48 items-center justify-center">
+              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : applications.length === 0 ? (
+            <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+              No applications are waiting for review.
+            </div>
+          ) : (
+            <div className="divide-y">
+              {applications.map((application) => {
+                const actionPending = actionVenueId === application.venue_id;
+                return (
+                  <div
+                    key={application.venue_id}
+                    className="flex items-center justify-between gap-4 px-6 py-4"
                   >
-                    <Eye className="size-3.5" />
-                    Review
-                  </Button>
-                  {app.status === "pending" && (
-                    <>
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex items-center gap-2">
+                        <p className="font-medium">{application.name}</p>
+                        <Badge className="border-amber-200 bg-amber-100 text-xs text-amber-800">
+                          Pending
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {application.provider_name} · {application.provider_email}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {application.borough} · {application.availability_date || "No date"}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
                       <Button
                         size="sm"
-                        className="gap-1 bg-green-600 hover:bg-green-700 text-white"
-                        onClick={() => approve(app.id)}
+                        variant="outline"
+                        className="gap-1"
+                        onClick={() => setSelected(application)}
                       >
-                        <CheckCircle2 className="size-3.5" />
+                        <Eye className="size-3.5" />
+                        Review
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="gap-1 bg-green-600 text-white hover:bg-green-700"
+                        disabled={actionPending}
+                        onClick={() => review(application, "approve")}
+                      >
+                        {actionPending ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="size-3.5" />
+                        )}
                         Approve
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
-                        className="gap-1 text-red-600 border-red-200 hover:bg-red-50"
-                        onClick={() => reject(app.id)}
+                        className="gap-1 border-red-200 text-red-600 hover:bg-red-50"
+                        disabled={actionPending}
+                        onClick={() => review(application, "reject")}
                       >
                         <XCircle className="size-3.5" />
                         Reject
                       </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Review dialog */}
-      <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
+      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Application Review</DialogTitle>
           </DialogHeader>
           {selected && (
             <div className="space-y-3 text-sm">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-muted-foreground">Venue</p>
-                  <p className="font-medium">{selected.venueName}</p>
+                  <p className="font-medium">{selected.name}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Type</p>
-                  <p className="font-medium">{selected.venueType}</p>
+                  <p className="font-medium">{selected.osm_type || "Other"}</p>
                 </div>
               </div>
               <Separator />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-muted-foreground">Provider</p>
-                  <p className="font-medium">{selected.providerName}</p>
+                  <p className="font-medium">{selected.provider_name}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Email</p>
-                  <p className="font-medium">{selected.email}</p>
+                  <p className="break-all font-medium">{selected.provider_email}</p>
                 </div>
               </div>
               <Separator />
               <div>
-                <p className="text-muted-foreground">Notes</p>
-                <p>{selected.notes || "No notes provided."}</p>
+                <p className="text-muted-foreground">Location</p>
+                <p>
+                  {[selected.street, selected.borough, selected.zipcode]
+                    .filter(Boolean)
+                    .join(", ")}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {selected.lat}, {selected.lon}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-muted-foreground">Availability</p>
+                  <p>
+                    {selected.availability_date || "Not specified"}{" "}
+                    {formatTime(selected.availability_start_time)}-
+                    {formatTime(selected.availability_end_time)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Capacity / Price</p>
+                  <p>
+                    {selected.seat_capacity} seats · $
+                    {(selected.hourly_price ?? 0).toFixed(2)}/hour
+                  </p>
+                </div>
+              </div>
+              <Separator />
+              <div>
+                <p className="text-muted-foreground">Description and rules</p>
+                <p>{selected.rules_text || "No description provided."}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Amenities</p>
+                <p>{selected.amenity_tags.join(", ") || "None listed"}</p>
               </div>
             </div>
           )}
           <DialogFooter className="gap-2">
-            {selected?.status === "pending" && (
+            {selected && (
               <>
                 <Button
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                  onClick={() => selected && approve(selected.id)}
+                  className="bg-green-600 text-white hover:bg-green-700"
+                  disabled={actionVenueId === selected.venue_id}
+                  onClick={() => review(selected, "approve")}
                 >
                   Approve
                 </Button>
                 <Button
                   variant="outline"
-                  className="text-red-600 border-red-200"
-                  onClick={() => selected && reject(selected.id)}
+                  className="border-red-200 text-red-600"
+                  disabled={actionVenueId === selected.venue_id}
+                  onClick={() => review(selected, "reject")}
                 >
                   Reject
                 </Button>
