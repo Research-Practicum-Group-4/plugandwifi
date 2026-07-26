@@ -33,7 +33,7 @@ export interface Venue {
   opening_now: boolean;
   seats_avail: number;
   total_seats: number;
-  hourly_price: number;
+  hourly_price: number | null;
   rating: number;
   lat: number;
   lon: number;
@@ -75,11 +75,84 @@ export interface VenueDetail extends Venue {
   rules_text: string | null;
 }
 
+export interface VenueCreateRequest {
+  name: string;
+  osm_type: string;
+  street: string;
+  zipcode: string;
+  lat: number;
+  lon: number;
+  borough: string;
+  opening_hours: string;
+  seat_capacity: number;
+  amenity_tags: string[];
+  rules_text: string;
+  has_wifi: boolean;
+  plug_access: number;
+  hourly_price: number;
+  accessibility_friendly: boolean;
+  wbe_certified: boolean;
+  mbe_certified: boolean;
+  lgbt_friendly: boolean;
+  availability_date?: string;
+  availability_days?: number[];
+  availability_start_time: string;
+  availability_end_time: string;
+}
+
+export interface GeocodeResponse {
+  lat: number;
+  lon: number;
+  display_name: string | null;
+}
+
+export interface VenueCreateResponse {
+  venue_id: string;
+  name: string;
+  state: string;
+  lat: number;
+  lon: number;
+  borough: string;
+  opening_hours: string | null;
+  seat_capacity: number;
+  amenity_tags: string[];
+  rules_text: string | null;
+  has_wifi: boolean | null;
+  plug_access: number | null;
+  hourly_price: number | null;
+}
+
+export interface ProviderVenueListResponse {
+  items: VenueCreateResponse[];
+}
+
+export interface AdminPendingVenue extends VenueCreateResponse {
+  provider_name: string;
+  provider_email: string;
+  osm_type: string | null;
+  street: string | null;
+  zipcode: string | null;
+  availability_date: string | null;
+  availability_start_time: string | null;
+  availability_end_time: string | null;
+}
+
+export interface AdminPendingVenueListResponse {
+  items: AdminPendingVenue[];
+}
+
+export interface VenueReviewResponse {
+  venue_id: string;
+  state: "Active" | "Rejected";
+  message: string;
+}
+
 export interface AvailabilitySlot {
   slot_id: number;
   start_time: string;
   end_time: string;
   available: boolean;
+  available_seats?: number;
 }
 
 export interface VenueAvailability {

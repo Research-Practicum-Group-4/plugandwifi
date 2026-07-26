@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
@@ -138,6 +138,54 @@ const fallbackMapVenues: Venue[] = manhattanVenues.map((venue) => ({
 
 const INITIAL_DISPLAY_COUNT = 10;
 type FallbackVenue = (typeof manhattanVenues)[number];
+type SearchResultsCacheEntry = {
+  venues: EnrichedVenue[];
+  activeLandmark: LandmarkContext | null;
+};
+
+function buildSearchResultsCacheKey({
+  searchQuery,
+  selectedVenueSuggestionId,
+  selectedVenueTypes,
+  filters,
+  priceRange,
+  searchDate,
+  startTime,
+  endTime,
+  seatsRequired,
+  duration,
+  sortBy,
+  userLocationEnabled,
+}: {
+  searchQuery: string;
+  selectedVenueSuggestionId: string | null;
+  selectedVenueTypes: string[];
+  filters: Record<string, boolean>;
+  priceRange: number[];
+  searchDate: string;
+  startTime: string;
+  endTime: string;
+  seatsRequired: number;
+  duration: string;
+  sortBy: string;
+  userLocationEnabled: boolean;
+}) {
+  return JSON.stringify({
+    version: 1,
+    searchQuery: normalizeSearchText(searchQuery),
+    selectedVenueSuggestionId,
+    selectedVenueTypes: [...selectedVenueTypes].sort(),
+    filters,
+    priceRange,
+    searchDate,
+    startTime,
+    endTime,
+    seatsRequired,
+    duration,
+    sortBy,
+    userLocationEnabled,
+  });
+}
 
 export function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -162,11 +210,13 @@ export function SearchPage() {
   const [selectedVenueTypes, setSelectedVenueTypes] = useState<string[]>([]);
   const [priceRange, setPriceRange] = useState([1, 10]);
   const [duration, setDuration] = useState("any");
-  const [sortBy, setSortBy] = useState<"default" | "suitability" | "price" | "rating">("default");
+  const [sortBy, setSortBy] = useState<"suitability" | "price" | "rating">("suitability");
 
   const [allVenues, setAllVenues] = useState<EnrichedVenue[]>([]);
   const [fallbackVenues, setFallbackVenues] = useState<EnrichedVenue[]>([]);
   const [apiFailed, setApiFailed] = useState(false);
+  const searchResultsCacheRef = useRef<Map<string, SearchResultsCacheEntry>>(new Map());
+  const fallbackVenuesCacheRef = useRef<EnrichedVenue[] | null>(null);
 
   // Pinned Midtown Manhattan — Chrome popup fires normally but real coords are ignored
   const PINNED_LAT = 40.7589;
@@ -271,6 +321,30 @@ export function SearchPage() {
   // Main Data Fetching Engine
   useEffect(() => {
     const executeQuery = async () => {
+      const searchCacheKey = buildSearchResultsCacheKey({
+        searchQuery: debouncedSearchQuery,
+        selectedVenueSuggestionId,
+        selectedVenueTypes,
+        filters,
+        priceRange,
+        searchDate,
+        startTime,
+        endTime,
+        seatsRequired,
+        duration,
+        sortBy,
+        userLocationEnabled,
+      });
+      const cachedResult = searchResultsCacheRef.current.get(searchCacheKey);
+
+      if (cachedResult) {
+        setAllVenues(cachedResult.venues);
+        setActiveLandmark(cachedResult.activeLandmark);
+        setApiFailed(false);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
 
       let lat: number | undefined = undefined;
@@ -334,6 +408,19 @@ export function SearchPage() {
       };
 
       try {
+        const cacheAndApplyResult = (
+          venues: EnrichedVenue[],
+          landmark: LandmarkContext | null,
+        ) => {
+          searchResultsCacheRef.current.set(searchCacheKey, {
+            venues,
+            activeLandmark: landmark,
+          });
+          setAllVenues(venues);
+          setActiveLandmark(landmark);
+          setApiFailed(false);
+        };
+
         const durationHours =
           duration !== "any" && searchDate && startTime
             ? Number(duration.replace("+", ""))
@@ -355,6 +442,7 @@ export function SearchPage() {
           end_time: endTime ? `${endTime}:00` : undefined,
           duration_hours: durationHours,
           seats_required: seatsRequired,
+          sort: sortBy === "suitability" ? "suitability" as const : undefined,
         };
 
         if (isLandmarkSearch && lat !== undefined && lon !== undefined) {
@@ -376,9 +464,7 @@ export function SearchPage() {
           );
           matched = applyEdiFilters(matched);
 
-          setAllVenues(matched);
-          setActiveLandmark(matchedLandmark);
-          setApiFailed(false);
+          cacheAndApplyResult(matched, matchedLandmark);
         } else if (nameFilter) {
           const normalizedNameFilter = normalizeSearchText(nameFilter);
           let suggestionItems: VenueSuggestion[] = [];
@@ -447,9 +533,7 @@ export function SearchPage() {
           );
           matched = applyEdiFilters(matched);
 
-          setAllVenues(matched);
-          setActiveLandmark(null);
-          setApiFailed(false);
+          cacheAndApplyResult(matched, null);
         } else {
           // General browse — pass pinned coords when user granted location for proximity sorting
           const allData = await api.getVenues({
@@ -469,9 +553,7 @@ export function SearchPage() {
           );
           finalAll = applyEdiFilters(finalAll);
 
-          setAllVenues(finalAll);
-          setActiveLandmark(null);
-          setApiFailed(false);
+          cacheAndApplyResult(finalAll, null);
         }
       } catch (err) {
         console.error("Failed to load search data, using fallback data:", err);
@@ -484,7 +566,7 @@ export function SearchPage() {
     };
 
     executeQuery();
-  }, [filters, selectedVenueTypes, debouncedSearchQuery, priceRange, searchDate, startTime, endTime, seatsRequired, duration, userLocationEnabled]);
+  }, [filters, selectedVenueTypes, debouncedSearchQuery, selectedVenueSuggestionId, priceRange, searchDate, startTime, endTime, seatsRequired, duration, sortBy, userLocationEnabled]);
 
   useEffect(() => {
     const shouldShowFallback = !loading && !apiFailed && allVenues.length === 0;
@@ -495,13 +577,20 @@ export function SearchPage() {
     }
 
     const loadFallbackVenues = async () => {
+      if (fallbackVenuesCacheRef.current) {
+        setFallbackVenues(fallbackVenuesCacheRef.current);
+        return;
+      }
+
       try {
         const data = await api.getVenues({
           page: 1,
           limit: 1000,
           sort: "recommended",
         });
-        setFallbackVenues(data.items.map(enrichVenue));
+        const enrichedFallbackVenues = data.items.map(enrichVenue);
+        fallbackVenuesCacheRef.current = enrichedFallbackVenues;
+        setFallbackVenues(enrichedFallbackVenues);
       } catch (err) {
         console.warn("Failed to load fallback venues:", err);
         setFallbackVenues([]);
@@ -530,13 +619,11 @@ export function SearchPage() {
   };
 
   const emptySearchState = !loading && !apiFailed && allVenues.length === 0;
-  const visibleFallbackVenues = sortEnrichedVenues(
-    fallbackVenues.slice(0, visibleCount)
-  );
+  const visibleFallbackVenues = sortEnrichedVenues(fallbackVenues).slice(0, visibleCount);
   const visibleLegacyFallbackVenues: FallbackVenue[] = manhattanVenues.slice(0, visibleCount);
   const visibleApiVenues = emptySearchState
     ? visibleFallbackVenues
-    : sortEnrichedVenues(allVenues.slice(0, visibleCount));
+    : sortEnrichedVenues(allVenues).slice(0, visibleCount);
   const canLoadMore = apiFailed
     ? manhattanVenues.length > visibleLegacyFallbackVenues.length
     : emptySearchState
@@ -1181,8 +1268,8 @@ export function SearchPage() {
                   }}
                   className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <option value="default">Recommended</option>
-                  <option value="suitability">Suitability</option>
+                  {/* <option value="default">Recommended</option> */}
+                  <option value="suitability">Recommended</option>
                   <option value="rating">Customer Rating</option>
                   <option value="price">Price (Low to High)</option>
                 </select>

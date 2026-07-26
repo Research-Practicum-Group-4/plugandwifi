@@ -1,3 +1,4 @@
+import inspect
 import json
 import logging
 import os
@@ -35,6 +36,7 @@ from .rbac import get_current_user, require_roles
 from .refresh_tokens import hash_refresh_token, issue_refresh_session
 from .schemas import (
     AdminDashboardOverviewResponse,
+    AdminPendingVenueListResponse,
     BookingCancellationResponse,
     BookingCreate,
     BookingResponse,
@@ -47,11 +49,13 @@ from .schemas import (
     ChatbotSearchParameters,
     FavoriteListResponse,
     FavoriteResponse,
+    GeocodeResponse,
     LogoutRequest,
     MockPaymentConfirmRequest,
     MockPaymentResponse,
     ProviderArrivalsResponse,
     ProviderDashboardKPIsResponse,
+    ProviderVenueListResponse,
     RefreshTokenRequest,
     ReviewCreate,
     ReviewResponse,
@@ -64,6 +68,8 @@ from .schemas import (
     VenueCreateResponse,
     VenueDetailResponse,
     VenueListResponse,
+    VenueReviewRequest,
+    VenueReviewResponse,
     VenueSuggestionsResponse,
     VenueSurveyMetricsResponse,
     VenueSuspensionRequest,
@@ -244,6 +250,65 @@ def get_busyness_zone_id_for_venue(venue_id: str):
         pass
 
     return zone_id
+
+
+def infer_nearest_known_zone_id(lat: float | None, lon: float | None):
+    if lat is None or lon is None:
+        return None
+
+    venues = get_busyness_venues_dataframe()
+    if venues is None or "zone_id" not in venues.columns:
+        return None
+
+    try:
+        candidates = venues[
+            venues["lat"].notna()
+            & venues["lon"].notna()
+            & venues["zone_id"].notna()
+        ][["lat", "lon", "zone_id"]]
+    except KeyError:
+        return None
+
+    if candidates.empty:
+        return None
+
+    nearest_zone_id = None
+    nearest_distance = None
+    for _, candidate in candidates.iterrows():
+        distance_km = calculate_distance_km(
+            lat, lon, float(candidate["lat"]), float(candidate["lon"])
+        )
+        if nearest_distance is None or distance_km < nearest_distance:
+            nearest_distance = distance_km
+            nearest_zone_id = candidate["zone_id"]
+
+    return nearest_zone_id
+
+
+def build_venue_location_map(venues: list[Venue]):
+    return {venue.venue_id: (venue.lat, venue.lon) for venue in venues}
+
+
+def get_busyness_predictions_for_venues(
+    venues: list[Venue],
+    hour: int | None = None,
+    day_type: str | None = None,
+    prediction_date: date | str | None = None,
+    selected_date: date | str | None = None,
+    selected_time: time | None = None,
+):
+    prediction_kwargs = {
+        "hour": hour,
+        "day_type": day_type,
+        "prediction_date": prediction_date,
+        "selected_date": selected_date,
+        "selected_time": selected_time,
+    }
+    if "venue_locations" in inspect.signature(get_busyness_predictions).parameters:
+        prediction_kwargs["venue_locations"] = build_venue_location_map(venues)
+    return get_busyness_predictions(
+        [venue.venue_id for venue in venues], **prediction_kwargs
+    )
 
 
 @lru_cache(maxsize=1)
@@ -474,6 +539,7 @@ def get_busyness_predictions(
     prediction_date: date | str | None = None,
     selected_date: date | str | None = None,
     selected_time: time | None = None,
+    venue_locations: dict[str, tuple[float | None, float | None]] | None = None,
 ):
     if not venue_ids:
         return {}
@@ -499,6 +565,30 @@ def get_busyness_predictions(
 
     try:
         selected_venues = venues[venues["venue_id"].isin(venue_ids)].copy()
+
+        missing_venue_ids = [
+            venue_id
+            for venue_id in venue_ids
+            if venue_id not in set(selected_venues["venue_id"].tolist())
+        ]
+        inferred_rows = []
+        for venue_id in missing_venue_ids:
+            if not venue_locations or venue_id not in venue_locations:
+                continue
+            lat, lon = venue_locations[venue_id]
+            zone_id = infer_nearest_known_zone_id(lat, lon)
+            if zone_id is None:
+                continue
+            inferred_rows.append(
+                {"venue_id": venue_id, "lat": lat, "lon": lon, "zone_id": zone_id}
+            )
+
+        if inferred_rows:
+            import pandas as pd
+
+            selected_venues = pd.concat(
+                [selected_venues, pd.DataFrame(inferred_rows)], ignore_index=True
+            )
 
         if selected_venues.empty:
             return empty_prediction
@@ -2146,8 +2236,8 @@ def search_venues_for_chatbot(
         )
 
     candidate_venues = [venue for venue, _ in venues_with_distance]
-    busyness_predictions = get_busyness_predictions(
-        [venue.venue_id for venue in candidate_venues],
+    busyness_predictions = get_busyness_predictions_for_venues(
+        candidate_venues,
         selected_date=search_parameters.date,
         selected_time=search_parameters.start_time,
     )
@@ -2612,6 +2702,67 @@ def serialize_created_venue(venue: Venue):
         "plug_access": venue.plug_access,
         "hourly_price": venue.hourly_price,
     }
+
+
+def serialize_pending_venue(
+    venue: Venue, provider: User, availability_slot: AvailabilitySlot | None
+):
+    return {
+        **serialize_created_venue(venue),
+        "provider_name": provider.full_name,
+        "provider_email": provider.email,
+        "osm_type": venue.osm_type,
+        "street": venue.street,
+        "zipcode": venue.zipcode,
+        "availability_date": (
+            availability_slot.date if availability_slot is not None else None
+        ),
+        "availability_start_time": (
+            availability_slot.start_time.isoformat()
+            if availability_slot is not None
+            else None
+        ),
+        "availability_end_time": (
+            availability_slot.end_time.isoformat()
+            if availability_slot is not None
+            else None
+        ),
+    }
+
+
+def build_availability_slots_for_venue(venue_id: str, payload: VenueCreate):
+    slots = []
+    if payload.availability_days:
+        requested_days = set(payload.availability_days)
+        start_date = get_current_local_date()
+        for day_offset in range(30):
+            slot_date = start_date + timedelta(days=day_offset)
+            if slot_date.weekday() not in requested_days:
+                continue
+            slots.append(
+                AvailabilitySlot(
+                    venue_id=venue_id,
+                    date=slot_date,
+                    start_time=payload.availability_start_time,
+                    end_time=payload.availability_end_time,
+                    available=True,
+                    available_seats=payload.seat_capacity,
+                )
+            )
+        return slots
+
+    if payload.availability_date is not None:
+        slots.append(
+            AvailabilitySlot(
+                venue_id=venue_id,
+                date=payload.availability_date,
+                start_time=payload.availability_start_time,
+                end_time=payload.availability_end_time,
+                available=True,
+                available_seats=payload.seat_capacity,
+            )
+        )
+    return slots
 
 
 def booking_datetime(booking: Booking):
@@ -3362,14 +3513,79 @@ def create_venue(
         has_wifi=payload.has_wifi,
         plug_access=payload.plug_access,
         hourly_price=payload.hourly_price,
+        osm_type=payload.osm_type,
+        street=payload.street,
+        zipcode=payload.zipcode,
+        accessibility_friendly=payload.accessibility_friendly,
+        wbe_certified=payload.wbe_certified,
+        mbe_certified=payload.mbe_certified,
+        lgbt_friendly=payload.lgbt_friendly,
         partner=current_user.id,
     )
 
     db.add(venue)
+    db.flush()
+    db.add_all(build_availability_slots_for_venue(venue.venue_id, payload))
     db.commit()
     db.refresh(venue)
 
     return serialize_created_venue(venue)
+
+
+@app.get("/api/provider/venues", response_model=ProviderVenueListResponse)
+def get_provider_venues(
+    current_user: User = Depends(require_roles("provider")),
+    db: Session = Depends(get_db),
+):
+    venues = (
+        db.query(Venue)
+        .filter(Venue.partner == current_user.id)
+        .order_by(Venue.name)
+        .all()
+    )
+    return {"items": [serialize_created_venue(venue) for venue in venues]}
+
+
+@app.get("/api/geocode/nyc", response_model=GeocodeResponse)
+def geocode_nyc_address(
+    address: str = Query(..., min_length=3),
+    borough: str = Query(..., min_length=2),
+    zipcode: str = Query(..., min_length=5),
+    current_user: User = Depends(require_roles("provider")),
+):
+    query = f"{address}, {borough}, {zipcode}, New York, USA"
+    try:
+        response = httpx.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={
+                "q": query,
+                "format": "jsonv2",
+                "limit": 1,
+                "countrycodes": "us",
+                "viewbox": "-74.2591,40.9176,-73.7004,40.4774",
+                "bounded": 1,
+            },
+            headers={"User-Agent": "PlugAndWifi/1.0 provider-geocoder"},
+            timeout=10,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502, detail="Could not geocode the address"
+        ) from exc
+
+    matches = response.json()
+    if not matches:
+        raise HTTPException(
+            status_code=404, detail="Address was not found in New York City"
+        )
+
+    match = matches[0]
+    return {
+        "lat": float(match["lat"]),
+        "lon": float(match["lon"]),
+        "display_name": match.get("display_name"),
+    }
 
 
 @app.get("/api/venues", response_model=VenueListResponse)
@@ -3506,8 +3722,8 @@ def get_venues(
             venues_with_distance.append((venue, distance_km))
 
         if is_suitability_sort(sort):
-            busyness_predictions = get_busyness_predictions(
-                [venue.venue_id for venue, _ in venues_with_distance],
+            busyness_predictions = get_busyness_predictions_for_venues(
+                [venue for venue, _ in venues_with_distance],
                 selected_date=date,
                 selected_time=start_time,
             )
@@ -3538,8 +3754,8 @@ def get_venues(
     else:
         if is_suitability_sort(sort):
             venues = query.all()
-            busyness_predictions = get_busyness_predictions(
-                [venue.venue_id for venue in venues],
+            busyness_predictions = get_busyness_predictions_for_venues(
+                venues,
                 selected_date=date,
                 selected_time=start_time,
             )
@@ -3571,8 +3787,8 @@ def get_venues(
         selected_venues = [(venue, None) for venue in venues]
 
     if busyness_predictions is None:
-        busyness_predictions = get_busyness_predictions(
-            [venue.venue_id for venue, _ in selected_venues],
+        busyness_predictions = get_busyness_predictions_for_venues(
+            [venue for venue, _ in selected_venues],
             selected_date=date,
             selected_time=start_time,
         )
@@ -3649,8 +3865,10 @@ def get_venue_by_id(
     if venue is None:
         raise HTTPException(status_code=404, detail="Venue not found")
 
-    busyness_predictions = get_busyness_predictions(
-        [venue.venue_id], selected_date=date, selected_time=start_time
+    busyness_predictions = get_busyness_predictions_for_venues(
+        [venue],
+        selected_date=date,
+        selected_time=start_time,
     )
     busyness_prediction = busyness_predictions.get(venue.venue_id)
 
@@ -4163,6 +4381,62 @@ def suspend_venue(
             "Venue suspended successfully"
             if payload.state == "Suspended"
             else "Venue activated successfully"
+        ),
+    }
+
+
+@app.get(
+    "/api/admin/venues/pending", response_model=AdminPendingVenueListResponse
+)
+def get_pending_venues(
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(Venue, User, AvailabilitySlot)
+        .join(User, Venue.partner == User.id)
+        .outerjoin(AvailabilitySlot, Venue.venue_id == AvailabilitySlot.venue_id)
+        .filter(Venue.state == "Pending Approval")
+        .order_by(Venue.name, AvailabilitySlot.date, AvailabilitySlot.start_time)
+        .all()
+    )
+
+    items_by_venue_id = {}
+    for venue, provider, availability_slot in rows:
+        if venue.venue_id not in items_by_venue_id:
+            items_by_venue_id[venue.venue_id] = serialize_pending_venue(
+                venue, provider, availability_slot
+            )
+    return {"items": list(items_by_venue_id.values())}
+
+
+@app.patch(
+    "/api/admin/venues/{venue_id}/review", response_model=VenueReviewResponse
+)
+def review_pending_venue(
+    venue_id: str,
+    payload: VenueReviewRequest,
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
+):
+    venue = (
+        db.query(Venue).filter(Venue.venue_id == venue_id).with_for_update().first()
+    )
+    if venue is None:
+        raise HTTPException(status_code=404, detail="Venue not found")
+    if venue.state != "Pending Approval":
+        raise HTTPException(status_code=409, detail="Venue is not pending approval")
+
+    venue.state = "Active" if payload.decision == "approve" else "Rejected"
+    db.commit()
+    db.refresh(venue)
+    return {
+        "venue_id": venue.venue_id,
+        "state": venue.state,
+        "message": (
+            "Venue approved successfully"
+            if payload.decision == "approve"
+            else "Venue rejected successfully"
         ),
     }
 

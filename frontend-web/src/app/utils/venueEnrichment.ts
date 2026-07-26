@@ -177,9 +177,20 @@ function pickPrice(rand: () => number): number {
   return 5;
 }
 
+function getDisplayPrice(venue: Venue, rand: () => number): number {
+  if (
+    typeof venue.hourly_price === "number" &&
+    Number.isFinite(venue.hourly_price) &&
+    venue.hourly_price >= 0
+  ) {
+    return venue.hourly_price;
+  }
+  return pickPrice(rand);
+}
+
 export function enrichVenue(venue: Venue): EnrichedVenue {
   const rand = seededRandom(hashString(venue.venue_id));
-  const enrichedPrice = pickPrice(rand);
+  const enrichedPrice = getDisplayPrice(venue, rand);
 
   const certifications: string[] = [];
   const wbeCertified = venue.wbe_certified === true || rand() < 0.2;

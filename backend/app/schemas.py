@@ -3,7 +3,7 @@ from datetime import time as time_type
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 class UserRegister(BaseModel):
@@ -252,6 +252,74 @@ class VenueCreate(BaseModel):
 
     hourly_price: float | None = Field(None, ge=0)
 
+    osm_type: str | None = None
+
+    street: str | None = None
+
+    zipcode: str | None = None
+
+    accessibility_friendly: bool = False
+
+    wbe_certified: bool = False
+
+    mbe_certified: bool = False
+
+    lgbt_friendly: bool = False
+
+    availability_date: date_type | None = None
+
+    availability_days: list[int] = Field(default_factory=list)
+
+    availability_start_time: time_type | None = None
+
+    availability_end_time: time_type | None = None
+
+    @model_validator(mode="after")
+    def validate_availability_window(self):
+        availability_values = (
+            self.availability_date,
+            self.availability_start_time,
+            self.availability_end_time,
+        )
+        if (
+            not self.availability_days
+            and any(value is not None for value in availability_values)
+            and not all(value is not None for value in availability_values)
+        ):
+            raise ValueError(
+                "availability_date, availability_start_time, and "
+                "availability_end_time must be provided together"
+            )
+        if (
+            self.availability_start_time is not None
+            and self.availability_end_time is not None
+            and self.availability_end_time <= self.availability_start_time
+        ):
+            raise ValueError("availability_end_time must be after availability_start_time")
+        if self.availability_days:
+            invalid_days = [
+                day for day in self.availability_days if day < 0 or day > 6
+            ]
+            if invalid_days:
+                raise ValueError("availability_days must use 0-6 for Monday-Sunday")
+            if (
+                self.availability_start_time is None
+                or self.availability_end_time is None
+            ):
+                raise ValueError(
+                    "availability_start_time and availability_end_time are required "
+                    "when availability_days is provided"
+                )
+        return self
+
+
+class GeocodeResponse(BaseModel):
+    lat: float
+
+    lon: float
+
+    display_name: str | None = None
+
 
 class VenueCreateResponse(BaseModel):
     venue_id: str
@@ -279,6 +347,44 @@ class VenueCreateResponse(BaseModel):
     plug_access: int | None = None
 
     hourly_price: float | None = None
+
+
+class ProviderVenueListResponse(BaseModel):
+    items: list[VenueCreateResponse]
+
+
+class AdminPendingVenueResponse(VenueCreateResponse):
+    provider_name: str
+
+    provider_email: str
+
+    osm_type: str | None = None
+
+    street: str | None = None
+
+    zipcode: str | None = None
+
+    availability_date: date_type | None = None
+
+    availability_start_time: str | None = None
+
+    availability_end_time: str | None = None
+
+
+class AdminPendingVenueListResponse(BaseModel):
+    items: list[AdminPendingVenueResponse]
+
+
+class VenueReviewRequest(BaseModel):
+    decision: Literal["approve", "reject"]
+
+
+class VenueReviewResponse(BaseModel):
+    venue_id: str
+
+    state: Literal["Active", "Rejected"]
+
+    message: str
 
 
 class VenueDetailResponse(BaseModel):

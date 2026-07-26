@@ -177,7 +177,7 @@ function MapMarkers({
                 color: "#2f8a64",
               }}
             >
-              ${selectedVenue.hourly_price.toFixed(2)}/hr
+              ${(selectedVenue.hourly_price ?? 0).toFixed(2)}/hr
             </p>
             <a
               href={`/venue/${selectedVenue.venue_id}`}

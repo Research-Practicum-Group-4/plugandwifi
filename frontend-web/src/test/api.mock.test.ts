@@ -196,6 +196,77 @@ describe('api.getSuggestions (mock)', () => {
 
 // ── Admin API ─────────────────────────────────────────────────────────────
 
+describe('provider venue approval flow (mock)', () => {
+  beforeEach(() => {
+    localStorageMock.setItem('access_token', 'mock-provider-token');
+    localStorageMock.setItem(
+      'user_profile',
+      JSON.stringify({
+        user_id: 3,
+        full_name: 'Demo Provider',
+        email: 'user3@example.com',
+        role: 'provider',
+      })
+    );
+  });
+
+  it('keeps a submitted venue hidden until admin approval', async () => {
+    const geocode = await api.geocodeNycAddress({
+      address: '350 5th Avenue',
+      borough: 'Manhattan',
+      zipcode: 'NY 10001',
+    });
+
+    const created = await api.createVenue({
+      name: 'Mock Approval Flow Venue',
+      osm_type: 'cafe',
+      street: '350 5th Avenue',
+      zipcode: 'NY 10001',
+      lat: geocode.lat,
+      lon: geocode.lon,
+      borough: 'Manhattan',
+      opening_hours: 'Mon, Wed, Fri 09:00-17:00',
+      seat_capacity: 8,
+      amenity_tags: ['wifi', 'power outlets'],
+      rules_text: 'Keep calls brief.',
+      has_wifi: true,
+      plug_access: 8,
+      hourly_price: 4.5,
+      accessibility_friendly: true,
+      wbe_certified: true,
+      mbe_certified: false,
+      lgbt_friendly: true,
+      availability_days: [0, 2, 4],
+      availability_start_time: '09:00:00',
+      availability_end_time: '17:00:00',
+    });
+
+    expect(created.state).toBe('Pending Approval');
+    expect((await api.getProviderVenues()).items).toContainEqual(created);
+    expect((await api.getPendingVenues()).items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ venue_id: created.venue_id }),
+      ])
+    );
+    expect((await api.getVenues({ name: created.name })).items).toHaveLength(0);
+
+    await api.reviewVenue(created.venue_id, 'approve');
+
+    expect((await api.getPendingVenues()).items).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ venue_id: created.venue_id }),
+      ])
+    );
+    expect((await api.getVenues({ name: created.name })).items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          venue_id: created.venue_id,
+        }),
+      ])
+    );
+  });
+});
+
 describe('api.getAdminStats (mock)', () => {
   beforeEach(() => {
     localStorageMock.setItem('access_token', 'mock-admin-token');

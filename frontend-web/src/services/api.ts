@@ -24,6 +24,13 @@ import {
   AdminStatsResponse,
   AdminDashboardOverviewResponse,
   VenueSuspensionResponse,
+  VenueCreateRequest,
+  VenueCreateResponse,
+  GeocodeResponse,
+  ProviderVenueListResponse,
+  AdminPendingVenue,
+  AdminPendingVenueListResponse,
+  VenueReviewResponse,
 } from "../types/api";
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
@@ -459,6 +466,8 @@ const generateMockAvailability = (venues: VenueDetail[]): Record<string, VenueAv
 };
 
 const mockAvailability: Record<string, VenueAvailability> = generateMockAvailability(mockVenues);
+const mockSubmittedVenues: VenueCreateResponse[] = [];
+const mockPendingVenues: AdminPendingVenue[] = [];
 
 const getMockCurrentUserId = (): number => {
   const userProfile = localStorage.getItem("user_profile");
@@ -472,6 +481,21 @@ const getMockCurrentUserId = (): number => {
   } catch {
     throw new Error("Authentication required: Please log in first.");
   }
+};
+
+const getFirstMockAvailabilityDate = (availabilityDays: number[] = []): string | null => {
+  if (availabilityDays.length === 0) return null;
+  const requestedDays = new Set(availabilityDays);
+  const date = new Date();
+  for (let offset = 0; offset < 30; offset += 1) {
+    const candidate = new Date(date);
+    candidate.setDate(date.getDate() + offset);
+    const mondayFirstDay = (candidate.getDay() + 6) % 7;
+    if (requestedDays.has(mondayFirstDay)) {
+      return candidate.toISOString().slice(0, 10);
+    }
+  }
+  return null;
 };
 
 // ==========================================
@@ -520,6 +544,153 @@ export const api = {
       const response = await axiosInstance.post<{ message: string }>("/auth/register", user);
       return response.data;
     }
+  },
+
+  geocodeNycAddress: async (params: {
+    address: string;
+    borough: string;
+    zipcode: string;
+  }): Promise<GeocodeResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(150);
+      return {
+        lat: 40.7505,
+        lon: -73.9934,
+        display_name: `${params.address}, ${params.borough}, ${params.zipcode}, New York, USA`,
+      };
+    }
+    const response = await axiosInstance.get<GeocodeResponse>("/geocode/nyc", {
+      params,
+    });
+    return response.data;
+  },
+
+  createVenue: async (venue: VenueCreateRequest): Promise<VenueCreateResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(400);
+      const userProfile = JSON.parse(localStorage.getItem("user_profile") || "{}");
+      const created: VenueCreateResponse = {
+        venue_id: `provider-${Date.now()}`,
+        name: venue.name,
+        state: "Pending Approval",
+        lat: venue.lat,
+        lon: venue.lon,
+        borough: venue.borough,
+        opening_hours: venue.opening_hours,
+        seat_capacity: venue.seat_capacity,
+        amenity_tags: venue.amenity_tags,
+        rules_text: venue.rules_text,
+        has_wifi: venue.has_wifi,
+        plug_access: venue.plug_access,
+        hourly_price: venue.hourly_price,
+      };
+      mockSubmittedVenues.push(created);
+      mockPendingVenues.push({
+        ...created,
+        provider_name: userProfile.full_name || "Demo Provider",
+        provider_email: userProfile.email || "user3@example.com",
+        osm_type: venue.osm_type,
+        street: venue.street,
+        zipcode: venue.zipcode,
+        availability_date:
+          venue.availability_date ||
+          getFirstMockAvailabilityDate(venue.availability_days),
+        availability_start_time: venue.availability_start_time,
+        availability_end_time: venue.availability_end_time,
+      });
+      return created;
+    }
+    const response = await axiosInstance.post<VenueCreateResponse>("/venues", venue);
+    return response.data;
+  },
+
+  getProviderVenues: async (): Promise<ProviderVenueListResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(200);
+      return { items: [...mockSubmittedVenues] };
+    }
+    const response = await axiosInstance.get<ProviderVenueListResponse>("/provider/venues");
+    return response.data;
+  },
+
+  getPendingVenues: async (): Promise<AdminPendingVenueListResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(250);
+      return { items: [...mockPendingVenues] };
+    }
+    const response = await axiosInstance.get<AdminPendingVenueListResponse>(
+      "/admin/venues/pending"
+    );
+    return response.data;
+  },
+
+  reviewVenue: async (
+    venueId: string,
+    decision: "approve" | "reject"
+  ): Promise<VenueReviewResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(300);
+      const index = mockPendingVenues.findIndex((venue) => venue.venue_id === venueId);
+      if (index === -1) throw new Error("Venue is not pending approval");
+      const [pending] = mockPendingVenues.splice(index, 1);
+      const submitted = mockSubmittedVenues.find((venue) => venue.venue_id === venueId);
+      const state = decision === "approve" ? "Active" : "Rejected";
+      if (submitted) submitted.state = state;
+      if (decision === "approve") {
+        mockVenues.push({
+          venue_id: pending.venue_id,
+          name: pending.name,
+          osm_type: pending.osm_type || "other",
+          cuisine_type: "",
+          cuisine_detail: "",
+          phone: null,
+          website: null,
+          building_number: null,
+          street: pending.street,
+          zipcode: pending.zipcode,
+          borough: pending.borough,
+          lat: pending.lat,
+          lon: pending.lon,
+          opening_hours: pending.opening_hours || "",
+          opening_now: true,
+          has_wifi: pending.has_wifi ?? false,
+          wifi_free: pending.has_wifi ?? false,
+          hotel_stars: null,
+          ...DEFAULT_VENUE_CONTRACT_FIELDS,
+          seat_capacity: pending.seat_capacity,
+          amenity_tags: pending.amenity_tags,
+          rules_text: pending.rules_text || "",
+          best_hours_for_work: [],
+          hourly_profile: {},
+          distance_km: 0,
+          seats_avail: pending.seat_capacity,
+          total_seats: pending.seat_capacity,
+          hourly_price: pending.hourly_price ?? 0,
+          rating: 0,
+          busyness_score: null,
+          busyness_label: null,
+          state,
+          plug_access: pending.plug_access,
+        });
+      }
+      return {
+        venue_id: venueId,
+        state,
+        message: decision === "approve"
+          ? "Venue approved successfully"
+          : "Venue rejected successfully",
+      };
+    }
+    const response = await axiosInstance.patch<VenueReviewResponse>(
+      `/admin/venues/${venueId}/review`,
+      { decision }
+    );
+    return response.data;
   },
 
   // 2. Get Venues List (with filtering)
@@ -574,7 +745,9 @@ export const api = {
           filtered = filtered.filter(v => v.opening_now === filters.opening_now);
         }
         if (filters.max_price !== undefined) {
-          filtered = filtered.filter(v => v.hourly_price <= filters.max_price!);
+          filtered = filtered.filter(
+            v => typeof v.hourly_price === "number" && v.hourly_price <= filters.max_price!
+          );
         }
         if (filters.plug_access !== undefined) {
           filtered = filtered.filter(v => v.plug_access === filters.plug_access);
