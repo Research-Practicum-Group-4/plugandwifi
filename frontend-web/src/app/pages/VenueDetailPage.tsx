@@ -82,6 +82,10 @@ function formatDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function formatVenueTypeLabel(osmType: string | null | undefined): string {
+  return (osmType || "workspace").replace(/_/g, " ");
+}
+
 function buildCalendarDays(monthDate: Date): Array<{ dateKey: string; dayNumber: number; inMonth: boolean }> {
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
@@ -517,6 +521,9 @@ export function VenueDetailPage() {
     );
   }
 
+  const venueTypeLabel = formatVenueTypeLabel(venue.osm_type);
+  const venueImageType = venue.osm_type || "workspace";
+
   return (
     <><div className="container mx-auto px-4 py-8">
       <div className="grid lg:grid-cols-[1fr_400px] gap-8">
@@ -525,7 +532,7 @@ export function VenueDetailPage() {
           <div className="mb-6">
             <div className="relative mb-6 overflow-hidden rounded-3xl">
               <img
-                src={venueImage(venue.venue_id, venue.osm_type ?? venue.cuisine_type ?? "workspace")}
+                src={venueImage(venue.venue_id, venueImageType)}
                 alt={venue.name}
                 className="h-[320px] w-full object-cover sm:h-[380px]" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
@@ -539,7 +546,7 @@ export function VenueDetailPage() {
               </div>
               <div className="absolute inset-x-0 bottom-0 p-6 text-white sm:p-8">
                 <div className="mb-3 inline-flex rounded-full bg-black/35 px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-white/85 backdrop-blur-sm">
-                  {(venue.osm_type ?? venue.cuisine_type ?? "workspace").replace(/_/g, " ")}
+                  {venueTypeLabel}
                 </div>
                 <h1 className="mb-2 text-white">{venue.name}</h1>
                 <div className="flex flex-wrap items-center gap-3 text-sm text-white/85">
@@ -558,7 +565,7 @@ export function VenueDetailPage() {
                 <span>{venue.rating}</span>
               </div>
               <span className="text-muted-foreground">(142 reviews)</span>
-              <Badge>{venue.cuisine_type}</Badge>
+              <Badge>{venueTypeLabel}</Badge>
             </div>
 
             {venue.certifications.length > 0 && (

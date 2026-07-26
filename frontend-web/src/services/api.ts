@@ -888,6 +888,7 @@ export const api = {
         seats_avail: v.seats_avail ?? v.plugs_available ?? 0,
         total_seats: v.total_seats ?? 0,
         distance_km: v.distance_km ?? 0,
+        rating: typeof v.rating === "number" && Number.isFinite(v.rating) ? v.rating : 0,
         suitability_score: v.suitability_score ?? null,
       }));
       return { ...raw, items } as VenueListResponse;
@@ -907,6 +908,7 @@ export const api = {
       // Backend stores best_hours_for_work and hourly_profile as JSON strings
       return {
         ...d,
+        rating: typeof d.rating === "number" && Number.isFinite(d.rating) ? d.rating : 0,
         best_hours_for_work: typeof d.best_hours_for_work === "string"
           ? JSON.parse(d.best_hours_for_work)
           : (d.best_hours_for_work ?? []),

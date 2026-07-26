@@ -145,6 +145,35 @@ export interface EnrichedVenue extends Venue {
   isAccessible: boolean;
 }
 
+export function getVenueRatingValue(rating: number | null | undefined): number {
+  return typeof rating === "number" && Number.isFinite(rating) ? rating : 0;
+}
+
+export function getVenueRatingRank(rating: number | null | undefined): number {
+  return getVenueRatingValue(rating);
+}
+
+export function formatVenueRating(rating: number | null | undefined): string {
+  const ratingValue = getVenueRatingValue(rating);
+  return ratingValue === 0 ? "0" : ratingValue.toFixed(1);
+}
+
+export function getVenueSuitabilityScore(venue: Pick<Venue, "rating" | "suitability_score">): number {
+  if (
+    typeof venue.suitability_score === "number" &&
+    Number.isFinite(venue.suitability_score)
+  ) {
+    return Math.round(venue.suitability_score);
+  }
+
+  const ratingValue = getVenueRatingValue(venue.rating);
+  return Math.round(ratingValue * 20);
+}
+
+export function getVenueSuitabilityRank(venue: Pick<Venue, "rating" | "suitability_score">): number {
+  return getVenueSuitabilityScore(venue);
+}
+
 function hashString(s: string): number {
   let h = 5381;
   for (let i = 0; i < s.length; i++) {
