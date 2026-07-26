@@ -78,6 +78,11 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 BUSYNESS_PREDICTION_CACHE = {}
+BUSYNESS_ZONE_LOOKUP_CACHE = {
+    "source_id": None,
+    "zone_by_venue_id": {},
+    "candidate_arrays": None,
+}
 NYC_TIMEZONE = ZoneInfo("America/New_York")
 CHATBOT_HISTORY_MAX_MESSAGES = 12
 CHATBOT_HISTORY_MAX_MESSAGE_CHARS = 1000
@@ -228,17 +233,7 @@ def get_busyness_prediction_key(zone_id, prediction_datetime: datetime):
 
 
 def get_busyness_zone_id_for_venue(venue_id: str):
-    venues = get_busyness_venues_dataframe()
-
-    if venues is None:
-        return None
-
-    selected_venue = venues[venues["venue_id"] == venue_id]
-
-    if selected_venue.empty:
-        return None
-
-    zone_id = selected_venue.iloc[0].get("zone_id")
+    zone_id = get_busyness_zone_helpers()["zone_by_venue_id"].get(venue_id)
 
     if zone_id is None:
         return None
@@ -252,35 +247,89 @@ def get_busyness_zone_id_for_venue(venue_id: str):
     return zone_id
 
 
-def infer_nearest_known_zone_id(lat: float | None, lon: float | None):
-    if lat is None or lon is None:
-        return None
-
+def get_busyness_zone_helpers():
     venues = get_busyness_venues_dataframe()
-    if venues is None or "zone_id" not in venues.columns:
-        return None
+
+    if venues is None:
+        return {"zone_by_venue_id": {}, "candidate_arrays": None}
+
+    source_id = id(venues)
+
+    if BUSYNESS_ZONE_LOOKUP_CACHE["source_id"] == source_id:
+        return BUSYNESS_ZONE_LOOKUP_CACHE
+
+    zone_by_venue_id = {}
+    candidate_arrays = None
 
     try:
+        zone_rows = venues[["venue_id", "zone_id"]].dropna(subset=["venue_id", "zone_id"])
+        zone_by_venue_id = dict(zip(zone_rows["venue_id"], zone_rows["zone_id"]))
+    except KeyError:
+        zone_by_venue_id = {}
+
+    try:
+        import numpy as np
+
         candidates = venues[
             venues["lat"].notna()
             & venues["lon"].notna()
             & venues["zone_id"].notna()
         ][["lat", "lon", "zone_id"]]
-    except KeyError:
+
+        if not candidates.empty:
+            candidate_arrays = {
+                "lat": candidates["lat"].to_numpy(dtype=float),
+                "lon": candidates["lon"].to_numpy(dtype=float),
+                "zone_id": candidates["zone_id"].to_numpy(),
+                "np": np,
+            }
+    except (KeyError, ValueError, TypeError):
+        candidate_arrays = None
+
+    BUSYNESS_ZONE_LOOKUP_CACHE.update(
+        {
+            "source_id": source_id,
+            "zone_by_venue_id": zone_by_venue_id,
+            "candidate_arrays": candidate_arrays,
+        }
+    )
+
+    return BUSYNESS_ZONE_LOOKUP_CACHE
+
+
+def infer_nearest_known_zone_id(lat: float | None, lon: float | None):
+    if lat is None or lon is None:
         return None
 
-    if candidates.empty:
+    candidate_arrays = get_busyness_zone_helpers()["candidate_arrays"]
+
+    if not candidate_arrays:
         return None
 
-    nearest_zone_id = None
-    nearest_distance = None
-    for _, candidate in candidates.iterrows():
-        distance_km = calculate_distance_km(
-            lat, lon, float(candidate["lat"]), float(candidate["lon"])
+    try:
+        np = candidate_arrays["np"]
+        lat1 = radians(float(lat))
+        lon1 = radians(float(lon))
+        candidate_lats = np.radians(candidate_arrays["lat"])
+        candidate_lons = np.radians(candidate_arrays["lon"])
+
+        dlat = candidate_lats - lat1
+        dlon = candidate_lons - lon1
+        a = (
+            np.sin(dlat / 2) ** 2
+            + np.cos(lat1) * np.cos(candidate_lats) * np.sin(dlon / 2) ** 2
         )
-        if nearest_distance is None or distance_km < nearest_distance:
-            nearest_distance = distance_km
-            nearest_zone_id = candidate["zone_id"]
+        distances = 2 * 6371 * np.arcsin(np.sqrt(a))
+        nearest_index = int(np.argmin(distances))
+        nearest_zone_id = candidate_arrays["zone_id"][nearest_index]
+    except (TypeError, ValueError):
+        return None
+
+    try:
+        if hasattr(nearest_zone_id, "item"):
+            nearest_zone_id = nearest_zone_id.item()
+    except ValueError:
+        pass
 
     return nearest_zone_id
 
@@ -564,31 +613,35 @@ def get_busyness_predictions(
         return empty_prediction
 
     try:
-        selected_venues = venues[venues["venue_id"].isin(venue_ids)].copy()
+        import pandas as pd
 
-        missing_venue_ids = [
-            venue_id
-            for venue_id in venue_ids
-            if venue_id not in set(selected_venues["venue_id"].tolist())
-        ]
-        inferred_rows = []
-        for venue_id in missing_venue_ids:
+        zone_by_venue_id = get_busyness_zone_helpers()["zone_by_venue_id"]
+        selected_rows = []
+
+        for venue_id in venue_ids:
+            zone_id = zone_by_venue_id.get(venue_id)
+            if zone_id is not None:
+                selected_rows.append({"venue_id": venue_id, "zone_id": zone_id})
+                continue
+
             if not venue_locations or venue_id not in venue_locations:
                 continue
+
             lat, lon = venue_locations[venue_id]
-            zone_id = infer_nearest_known_zone_id(lat, lon)
-            if zone_id is None:
+            inferred_zone_id = infer_nearest_known_zone_id(lat, lon)
+            if inferred_zone_id is None:
                 continue
-            inferred_rows.append(
-                {"venue_id": venue_id, "lat": lat, "lon": lon, "zone_id": zone_id}
+
+            selected_rows.append(
+                {
+                    "venue_id": venue_id,
+                    "lat": lat,
+                    "lon": lon,
+                    "zone_id": inferred_zone_id,
+                }
             )
 
-        if inferred_rows:
-            import pandas as pd
-
-            selected_venues = pd.concat(
-                [selected_venues, pd.DataFrame(inferred_rows)], ignore_index=True
-            )
+        selected_venues = pd.DataFrame(selected_rows)
 
         if selected_venues.empty:
             return empty_prediction

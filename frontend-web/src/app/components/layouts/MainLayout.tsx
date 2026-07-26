@@ -1,4 +1,4 @@
-import { Outlet, Link, useLocation } from "react-router";
+import { Outlet, Link } from "react-router";
 import { Button } from "../ui/button";
 import { User, Building2, Shield, Calendar } from "lucide-react";
 import logo from "../../../imports/logo.jpg";
@@ -15,10 +15,10 @@ import {
 import { Avatar, AvatarFallback } from "../ui/avatar";
 
 export function MainLayout() {
-  const location = useLocation();
-  const isProviderRoute = location.pathname.startsWith("/provider");
-  const isAdminRoute = location.pathname.startsWith("/admin");
   const { isAuthenticated, user, logout } = useAuth();
+  const role = user?.role?.toLowerCase();
+  const isProvider = isAuthenticated && role === "provider";
+  const isAdmin = isAuthenticated && role === "admin";
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -34,40 +34,41 @@ export function MainLayout() {
           </Link>
 
           <nav className="flex items-center gap-4">
-            {!isProviderRoute && !isAdminRoute && (
+            <Link to="/search">
+              <Button variant="ghost">Find Space</Button>
+            </Link>
+
+            {isAuthenticated && (
               <>
-                <Link to="/search">
-                  <Button variant="ghost">Find Space</Button>
+                <Link to="/saved">
+                  <Button variant="ghost">Saved</Button>
                 </Link>
-                {isAuthenticated && (
-                  <>
-                    <Link to="/saved">
-                      <Button variant="ghost">Saved</Button>
-                    </Link>
-                    <Link to="/bookings">
-                      <Button variant="ghost" className="flex items-center gap-1.5">
-                        <Calendar className="size-4" />
-                        My Bookings
-                      </Button>
-                    </Link>
-                  </>
-                )}
+                <Link to="/bookings">
+                  <Button variant="ghost" className="flex items-center gap-1.5">
+                    <Calendar className="size-4" />
+                    My Bookings
+                  </Button>
+                </Link>
               </>
             )}
 
-            <Link to="/admin/dashboard">
-              <Button variant="ghost" className="text-amber-600 hover:text-amber-700 hover:bg-amber-50/50 font-medium flex items-center gap-1.5">
-                <Shield className="size-4" />
-                Admin
-              </Button>
-            </Link>
+            {isAdmin && (
+              <Link to="/admin/dashboard">
+                <Button variant="ghost" className="text-amber-600 hover:text-amber-700 hover:bg-amber-50/50 font-medium flex items-center gap-1.5">
+                  <Shield className="size-4" />
+                  Admin
+                </Button>
+              </Link>
+            )}
 
-            <Link to="/provider/dashboard">
-              <Button variant="ghost" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50/50 font-medium flex items-center gap-1.5">
-                <Building2 className="size-4" />
-                Provider
-              </Button>
-            </Link>
+            {isProvider && (
+              <Link to="/provider/dashboard">
+                <Button variant="ghost" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50/50 font-medium flex items-center gap-1.5">
+                  <Building2 className="size-4" />
+                  Provider
+                </Button>
+              </Link>
+            )}
 
             {isAuthenticated ? (
               <DropdownMenu>
@@ -88,12 +89,16 @@ export function MainLayout() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild className="cursor-pointer">
-                    <Link to="/bookings" className="w-full">
-                      My Bookings
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
+                  {isAuthenticated && (
+                    <>
+                      <DropdownMenuItem asChild className="cursor-pointer">
+                        <Link to="/bookings" className="w-full">
+                          My Bookings
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   <DropdownMenuItem onClick={logout} className="text-red-600 focus:text-red-600 cursor-pointer">
                     Log out
                   </DropdownMenuItem>
@@ -101,8 +106,9 @@ export function MainLayout() {
               </DropdownMenu>
             ) : (
               <Link to="/login">
-                <Button variant="ghost" size="icon">
-                  <User className="size-5" />
+                <Button variant="ghost" className="flex items-center gap-1.5">
+                  <User className="size-4" />
+                  Login / Sign up
                 </Button>
               </Link>
             )}

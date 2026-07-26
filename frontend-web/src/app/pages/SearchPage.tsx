@@ -10,7 +10,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Search, Star, Filter, Clock, MapPin, Sparkles, Phone, Accessibility, Plug, Wifi, Zap, Volume, Loader2 } from "lucide-react";
 import { api } from "../../services/api";
-import { enrichVenue, EnrichedVenue, venueImage, busynessDisplay } from "../utils/venueEnrichment";
+import {
+  enrichVenue,
+  EnrichedVenue,
+  venueImage,
+  busynessDisplay,
+  formatVenueRating,
+  getVenueRatingRank,
+  getVenueSuitabilityRank,
+  getVenueSuitabilityScore,
+} from "../utils/venueEnrichment";
 import { formatDistance, LandmarkContext } from "../utils/distance";
 import { MapView } from "../components/MapView";
 import { manhattanVenues } from "../data/manhattanVenues";
@@ -137,6 +146,7 @@ const fallbackMapVenues: Venue[] = manhattanVenues.map((venue) => ({
 }));
 
 const INITIAL_DISPLAY_COUNT = 10;
+const SEARCH_RESULT_FETCH_LIMIT = 200;
 type FallbackVenue = (typeof manhattanVenues)[number];
 type SearchResultsCacheEntry = {
   venues: EnrichedVenue[];
@@ -452,12 +462,12 @@ export function SearchPage() {
             lon,
             radius: 2.0,
             page: 1,
-            limit: 1000,
+            limit: SEARCH_RESULT_FETCH_LIMIT,
           });
 
           let matched: EnrichedVenue[] = allData.items.map(enrichVenue);
           if (filters.fourPlusStars) {
-            matched = matched.filter((v) => v.rating >= 4.0);
+            matched = matched.filter((v) => getVenueRatingRank(v.rating) >= 4.0);
           }
           matched = matched.filter(
             (v) => v.enrichedPrice >= priceRange[0] && v.enrichedPrice <= priceRange[1]
@@ -494,16 +504,16 @@ export function SearchPage() {
             ...queryParams,
             ...(userLocationEnabled ? { lat: PINNED_LAT, lon: PINNED_LON, radius: 50 } : {}),
             page: 1,
-            limit: 1000,
+            limit: SEARCH_RESULT_FETCH_LIMIT,
           });
 
           let matched: EnrichedVenue[];
+          const prioritizedRank = new Map(prioritizedIds.map((id, index) => [id, index]));
 
           if (prioritizedIds.length > 0) {
-            const rank = new Map(prioritizedIds.map((id, index) => [id, index]));
             matched = allData.items
-              .filter((v) => rank.has(v.venue_id))
-              .sort((a, b) => (rank.get(a.venue_id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.venue_id) ?? Number.MAX_SAFE_INTEGER))
+              .filter((v) => prioritizedRank.has(v.venue_id))
+              .sort((a, b) => (prioritizedRank.get(a.venue_id) ?? Number.MAX_SAFE_INTEGER) - (prioritizedRank.get(b.venue_id) ?? Number.MAX_SAFE_INTEGER))
               .map(enrichVenue);
           } else {
             matched = allData.items
@@ -511,22 +521,28 @@ export function SearchPage() {
               .map(enrichVenue);
           }
 
-          if (matched.length === 0 && prioritizedIds.length > 0) {
+          const matchedIds = new Set(matched.map((venue) => venue.venue_id));
+          const missingPrioritizedIds = prioritizedIds.filter((venueId) => !matchedIds.has(venueId));
+
+          if (missingPrioritizedIds.length > 0) {
             try {
               const fallbackDetails = await Promise.all(
-                prioritizedIds.slice(0, 10).map((venueId) => api.getVenueDetail(venueId).catch(() => null))
+                missingPrioritizedIds.slice(0, 10).map((venueId) => api.getVenueDetail(venueId).catch(() => null))
               );
 
-              matched = fallbackDetails
+              const fallbackMatches = fallbackDetails
                 .filter((venue): venue is NonNullable<typeof venue> => venue !== null)
                 .map(enrichVenue);
+              matched = [...matched, ...fallbackMatches].sort(
+                (a, b) => (prioritizedRank.get(a.venue_id) ?? Number.MAX_SAFE_INTEGER) - (prioritizedRank.get(b.venue_id) ?? Number.MAX_SAFE_INTEGER)
+              );
             } catch (err) {
               console.warn("Venue detail fallback lookup failed:", err);
             }
           }
 
           if (filters.fourPlusStars) {
-            matched = matched.filter((v) => v.rating >= 4.0);
+            matched = matched.filter((v) => getVenueRatingRank(v.rating) >= 4.0);
           }
           matched = matched.filter(
             (v) => v.enrichedPrice >= priceRange[0] && v.enrichedPrice <= priceRange[1]
@@ -540,13 +556,13 @@ export function SearchPage() {
             ...queryParams,
             ...(userLocationEnabled ? { lat: PINNED_LAT, lon: PINNED_LON, radius: 50 } : {}),
             page: 1,
-            limit: 1000,
+            limit: SEARCH_RESULT_FETCH_LIMIT,
           });
 
           let finalAll: EnrichedVenue[] = allData.items.map(enrichVenue);
 
           if (filters.fourPlusStars) {
-            finalAll = finalAll.filter((v) => v.rating >= 4.0);
+            finalAll = finalAll.filter((v) => getVenueRatingRank(v.rating) >= 4.0);
           }
           finalAll = finalAll.filter(
             (v) => v.enrichedPrice >= priceRange[0] && v.enrichedPrice <= priceRange[1]
@@ -585,7 +601,7 @@ export function SearchPage() {
       try {
         const data = await api.getVenues({
           page: 1,
-          limit: 1000,
+          limit: SEARCH_RESULT_FETCH_LIMIT,
           sort: "recommended",
         });
         const enrichedFallbackVenues = data.items.map(enrichVenue);
@@ -605,14 +621,14 @@ export function SearchPage() {
 
     if (sortBy === "suitability") {
       sortedVenues.sort((a, b) => {
-        const left = a.suitability_score ?? (a.rating * 20);
-        const right = b.suitability_score ?? (b.rating * 20);
+        const left = getVenueSuitabilityRank(a);
+        const right = getVenueSuitabilityRank(b);
         return right - left;
       });
     } else if (sortBy === "price") {
       sortedVenues.sort((a, b) => a.enrichedPrice - b.enrichedPrice);
     } else if (sortBy === "rating") {
-      sortedVenues.sort((a, b) => b.rating - a.rating);
+      sortedVenues.sort((a, b) => getVenueRatingRank(b.rating) - getVenueRatingRank(a.rating));
     }
 
     return sortedVenues;
@@ -660,9 +676,7 @@ export function SearchPage() {
   };
 
   const renderApiVenueCard = (venue: EnrichedVenue) => {
-    const suitability = venue.suitability_score != null
-      ? Math.round(venue.suitability_score)
-      : Math.round(venue.rating * 20);
+    const suitability = getVenueSuitabilityScore(venue);
     const busyness = busynessDisplay(venue.venue_id, venue.busyness_score, venue.busyness_label);
 
     return (
@@ -695,7 +709,9 @@ export function SearchPage() {
                 >
                   {busyness.label}
                 </span>
-                {(activeLandmark || userLocationEnabled) && venue.distance_km > 0 ? (
+                {(activeLandmark || userLocationEnabled) &&
+                typeof venue.distance_km === "number" &&
+                venue.distance_km > 0 ? (
                   <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                     <MapPin className="size-4" />
                     <span>{formatDistance(venue.distance_km) ?? "Distance unavailable"}</span>
@@ -708,7 +724,7 @@ export function SearchPage() {
               </div>
               <div className="flex items-center gap-1">
                 <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
-                <span>{venue.rating}</span>
+                <span>{formatVenueRating(venue.rating)}</span>
               </div>
             </div>
 
@@ -747,9 +763,9 @@ export function SearchPage() {
                 <span className="text-muted-foreground">Suitability for you</span>
                 <span
                   className="font-semibold"
-                  style={{ color: getSuitabilityColor(suitability) }}
+                  style={{ color: suitability == null ? "#6b7280" : getSuitabilityColor(suitability) }}
                 >
-                  {suitability}/100
+                  {suitability == null ? "New" : `${suitability}/100`}
                 </span>
               </div>
             </div>
@@ -825,7 +841,7 @@ export function SearchPage() {
               </div>
               <div className="flex items-center gap-1">
                 <Star className="size-4 fill-yellow-400 stroke-yellow-400" />
-                <span>{venue.rating}</span>
+                <span>{formatVenueRating(venue.rating)}</span>
                 <span className="text-muted-foreground">({venue.reviews})</span>
               </div>
             </div>
