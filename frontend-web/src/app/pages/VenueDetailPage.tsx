@@ -108,6 +108,10 @@ function formatCurrency(value: number): string {
   return currencyFormatter.format(value);
 }
 
+function formatDurationHours(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
+}
+
 function buildCalendarDays(monthDate: Date): Array<{ dateKey: string; dayNumber: number; inMonth: boolean }> {
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
@@ -255,8 +259,9 @@ export function VenueDetailPage() {
     try {
       const [startH, startM] = start.split(":").map(Number);
       const [endH, endM] = end.split(":").map(Number);
-      const diff = endH + endM / 60 - (startH + startM / 60);
-      return diff > 0 ? diff : 0;
+      const diffMinutes = endH * 60 + endM - (startH * 60 + startM);
+      const diffHours = diffMinutes / 60;
+      return diffHours > 0 ? Number(diffHours.toFixed(2)) : 0;
     } catch {
       return 0;
     }
@@ -447,7 +452,7 @@ export function VenueDetailPage() {
         bookingDate,
         startTime: `${startTime}:00`,
         endTime: `${endTime}:00`,
-        duration: duration.toString(),
+        duration: formatDurationHours(duration),
         price: roundedTotalPrice,
         seatsReserved,
       },
@@ -1002,7 +1007,7 @@ export function VenueDetailPage() {
 
               <div className="flex justify-between items-center">
                 <span>
-                  Total ({duration}h • {seatsReserved} {seatsReserved === 1 ? "seat" : "seats"})
+                  Total ({formatDurationHours(duration)}h • {seatsReserved} {seatsReserved === 1 ? "seat" : "seats"})
                 </span>
                 <span className="text-2xl" style={{ color: "#2f8a64" }}>
                   {formatCurrency(totalPrice)}
