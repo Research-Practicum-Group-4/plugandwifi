@@ -27,6 +27,12 @@ const EDI_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
 };
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 type HourlyAvailabilityBlock = {
   id: string;
@@ -96,6 +102,10 @@ function formatReviewDate(value: string): string {
   } catch {
     return value;
   }
+}
+
+function formatCurrency(value: number): string {
+  return currencyFormatter.format(value);
 }
 
 function buildCalendarDays(monthDate: Date): Array<{ dateKey: string; dayNumber: number; inMonth: boolean }> {
@@ -295,6 +305,7 @@ export function VenueDetailPage() {
 
   const duration = getDurationHours(startTime, endTime);
   const totalPrice = venue ? venue.enrichedPrice * duration * seatsReserved : 0;
+  const roundedTotalPrice = Number(totalPrice.toFixed(2));
   const activeLandmark = stateLandmark ?? storedLandmark;
   const displayedDistance = venue && activeLandmark
     ? formatDistance(calculateDistanceKm(activeLandmark.lat, activeLandmark.lon, venue.lat, venue.lon))
@@ -437,7 +448,7 @@ export function VenueDetailPage() {
         startTime: `${startTime}:00`,
         endTime: `${endTime}:00`,
         duration: duration.toString(),
-        price: totalPrice,
+        price: roundedTotalPrice,
         seatsReserved,
       },
     });
@@ -861,7 +872,7 @@ export function VenueDetailPage() {
             <CardContent className="space-y-6">
               <div>
                 <div className="flex items-baseline gap-2 mb-4">
-                  <span className="text-3xl">${venue.enrichedPrice}</span>
+                  <span className="text-3xl">{formatCurrency(venue.enrichedPrice)}</span>
                   <span className="text-muted-foreground">per hour</span>
                 </div>
 
@@ -876,7 +887,7 @@ export function VenueDetailPage() {
                           1 hour
                         </Label>
                       </div>
-                      <span>${venue.enrichedPrice}</span>
+                      <span>{formatCurrency(venue.enrichedPrice)}</span>
                     </div>
                     <div className="flex items-center justify-between p-3 rounded-lg border">
                       <div className="flex items-center gap-2">
@@ -885,7 +896,7 @@ export function VenueDetailPage() {
                           2 hours
                         </Label>
                       </div>
-                      <span>${venue.enrichedPrice * 2}</span>
+                      <span>{formatCurrency(venue.enrichedPrice * 2)}</span>
                     </div>
                     <div className="flex items-center justify-between p-3 rounded-lg border">
                       <div className="flex items-center gap-2">
@@ -894,7 +905,7 @@ export function VenueDetailPage() {
                           3 hours
                         </Label>
                       </div>
-                      <span>${venue.enrichedPrice * 3}</span>
+                      <span>{formatCurrency(venue.enrichedPrice * 3)}</span>
                     </div>
                   </RadioGroup>
                 </div>
@@ -994,7 +1005,7 @@ export function VenueDetailPage() {
                   Total ({duration}h • {seatsReserved} {seatsReserved === 1 ? "seat" : "seats"})
                 </span>
                 <span className="text-2xl" style={{ color: "#2f8a64" }}>
-                  ${totalPrice.toFixed(2)}
+                  {formatCurrency(totalPrice)}
                 </span>
               </div>
 
