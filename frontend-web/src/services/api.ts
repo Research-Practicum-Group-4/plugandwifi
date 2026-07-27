@@ -903,14 +903,30 @@ export const api = {
   },
 
   // 3. Get Venue Details
-  getVenueDetail: async (venueId: string): Promise<VenueDetail> => {
+  getVenueDetail: async (
+    venueId: string,
+    filters?: {
+      date?: string;
+      start_time?: string;
+      end_time?: string;
+    }
+  ): Promise<VenueDetail> => {
     if (USE_MOCK) {
       await delay(300);
       const venue = mockVenues.find(v => v.venue_id === venueId);
       if (venue) return venue;
       throw new Error("Venue not found");
     } else {
-      const response = await axiosInstance.get<any>(`/venues/${venueId}`);
+      const params = new URLSearchParams();
+      const setParam = (key: string, value: unknown) => {
+        if (value === undefined || value === null || value === "") return;
+        params.set(key, String(value));
+      };
+      setParam("date", filters?.date);
+      setParam("start_time", filters?.start_time);
+      setParam("end_time", filters?.end_time);
+
+      const response = await axiosInstance.get<any>(`/venues/${venueId}`, { params });
       const d = response.data;
       // Backend stores best_hours_for_work and hourly_profile as JSON strings
       return {

@@ -550,7 +550,13 @@ export function SearchPage() {
           if (missingPrioritizedIds.length > 0) {
             try {
               const fallbackDetails = await Promise.all(
-                missingPrioritizedIds.slice(0, 10).map((venueId) => api.getVenueDetail(venueId).catch(() => null))
+                missingPrioritizedIds.slice(0, 10).map((venueId) =>
+                  api.getVenueDetail(venueId, {
+                    date: searchDate || undefined,
+                    start_time: startTime ? `${startTime}:00` : undefined,
+                    end_time: endTime ? `${endTime}:00` : undefined,
+                  }).catch(() => null)
+                )
               );
 
               const fallbackMatches = fallbackDetails
