@@ -5,7 +5,6 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Checkbox } from "../components/ui/checkbox";
 import { Label } from "../components/ui/label";
-import { Slider } from "../components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Search, Star, Filter, Clock, MapPin, Sparkles, Phone, Accessibility, Plug, Wifi, Zap, Volume, Loader2 } from "lucide-react";
@@ -61,6 +60,14 @@ function getSuitabilityColor(score: number): string {
 
 function normalizeSearchText(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function parsePriceInput(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 function renderWorkspaceFeatureBadges({
@@ -158,7 +165,8 @@ function buildSearchResultsCacheKey({
   selectedVenueSuggestionId,
   selectedVenueTypes,
   filters,
-  priceRange,
+  minPriceInput,
+  maxPriceInput,
   searchDate,
   startTime,
   endTime,
@@ -171,7 +179,8 @@ function buildSearchResultsCacheKey({
   selectedVenueSuggestionId: string | null;
   selectedVenueTypes: string[];
   filters: Record<string, boolean>;
-  priceRange: number[];
+  minPriceInput: string;
+  maxPriceInput: string;
   searchDate: string;
   startTime: string;
   endTime: string;
@@ -186,7 +195,8 @@ function buildSearchResultsCacheKey({
     selectedVenueSuggestionId,
     selectedVenueTypes: [...selectedVenueTypes].sort(),
     filters,
-    priceRange,
+    minPriceInput: minPriceInput.trim(),
+    maxPriceInput: maxPriceInput.trim(),
     searchDate,
     startTime,
     endTime,
@@ -218,7 +228,8 @@ export function SearchPage() {
     vbeOwned: false,
   });
   const [selectedVenueTypes, setSelectedVenueTypes] = useState<string[]>([]);
-  const [priceRange, setPriceRange] = useState([1, 10]);
+  const [minPriceInput, setMinPriceInput] = useState("");
+  const [maxPriceInput, setMaxPriceInput] = useState("");
   const [duration, setDuration] = useState("any");
   const [sortBy, setSortBy] = useState<"suitability" | "price" | "rating">("suitability");
 
@@ -261,7 +272,7 @@ export function SearchPage() {
 
   useEffect(() => {
     setVisibleCount(INITIAL_DISPLAY_COUNT);
-  }, [filters, selectedVenueTypes, debouncedSearchQuery, priceRange, searchDate, startTime, endTime, seatsRequired, duration, sortBy]);
+  }, [filters, selectedVenueTypes, debouncedSearchQuery, minPriceInput, maxPriceInput, searchDate, startTime, endTime, seatsRequired, duration, sortBy]);
 
   // Handle Autocomplete List Filtering
   useEffect(() => {
@@ -336,7 +347,8 @@ export function SearchPage() {
         selectedVenueSuggestionId,
         selectedVenueTypes,
         filters,
-        priceRange,
+        minPriceInput,
+        maxPriceInput,
         searchDate,
         startTime,
         endTime,
@@ -418,14 +430,27 @@ export function SearchPage() {
       };
 
       try {
+        const minPrice = parsePriceInput(minPriceInput);
+        const maxPrice = parsePriceInput(maxPriceInput);
+        const applyPriceFilter = (venues: EnrichedVenue[]): EnrichedVenue[] =>
+          venues.filter((v) => {
+            if (minPrice !== undefined && v.enrichedPrice < minPrice) return false;
+            if (maxPrice !== undefined && v.enrichedPrice > maxPrice) return false;
+            return true;
+          });
+
         const cacheAndApplyResult = (
           venues: EnrichedVenue[],
           landmark: LandmarkContext | null,
         ) => {
-          searchResultsCacheRef.current.set(searchCacheKey, {
-            venues,
-            activeLandmark: landmark,
-          });
+          if (venues.length > 0) {
+            searchResultsCacheRef.current.set(searchCacheKey, {
+              venues,
+              activeLandmark: landmark,
+            });
+          } else {
+            searchResultsCacheRef.current.delete(searchCacheKey);
+          }
           setAllVenues(venues);
           setActiveLandmark(landmark);
           setApiFailed(false);
@@ -446,7 +471,7 @@ export function SearchPage() {
           vbe_certified: filters.vbeOwned ? true : undefined,
           bcorp_certified: filters.bCorpCertified ? true : undefined,
           lgbt_friendly: filters.lgbtFriendly ? true : undefined,
-          max_price: priceRange[1],
+          max_price: maxPrice,
           date: searchDate || undefined,
           start_time: startTime ? `${startTime}:00` : undefined,
           end_time: endTime ? `${endTime}:00` : undefined,
@@ -469,9 +494,7 @@ export function SearchPage() {
           if (filters.fourPlusStars) {
             matched = matched.filter((v) => getVenueRatingRank(v.rating) >= 4.0);
           }
-          matched = matched.filter(
-            (v) => v.enrichedPrice >= priceRange[0] && v.enrichedPrice <= priceRange[1]
-          );
+          matched = applyPriceFilter(matched);
           matched = applyEdiFilters(matched);
 
           cacheAndApplyResult(matched, matchedLandmark);
@@ -502,7 +525,7 @@ export function SearchPage() {
 
           const allData = await api.getVenues({
             ...queryParams,
-            ...(userLocationEnabled ? { lat: PINNED_LAT, lon: PINNED_LON, radius: 50 } : {}),
+            name: nameFilter,
             page: 1,
             limit: SEARCH_RESULT_FETCH_LIMIT,
           });
@@ -544,9 +567,7 @@ export function SearchPage() {
           if (filters.fourPlusStars) {
             matched = matched.filter((v) => getVenueRatingRank(v.rating) >= 4.0);
           }
-          matched = matched.filter(
-            (v) => v.enrichedPrice >= priceRange[0] && v.enrichedPrice <= priceRange[1]
-          );
+          matched = applyPriceFilter(matched);
           matched = applyEdiFilters(matched);
 
           cacheAndApplyResult(matched, null);
@@ -564,9 +585,7 @@ export function SearchPage() {
           if (filters.fourPlusStars) {
             finalAll = finalAll.filter((v) => getVenueRatingRank(v.rating) >= 4.0);
           }
-          finalAll = finalAll.filter(
-            (v) => v.enrichedPrice >= priceRange[0] && v.enrichedPrice <= priceRange[1]
-          );
+          finalAll = applyPriceFilter(finalAll);
           finalAll = applyEdiFilters(finalAll);
 
           cacheAndApplyResult(finalAll, null);
@@ -582,7 +601,7 @@ export function SearchPage() {
     };
 
     executeQuery();
-  }, [filters, selectedVenueTypes, debouncedSearchQuery, selectedVenueSuggestionId, priceRange, searchDate, startTime, endTime, seatsRequired, duration, sortBy, userLocationEnabled]);
+  }, [filters, selectedVenueTypes, debouncedSearchQuery, selectedVenueSuggestionId, minPriceInput, maxPriceInput, searchDate, startTime, endTime, seatsRequired, duration, sortBy, userLocationEnabled]);
 
   useEffect(() => {
     const shouldShowFallback = !loading && !apiFailed && allVenues.length === 0;
@@ -665,7 +684,8 @@ export function SearchPage() {
       vbeOwned: false,
     });
     setSelectedVenueTypes([]);
-    setPriceRange([1, 10]);
+    setMinPriceInput("");
+    setMaxPriceInput("");
     setDuration("any");
     setSearchQuery("");
     setSearchDate("");
@@ -1105,20 +1125,41 @@ export function SearchPage() {
 
           <div>
             <h4 className="mb-4">Price Range (per hour)</h4>
-            <Slider
-              value={priceRange}
-              onValueChange={(val) => {
-                setPriceRange(val);
-                setVisibleCount(INITIAL_DISPLAY_COUNT);
-              }}
-              min={3}
-              max={10}
-              step={1}
-              className="mb-2"
-            />
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>${priceRange[0]}</span>
-              <span>${priceRange[1]}</span>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="minPrice" className="text-xs text-muted-foreground">
+                  Min price
+                </Label>
+                <Input
+                  id="minPrice"
+                  type="number"
+                  min={0}
+                  inputMode="decimal"
+                  placeholder="No min"
+                  value={minPriceInput}
+                  onChange={(e) => {
+                    setMinPriceInput(e.target.value);
+                    setVisibleCount(INITIAL_DISPLAY_COUNT);
+                  }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="maxPrice" className="text-xs text-muted-foreground">
+                  Max price
+                </Label>
+                <Input
+                  id="maxPrice"
+                  type="number"
+                  min={0}
+                  inputMode="decimal"
+                  placeholder="No max"
+                  value={maxPriceInput}
+                  onChange={(e) => {
+                    setMaxPriceInput(e.target.value);
+                    setVisibleCount(INITIAL_DISPLAY_COUNT);
+                  }}
+                />
+              </div>
             </div>
           </div>
 
