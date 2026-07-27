@@ -2929,6 +2929,43 @@ def test_admin_venue_suspension_rejects_non_admin_user():
     assert response.status_code == 403
 
 
+def test_admin_venues_search_includes_suspended_venues():
+    db = TestingSessionLocal()
+    try:
+        admin_user = User(
+            id=93,
+            full_name="Venue Search Admin",
+            email="venue-search-admin@example.com",
+            password_hash=hash_password("00000000"),
+            role="admin",
+        )
+        venue = db.query(Venue).filter(Venue.venue_id == "osm_296568074").one()
+        venue.state = "Suspended"
+        db.add(admin_user)
+        db.commit()
+    finally:
+        db.close()
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "venue-search-admin@example.com", "password": "00000000"},
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+
+    admin_response = client.get(
+        "/api/admin/venues?query=library&state=all", headers=headers
+    )
+    assert admin_response.status_code == 200
+    admin_items = admin_response.json()["items"]
+    assert [item["venue_id"] for item in admin_items] == ["osm_296568074"]
+    assert admin_items[0]["state"] == "Suspended"
+
+    public_response = client.get("/api/venues?name=library")
+    assert public_response.status_code == 200
+    public_ids = [item["venue_id"] for item in public_response.json()["items"]]
+    assert "osm_296568074" not in public_ids
+
+
 def test_admin_venue_suspension_cancels_active_bookings_and_excludes_search():
     db = TestingSessionLocal()
     try:
@@ -3094,6 +3131,11 @@ def test_provider_dashboard_arrivals_returns_upcoming_feed_in_chronological_orde
     db = TestingSessionLocal()
     try:
         db.query(Booking).delete()
+        provider = db.query(User).filter(User.email == provider_payload["email"]).one()
+        owned_venue = db.query(Venue).filter(Venue.venue_id == "osm_296568075").one()
+        other_venue = db.query(Venue).filter(Venue.venue_id == "osm_296568074").one()
+        owned_venue.partner = provider.id
+        other_venue.partner = 9999
         db.add_all(
             [
                 Booking(
@@ -3167,13 +3209,12 @@ def test_provider_dashboard_arrivals_returns_upcoming_feed_in_chronological_orde
     assert response.status_code == 200
     data = response.json()
 
-    assert [item["booking_id"] for item in data["items"]] == [31, 30]
+    assert [item["booking_id"] for item in data["items"]] == [31]
     assert data["items"][0]["client_full_name"] == "Test Student"
     assert data["items"][0]["venue_name"] == "UCD Village Study Hub"
     assert data["items"][0]["confirmation_status"] == "confirmed"
     assert data["items"][0]["space_label"] == "UCD Village Study Hub"
     assert data["items"][0]["fee_estimate"] == 4
-    assert data["items"][1]["fee_estimate"] == 7
 
     limited_response = client.get(
         "/api/provider/dashboard/arrivals?limit=1", headers=headers
@@ -3181,6 +3222,203 @@ def test_provider_dashboard_arrivals_returns_upcoming_feed_in_chronological_orde
     assert limited_response.status_code == 200
     assert len(limited_response.json()["items"]) == 1
     assert limited_response.json()["items"][0]["booking_id"] == 31
+
+
+def test_provider_can_complete_own_booking():
+    provider_payload = {
+        "full_name": "Completion Provider",
+        "email": "completion-provider@ucd.ie",
+        "password": "password123",
+        "role": "provider",
+    }
+    assert client.post("/api/auth/register", json=provider_payload).status_code == 200
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": provider_payload["email"],
+            "password": provider_payload["password"],
+        },
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+
+    db = TestingSessionLocal()
+    try:
+        venue = db.query(Venue).filter(Venue.venue_id == "osm_296568074").one()
+        provider = db.query(User).filter(User.email == provider_payload["email"]).one()
+        venue.partner = provider.id
+        booking = Booking(
+            id=35,
+            user_id=1,
+            venue_id=venue.venue_id,
+            booking_date=date(2026, 7, 1),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            seats_reserved=1,
+            status="confirmed",
+            order_id="ORD-provider-complete",
+            payment_status="paid",
+        )
+        db.add(booking)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.patch("/api/provider/bookings/35/complete", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "booking_id": 35,
+        "status": "completed",
+        "message": "Booking marked as completed",
+    }
+
+    db = TestingSessionLocal()
+    try:
+        booking = db.query(Booking).filter(Booking.id == 35).one()
+        assert booking.status == "completed"
+    finally:
+        db.close()
+
+
+def test_provider_booking_history_returns_owned_past_bookings_for_completion():
+    provider_payload = {
+        "full_name": "History Provider",
+        "email": "history-provider@ucd.ie",
+        "password": "password123",
+        "role": "provider",
+    }
+    assert client.post("/api/auth/register", json=provider_payload).status_code == 200
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": provider_payload["email"],
+            "password": provider_payload["password"],
+        },
+    )
+    headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+
+    past_start = (datetime.now(timezone.utc) - timedelta(days=1)).replace(microsecond=0)
+    past_end = past_start + timedelta(hours=1)
+    future_start = (datetime.now(timezone.utc) + timedelta(days=1)).replace(microsecond=0)
+    future_end = future_start + timedelta(hours=1)
+
+    db = TestingSessionLocal()
+    try:
+        db.query(Booking).delete()
+        provider = db.query(User).filter(User.email == provider_payload["email"]).one()
+        owned_venue = db.query(Venue).filter(Venue.venue_id == "osm_296568074").one()
+        other_venue = db.query(Venue).filter(Venue.venue_id == "osm_296568075").one()
+        owned_venue.partner = provider.id
+        other_venue.partner = 9999
+        db.add_all(
+            [
+                Booking(
+                    id=37,
+                    user_id=1,
+                    venue_id=owned_venue.venue_id,
+                    booking_date=past_start.date(),
+                    start_time=past_start.time(),
+                    end_time=past_end.time(),
+                    seats_reserved=1,
+                    status="confirmed",
+                    order_id="ORD-history-owned-past",
+                    payment_status="paid",
+                ),
+                Booking(
+                    id=38,
+                    user_id=1,
+                    venue_id=owned_venue.venue_id,
+                    booking_date=future_start.date(),
+                    start_time=future_start.time(),
+                    end_time=future_end.time(),
+                    seats_reserved=1,
+                    status="confirmed",
+                    order_id="ORD-history-owned-future",
+                    payment_status="paid",
+                ),
+                Booking(
+                    id=39,
+                    user_id=1,
+                    venue_id=other_venue.venue_id,
+                    booking_date=past_start.date(),
+                    start_time=past_start.time(),
+                    end_time=past_end.time(),
+                    seats_reserved=1,
+                    status="confirmed",
+                    order_id="ORD-history-other-past",
+                    payment_status="paid",
+                ),
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    history_response = client.get(
+        "/api/provider/dashboard/bookings/history", headers=headers
+    )
+
+    assert history_response.status_code == 200
+    assert [item["booking_id"] for item in history_response.json()["items"]] == [37]
+    assert history_response.json()["items"][0]["confirmation_status"] == "confirmed"
+
+    complete_response = client.patch("/api/provider/bookings/37/complete", headers=headers)
+    assert complete_response.status_code == 200
+    assert complete_response.json()["status"] == "completed"
+
+
+def test_provider_complete_booking_rejects_wrong_role_and_wrong_provider():
+    provider_payload = {
+        "full_name": "Wrong Completion Provider",
+        "email": "wrong-completion-provider@ucd.ie",
+        "password": "password123",
+        "role": "provider",
+    }
+    assert client.post("/api/auth/register", json=provider_payload).status_code == 200
+    provider_login = client.post(
+        "/api/auth/login",
+        json={
+            "email": provider_payload["email"],
+            "password": provider_payload["password"],
+        },
+    )
+    provider_headers = {
+        "Authorization": f"Bearer {provider_login.json()['access_token']}"
+    }
+
+    user_login = client.post(
+        "/api/auth/login", json={"email": "test2@example.com", "password": "00000000"}
+    )
+    user_headers = {"Authorization": f"Bearer {user_login.json()['access_token']}"}
+
+    db = TestingSessionLocal()
+    try:
+        venue = db.query(Venue).filter(Venue.venue_id == "osm_296568074").one()
+        venue.partner = 9999
+        booking = Booking(
+            id=36,
+            user_id=1,
+            venue_id=venue.venue_id,
+            booking_date=date(2026, 7, 1),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            seats_reserved=1,
+            status="confirmed",
+            order_id="ORD-provider-complete-wrong",
+            payment_status="paid",
+        )
+        db.add(booking)
+        db.commit()
+    finally:
+        db.close()
+
+    user_response = client.patch("/api/provider/bookings/36/complete", headers=user_headers)
+    assert user_response.status_code == 403
+
+    wrong_provider_response = client.patch(
+        "/api/provider/bookings/36/complete", headers=provider_headers
+    )
+    assert wrong_provider_response.status_code == 403
 
 
 def test_deactivate_slot_requires_authentication():
@@ -3799,6 +4037,7 @@ def test_create_review_updates_venue_rating_and_api_payloads():
             wifi_score=3,
             plug_score=3,
             quietness_score=3,
+            comment="Reliable quiet workspace.",
             verified=True,
         )
 
@@ -3810,12 +4049,19 @@ def test_create_review_updates_venue_rating_and_api_payloads():
     response = client.post(
         "/api/reviews",
         headers=headers,
-        json={"booking_id": 70, "wifi_score": 5, "plug_score": 4, "quietness_score": 3},
+        json={
+            "booking_id": 70,
+            "wifi_score": 5,
+            "plug_score": 4,
+            "quietness_score": 3,
+            "comment": "Strong WiFi and enough outlets.",
+        },
     )
 
     assert response.status_code == 200
     data = response.json()
     assert data["booking_id"] == 70
+    assert data["comment"] == "Strong WiFi and enough outlets."
     assert data["verified"] is True
     assert data["venue_rating"] == 3.5
 
@@ -3830,6 +4076,23 @@ def test_create_review_updates_venue_rating_and_api_payloads():
     venue_detail_response = client.get("/api/venues/osm_296568074")
     assert venue_detail_response.status_code == 200
     assert venue_detail_response.json()["rating"] == 3.5
+
+    reviews_response = client.get("/api/venues/osm_296568074/reviews")
+    assert reviews_response.status_code == 200
+    reviews_data = reviews_response.json()
+    assert reviews_data["total_items"] == 2
+    assert reviews_data["average_rating"] == 3.5
+    assert reviews_data["items"][0]["booking_id"] == 70
+    assert reviews_data["items"][0]["reviewer_name"] == "Test Student"
+    assert reviews_data["items"][0]["rating"] == 4.0
+    assert reviews_data["items"][0]["comment"] == "Strong WiFi and enough outlets."
+
+    bookings_response = client.get("/api/users/me/bookings", headers=headers)
+    assert bookings_response.status_code == 200
+    completed_booking = next(
+        item for item in bookings_response.json()["completed"] if item["booking_id"] == 70
+    )
+    assert completed_booking["review_submitted"] is True
 
 
 def test_create_review_rejects_non_owner_booking():

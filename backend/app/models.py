@@ -251,6 +251,8 @@ class PostBookingReview(Base):
 
     quietness_score = Column(Float)
 
+    comment = Column(Text)
+
     verified = Column(Boolean, nullable=False, default=False, server_default="false")
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

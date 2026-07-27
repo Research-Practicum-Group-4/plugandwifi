@@ -12,6 +12,7 @@ import {
   BookingCancellationResponse,
   ProviderDashboardKPIsResponse,
   ProviderArrivalsResponse,
+  ProviderBookingCompletionResponse,
   VenueSuggestionsResponse,
   ChatbotRecommendRequest,
   ChatbotRecommendResponse,
@@ -31,6 +32,10 @@ import {
   AdminPendingVenue,
   AdminPendingVenueListResponse,
   VenueReviewResponse,
+  ReviewCreateRequest,
+  ReviewResponse,
+  VenueReviewItem,
+  VenueReviewsResponse,
 } from "../types/api";
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
@@ -397,6 +402,8 @@ const mockBookings: UserBookingItem[] = [
   }
 ];
 
+const mockReviews: VenueReviewItem[] = [];
+
 const mockFavoritesByUserId: Record<number, string[]> = {
   1: [],
   2: [],
@@ -726,7 +733,7 @@ export const api = {
   }): Promise<VenueListResponse> => {
     if (USE_MOCK) {
       await delay(400);
-      let filtered = [...mockVenues];
+      let filtered = mockVenues.filter((venue) => (venue.state ?? "Active") === "Active");
 
       if (filters) {
         if (filters.cuisine_type) {
@@ -926,6 +933,27 @@ export const api = {
     }
   },
 
+  getVenueReviews: async (venueId: string): Promise<VenueReviewsResponse> => {
+    if (USE_MOCK) {
+      await delay(250);
+      const items = mockReviews.filter((review) => review.venue_id === venueId);
+      const ratings = items
+        .map((review) => review.rating)
+        .filter((rating): rating is number => typeof rating === "number" && Number.isFinite(rating));
+
+      return {
+        items,
+        total_items: items.length,
+        average_rating: ratings.length
+          ? Math.round((ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length) * 100) / 100
+          : null,
+      };
+    } else {
+      const response = await axiosInstance.get<VenueReviewsResponse>(`/venues/${venueId}/reviews`);
+      return response.data;
+    }
+  },
+
   // 4. Get Availability slots
   getAvailability: async (venueId: string): Promise<VenueAvailability> => {
     if (USE_MOCK) {
@@ -1049,13 +1077,75 @@ export const api = {
     checkAuth();
     if (USE_MOCK) {
       await delay(300);
+      const withReviewState = (booking: UserBookingItem): UserBookingItem => ({
+        ...booking,
+        review_submitted: mockReviews.some((review) => review.booking_id === booking.booking_id),
+      });
       return {
-        upcoming: mockBookings.filter(b => b.status === "upcoming"),
-        completed: mockBookings.filter(b => b.status === "completed"),
-        cancelled: mockBookings.filter(b => b.status === "cancelled" || b.status === "canceled")
+        upcoming: mockBookings.filter(b => b.status === "upcoming").map(withReviewState),
+        completed: mockBookings.filter(b => b.status === "completed").map(withReviewState),
+        cancelled: mockBookings
+          .filter(b => b.status === "cancelled" || b.status === "canceled")
+          .map(withReviewState)
       };
     } else {
       const response = await axiosInstance.get<UserBookingsResponse>("/users/me/bookings");
+      return response.data;
+    }
+  },
+
+  createReview: async (review: ReviewCreateRequest): Promise<ReviewResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(300);
+      const booking = mockBookings.find((item) => item.booking_id === review.booking_id);
+      if (!booking) {
+        throw new Error("Booking not found");
+      }
+      if (booking.status !== "completed") {
+        throw new Error("Only completed bookings can be reviewed");
+      }
+      if (mockReviews.some((item) => item.booking_id === review.booking_id)) {
+        throw new Error("Review already exists for this booking");
+      }
+
+      const rating = (review.wifi_score + review.plug_score + review.quietness_score) / 3;
+      const item: VenueReviewItem = {
+        id: 1000 + mockReviews.length + 1,
+        booking_id: booking.booking_id,
+        user_id: 1,
+        reviewer_name: "Demo User",
+        venue_id: booking.venue_id,
+        rating: Math.round(rating * 100) / 100,
+        wifi_score: review.wifi_score,
+        plug_score: review.plug_score,
+        quietness_score: review.quietness_score,
+        comment: review.comment?.trim() || null,
+        verified: true,
+        created_at: new Date().toISOString(),
+      };
+
+      mockReviews.unshift(item);
+      const venueReviews = mockReviews.filter((mockReview) => mockReview.venue_id === booking.venue_id);
+      const average =
+        venueReviews.reduce((sum, mockReview) => sum + (mockReview.rating ?? 0), 0) / venueReviews.length;
+      const venue = mockVenues.find((mockVenue) => mockVenue.venue_id === booking.venue_id);
+      if (venue) venue.rating = Math.round(average * 100) / 100;
+
+      return {
+        id: item.id,
+        booking_id: item.booking_id,
+        user_id: item.user_id,
+        venue_id: item.venue_id,
+        wifi_score: item.wifi_score,
+        plug_score: item.plug_score,
+        quietness_score: item.quietness_score,
+        comment: item.comment,
+        verified: item.verified,
+        venue_rating: venue?.rating ?? item.rating,
+      };
+    } else {
+      const response = await axiosInstance.post<ReviewResponse>("/reviews", review);
       return response.data;
     }
   },
@@ -1182,11 +1272,71 @@ export const api = {
     }
   },
 
+  getProviderBookingHistory: async (): Promise<ProviderArrivalsResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(300);
+      return {
+        items: mockBookings
+          .filter((booking) => booking.status === "completed")
+          .map((booking) => ({
+            booking_id: booking.booking_id,
+            client_full_name: "Demo User",
+            venue_id: booking.venue_id,
+            venue_name: booking.venue_name,
+            confirmation_status: booking.status,
+            booking_date: booking.booking_date,
+            start_time: booking.start_time,
+            end_time: booking.end_time,
+            seats_reserved: booking.seats_reserved,
+            space_label: booking.venue_name,
+            fee_estimate: 24,
+          })),
+      };
+    } else {
+      const response = await axiosInstance.get<ProviderArrivalsResponse>(
+        "/provider/dashboard/bookings/history"
+      );
+      return response.data;
+    }
+  },
+
+  completeProviderBooking: async (
+    bookingId: number
+  ): Promise<ProviderBookingCompletionResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(250);
+      const booking = mockBookings.find((item) => item.booking_id === bookingId);
+      if (booking) {
+        if (booking.status === "completed") {
+          throw new Error("Booking is already completed");
+        }
+        if (["cancelled", "canceled", "payment_failed"].includes(booking.status)) {
+          throw new Error("Booking cannot be completed");
+        }
+        booking.status = "completed";
+      }
+
+      return {
+        booking_id: bookingId,
+        status: "completed",
+        message: "Booking marked as completed",
+      };
+    } else {
+      const response = await axiosInstance.patch<ProviderBookingCompletionResponse>(
+        `/provider/bookings/${bookingId}/complete`
+      );
+      return response.data;
+    }
+  },
+
   // 10. Get Venue Suggestions (Autocomplete)
   getSuggestions: async (q: string, limit: number = 8): Promise<VenueSuggestionsResponse> => {
     if (USE_MOCK) {
       await delay(100);
       const filtered = mockVenues
+        .filter(v => (v.state ?? "Active") === "Active")
         .filter(v => v.name.toLowerCase().includes(q.toLowerCase()))
         .slice(0, limit)
         .map(v => ({
@@ -1309,6 +1459,100 @@ export const api = {
     } else {
       const response = await axiosInstance.get<AdminStatsResponse>("/admin/stats");
       return response.data;
+    }
+  },
+
+  getAdminVenues: async (filters?: {
+    query?: string;
+    state?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<VenueListResponse> => {
+    checkAuth();
+    if (USE_MOCK) {
+      await delay(250);
+      let filtered = [...mockVenues];
+      const search = filters?.query?.trim().toLowerCase();
+      const state = filters?.state?.trim().toLowerCase();
+
+      if (search) {
+        filtered = filtered.filter((venue) =>
+          venue.name.toLowerCase().includes(search) ||
+          venue.venue_id.toLowerCase().includes(search) ||
+          venue.borough.toLowerCase().includes(search)
+        );
+      }
+
+      if (state && state !== "all") {
+        filtered = filtered.filter((venue) => (venue.state ?? "Active").toLowerCase() === state);
+      }
+
+      filtered.sort((a, b) => a.name.localeCompare(b.name) || a.venue_id.localeCompare(b.venue_id));
+
+      const limit = filters?.limit ?? 50;
+      const page = filters?.page ?? 1;
+      const offset = (page - 1) * limit;
+      const total_items = filtered.length;
+      const total_pages = Math.ceil(total_items / limit);
+
+      return {
+        items: filtered.slice(offset, offset + limit).map((v) => ({
+          venue_id: v.venue_id,
+          name: v.name,
+          osm_type: v.osm_type,
+          cuisine_type: v.cuisine_type,
+          distance_km: v.distance_km,
+          has_wifi: v.has_wifi,
+          wifi_free: v.wifi_free,
+          opening_now: v.opening_now,
+          seats_avail: v.seats_avail,
+          total_seats: v.total_seats,
+          hourly_price: v.hourly_price,
+          rating: typeof v.rating === "number" && Number.isFinite(v.rating) ? v.rating : 0,
+          lat: v.lat,
+          lon: v.lon,
+          borough: v.borough,
+          state: v.state ?? "Active",
+          plug_access: v.plug_access,
+          accessibility_friendly: Boolean(v.accessibility_friendly),
+          calls_allowed: Boolean(v.calls_allowed),
+          wbe_certified: Boolean(v.wbe_certified),
+          mbe_certified: Boolean(v.mbe_certified),
+          vbe_certified: Boolean(v.vbe_certified),
+          bcorp_certified: Boolean(v.bcorp_certified),
+          lgbt_friendly: Boolean(v.lgbt_friendly),
+        })),
+        page,
+        limit,
+        total_items,
+        total_pages,
+        has_more: filtered.length > offset + limit,
+      };
+    } else {
+      const params = new URLSearchParams();
+      const setParam = (key: string, value: unknown) => {
+        if (value === undefined || value === null || value === "") return;
+        params.set(key, String(value));
+      };
+
+      setParam("query", filters?.query);
+      setParam("state", filters?.state);
+      setParam("page", filters?.page);
+      setParam("limit", filters?.limit);
+
+      const response = await axiosInstance.get<any>("/admin/venues", { params });
+      const raw = response.data;
+      const items = (raw.items ?? []).map((v: any) => ({
+        ...v,
+        wifi_free: v.wifi_free ?? (v.has_wifi ?? false),
+        opening_now: v.opening_now ?? true,
+        seats_avail: v.seats_avail ?? v.plugs_available ?? 0,
+        total_seats: v.total_seats ?? 0,
+        distance_km: v.distance_km ?? 0,
+        rating: typeof v.rating === "number" && Number.isFinite(v.rating) ? v.rating : 0,
+        suitability_score: v.suitability_score ?? null,
+      }));
+      return { ...raw, items } as VenueListResponse;
     }
   },
 
@@ -1536,6 +1780,19 @@ export const api = {
     checkAuth();
     if (USE_MOCK) {
       await delay(300);
+      const venue = mockVenues.find((item) => item.venue_id === venueId);
+      if (!venue) {
+        throw new Error("Venue not found");
+      }
+      venue.state = state;
+      if (state === "Suspended") {
+        mockBookings.forEach((booking) => {
+          if (booking.venue_id === venueId && booking.status === "upcoming") {
+            booking.status = "cancelled";
+            booking.payment_status = "refund_pending";
+          }
+        });
+      }
       return {
         venue_id: venueId,
         state,
