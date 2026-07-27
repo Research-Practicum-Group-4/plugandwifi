@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import {
   AlertTriangle,
   Ban,
   BarChart2,
   Building2,
+  CheckCircle2,
   ClipboardList,
   Flag,
   Loader2,
@@ -75,6 +76,32 @@ type ActionTarget =
   | { kind: "customer"; issue: AdminCustomerIssue }
   | { kind: "venue"; issue: AdminVenueIssue };
 
+const demoFinancialOverview = {
+  totalRevenue: 48620,
+  revenueDelta: "+18.5%",
+  totalBookings: 1248,
+  bookingsDelta: "+12.2%",
+  avgBookingValue: 38.96,
+  avgBookingDelta: "+5.7%",
+  medianVenueRevenue: 2840,
+  medianVenueDelta: "+9.4%",
+};
+
+const demoPlatformStats = {
+  totalVenues: 184,
+  activeVenues: 142,
+  pendingApproval: 17,
+  suspendedVenues: 9,
+  topPerformer: "Modernhaus SoHo",
+  totalUsers: 6420,
+  activeUsers: 3860,
+  newThisMonth: 428,
+  churnRate: 3.8,
+};
+
+const displayMetric = (value: number | null | undefined, fallback: number) =>
+  typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
+
 export function AdminDashboard() {
   const [stats, setStats] = useState<AdminStatsResponse | null>(null);
   const [overview, setOverview] = useState<AdminDashboardOverviewResponse | null>(null);
@@ -82,11 +109,13 @@ export function AdminDashboard() {
   const [venueIssues, setVenueIssues] = useState<AdminVenueIssue[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [venueSearch, setVenueSearch] = useState("");
+  const [venueLoading, setVenueLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actionTarget, setActionTarget] = useState<ActionTarget | null>(null);
   const [actionPending, setActionPending] = useState(false);
   const [suspendingVenue, setSuspendingVenue] = useState<Venue | null>(null);
   const [isSuspending, setIsSuspending] = useState(false);
+  const [updatingVenueId, setUpdatingVenueId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -94,40 +123,73 @@ export function AdminDashboard() {
         localStorage.setItem("access_token", "mock_jwt_token");
       }
       try {
-        const [statsData, overviewData, customerData, venueData, venueListData] = await Promise.all([
+        const [statsData, overviewData, customerData, venueData] = await Promise.all([
           api.getAdminStats(),
           api.getAdminOverview().catch(() => null),
           api.getAdminCustomerIssues(),
           api.getAdminVenueIssues(),
-          api.getVenues({ limit: 100 }).catch(() => ({ items: [] })),
         ]);
 
         setStats(statsData);
         setOverview(overviewData);
         setCustomerIssues(customerData);
         setVenueIssues(venueData);
-        setVenues(venueListData.items);
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
-  const filteredVenues = useMemo(
-    () =>
-      venues.filter((venue) => {
-        const search = venueSearch.trim().toLowerCase();
-        if (!search) return true;
-        return (
-          venue.name.toLowerCase().includes(search) ||
-          (venue.borough ?? "").toLowerCase().includes(search)
-        );
-      }),
-    [venueSearch, venues]
-  );
+  useEffect(() => {
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      setVenueLoading(true);
+      try {
+        const venueListData = await api.getAdminVenues({
+          query: venueSearch.trim() || undefined,
+          state: "all",
+          limit: 50,
+        });
+        if (!cancelled) setVenues(venueListData.items);
+      } catch (err) {
+        console.error("Failed to load admin venues:", err);
+        if (!cancelled) {
+          setVenues([]);
+          toast.error("Failed to load venues.");
+        }
+      } finally {
+        if (!cancelled) setVenueLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [venueSearch]);
 
   const pendingCustomer = customerIssues.filter((issue) => issue.status === "pending").length;
   const pendingVenue = venueIssues.filter((issue) => issue.status === "pending").length;
+  const financialOverview = {
+    totalRevenue: displayMetric(stats?.total_revenue, demoFinancialOverview.totalRevenue),
+    totalBookings: displayMetric(stats?.total_bookings, demoFinancialOverview.totalBookings),
+    avgBookingValue: displayMetric(stats?.avg_booking_value, demoFinancialOverview.avgBookingValue),
+    medianVenueRevenue: displayMetric(
+      stats?.median_venue_revenue,
+      demoFinancialOverview.medianVenueRevenue
+    ),
+  };
+  const platformStats = {
+    totalVenues: displayMetric(stats?.total_venues, demoPlatformStats.totalVenues),
+    activeVenues: displayMetric(stats?.active_venues, demoPlatformStats.activeVenues),
+    pendingApproval: displayMetric(stats?.pending_approval, demoPlatformStats.pendingApproval),
+    suspendedVenues: displayMetric(stats?.suspended_venues, demoPlatformStats.suspendedVenues),
+    topPerformer: stats?.top_performer || demoPlatformStats.topPerformer,
+    totalUsers: displayMetric(stats?.total_users, demoPlatformStats.totalUsers),
+    activeUsers: displayMetric(stats?.active_users, demoPlatformStats.activeUsers),
+    newThisMonth: displayMetric(stats?.new_this_month, demoPlatformStats.newThisMonth),
+    churnRate: displayMetric(stats?.churn_rate, demoPlatformStats.churnRate),
+  };
 
   const handleAction = async (action: AdminActionType) => {
     if (!actionTarget || actionPending) return;
@@ -163,25 +225,43 @@ export function AdminDashboard() {
   };
 
   const handleConfirmSuspend = async () => {
-    if (!suspendingVenue || isSuspending) return;
+    if (!suspendingVenue || isSuspending || updatingVenueId) return;
 
     setIsSuspending(true);
     try {
-      const result = await api.suspendVenue(suspendingVenue.venue_id, "Suspended");
-      setVenues((prev) =>
-        prev.map((venue) =>
-          venue.venue_id === suspendingVenue.venue_id
-            ? { ...venue, state: result.state }
-            : venue
-        )
-      );
-      toast.success(result.message);
+      await updateVenueState(suspendingVenue, "Suspended");
     } catch (err) {
       console.error("Failed to suspend venue:", err);
       toast.error("Failed to suspend venue.");
     } finally {
       setIsSuspending(false);
       setSuspendingVenue(null);
+    }
+  };
+
+  const updateVenueState = async (venue: Venue, state: "Suspended" | "Active") => {
+    setUpdatingVenueId(venue.venue_id);
+    try {
+      const result = await api.suspendVenue(venue.venue_id, state);
+      setVenues((prev) =>
+        prev.map((item) =>
+          item.venue_id === venue.venue_id ? { ...item, state: result.state } : item
+        )
+      );
+      toast.success(result.message);
+    } finally {
+      setUpdatingVenueId(null);
+    }
+  };
+
+  const handleActivateVenue = async (venue: Venue) => {
+    if (updatingVenueId) return;
+
+    try {
+      await updateVenueState(venue, "Active");
+    } catch (err) {
+      console.error("Failed to activate venue:", err);
+      toast.error("Failed to activate venue.");
     }
   };
 
@@ -251,7 +331,12 @@ export function AdminDashboard() {
 
       {/* Financial Overview */}
       <div>
-        <h2 className="mb-4 text-lg font-semibold">Financial Overview</h2>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-semibold">Financial Overview</h2>
+          <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+            Demo data
+          </Badge>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardContent className="pt-5">
@@ -259,8 +344,12 @@ export function AdminDashboard() {
                 <p className="text-xs text-muted-foreground">Total Revenue</p>
                 <span className="text-xs text-muted-foreground">$</span>
               </div>
-              <p className="mt-1 text-2xl font-bold">${stats?.total_revenue.toLocaleString() ?? "0"}</p>
-              <p className="mt-1 text-xs font-medium text-emerald-600">+18.5%</p>
+              <p className="mt-1 text-2xl font-bold">
+                ${financialOverview.totalRevenue.toLocaleString()}
+              </p>
+              <p className="mt-1 text-xs font-medium text-emerald-600">
+                {demoFinancialOverview.revenueDelta} vs last month
+              </p>
             </CardContent>
           </Card>
           <Card>
@@ -269,7 +358,12 @@ export function AdminDashboard() {
                 <p className="text-xs text-muted-foreground">Total Bookings</p>
                 <TrendingUp className="size-4 text-muted-foreground" />
               </div>
-              <p className="mt-1 text-2xl font-bold">{stats?.total_bookings.toLocaleString() ?? "0"}</p>
+              <p className="mt-1 text-2xl font-bold">
+                {financialOverview.totalBookings.toLocaleString()}
+              </p>
+              <p className="mt-1 text-xs font-medium text-emerald-600">
+                {demoFinancialOverview.bookingsDelta} vs last month
+              </p>
             </CardContent>
           </Card>
           <Card>
@@ -278,7 +372,12 @@ export function AdminDashboard() {
                 <p className="text-xs text-muted-foreground">Avg Booking Value</p>
                 <span className="text-xs text-muted-foreground">$</span>
               </div>
-              <p className="mt-1 text-2xl font-bold">${stats?.avg_booking_value ?? "0"}</p>
+              <p className="mt-1 text-2xl font-bold">
+                ${financialOverview.avgBookingValue.toFixed(2)}
+              </p>
+              <p className="mt-1 text-xs font-medium text-emerald-600">
+                {demoFinancialOverview.avgBookingDelta} vs last month
+              </p>
             </CardContent>
           </Card>
           <Card>
@@ -287,7 +386,12 @@ export function AdminDashboard() {
                 <p className="text-xs text-muted-foreground">Median Venue Revenue</p>
                 <BarChart2 className="size-4 text-muted-foreground" />
               </div>
-              <p className="mt-1 text-2xl font-bold">${stats?.median_venue_revenue.toLocaleString() ?? "0"}</p>
+              <p className="mt-1 text-2xl font-bold">
+                ${financialOverview.medianVenueRevenue.toLocaleString()}
+              </p>
+              <p className="mt-1 text-xs font-medium text-emerald-600">
+                {demoFinancialOverview.medianVenueDelta} vs last month
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -300,30 +404,33 @@ export function AdminDashboard() {
             <div className="mb-4 flex items-center gap-2">
               <Building2 className="size-4 text-muted-foreground" />
               <p className="font-semibold">Venue Statistics</p>
+              <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+                Demo data
+              </Badge>
             </div>
             <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Total Venues</span>
-                <span className="font-bold text-lg">{stats?.total_venues ?? 0}</span>
+                <span className="font-bold text-lg">{platformStats.totalVenues}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Active Venues</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-lg text-emerald-600">{stats?.active_venues ?? 0}</span>
+                  <span className="font-bold text-lg text-emerald-600">{platformStats.activeVenues}</span>
                   <Badge className="bg-zinc-900 text-white text-xs">Active</Badge>
                 </div>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Pending Approval</span>
-                <span className="font-bold text-lg">{stats?.pending_approval ?? 0}</span>
+                <span className="font-bold text-lg">{platformStats.pendingApproval}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Suspended</span>
-                <Badge className="bg-red-600 text-white">{stats?.suspended_venues ?? 0}</Badge>
+                <Badge className="bg-red-600 text-white">{platformStats.suspendedVenues}</Badge>
               </div>
               <div className="flex items-center justify-between border-t pt-3">
                 <span className="text-muted-foreground">Top Performer</span>
-                <span className="font-medium">{stats?.top_performer ?? "—"}</span>
+                <span className="font-medium">{platformStats.topPerformer}</span>
               </div>
             </div>
           </CardContent>
@@ -334,26 +441,31 @@ export function AdminDashboard() {
             <div className="mb-4 flex items-center gap-2">
               <Users className="size-4 text-muted-foreground" />
               <p className="font-semibold">User Statistics</p>
+              <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+                Demo data
+              </Badge>
             </div>
             <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Total Users</span>
-                <span className="font-bold text-lg">{stats?.total_users.toLocaleString() ?? 0}</span>
+                <span className="font-bold text-lg">{platformStats.totalUsers.toLocaleString()}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Active Users</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-lg text-emerald-600">{stats?.active_users.toLocaleString() ?? 0}</span>
+                  <span className="font-bold text-lg text-emerald-600">
+                    {platformStats.activeUsers.toLocaleString()}
+                  </span>
                   <Badge className="bg-zinc-900 text-white text-xs">Active</Badge>
                 </div>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">New This Month</span>
-                <span className="font-bold text-lg">+{stats?.new_this_month ?? 0}</span>
+                <span className="font-bold text-lg">+{platformStats.newThisMonth}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Churn Rate</span>
-                <span className="font-bold text-lg text-red-500">{stats?.churn_rate ?? 0}%</span>
+                <span className="font-bold text-lg text-red-500">{platformStats.churnRate}%</span>
               </div>
             </div>
           </CardContent>
@@ -369,7 +481,7 @@ export function AdminDashboard() {
                 Operational Venues
               </CardTitle>
               <p className="mt-1 text-sm text-muted-foreground">
-                Search active listings and suspend problematic venues.
+                Search listings and manage venue discovery state.
               </p>
             </div>
             <div className="relative w-full sm:w-64">
@@ -384,9 +496,9 @@ export function AdminDashboard() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="max-h-[520px] overflow-auto rounded-md border">
             <table className="w-full text-left text-sm">
-              <thead className="border-b bg-muted text-xs uppercase text-muted-foreground">
+              <thead className="sticky top-0 z-10 border-b bg-muted text-xs uppercase text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">Venue</th>
                   <th className="px-4 py-3">Location</th>
@@ -397,7 +509,7 @@ export function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filteredVenues.map((venue) => (
+                {venues.map((venue) => (
                   <tr key={venue.venue_id} className="hover:bg-muted/50">
                     <td className="px-4 py-3 font-medium">{venue.name}</td>
                     <td className="px-4 py-3 text-muted-foreground">{venue.borough || "Manhattan"}</td>
@@ -414,24 +526,44 @@ export function AdminDashboard() {
                         {venue.state || "Active"}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="cursor-pointer border-red-200 text-red-600 hover:bg-red-50"
-                        disabled={venue.state === "Suspended"}
-                        onClick={() => setSuspendingVenue(venue)}
-                      >
-                        <Ban className="mr-1 size-3.5" />
-                        Suspend
-                      </Button>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="cursor-pointer border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                          disabled={(venue.state ?? "Active") === "Active" || updatingVenueId === venue.venue_id}
+                          onClick={() => handleActivateVenue(venue)}
+                        >
+                          {updatingVenueId === venue.venue_id ? (
+                            <Loader2 className="mr-1 size-3.5 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="mr-1 size-3.5" />
+                          )}
+                          Active
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="cursor-pointer border-red-200 text-red-600 hover:bg-red-50"
+                          disabled={venue.state === "Suspended" || updatingVenueId === venue.venue_id}
+                          onClick={() => setSuspendingVenue(venue)}
+                        >
+                          {updatingVenueId === venue.venue_id ? (
+                            <Loader2 className="mr-1 size-3.5 animate-spin" />
+                          ) : (
+                            <Ban className="mr-1 size-3.5" />
+                          )}
+                          Suspend
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
-                {filteredVenues.length === 0 && (
+                {venues.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
-                      No venues found.
+                      {venueLoading ? "Loading venues..." : "No venues found."}
                     </td>
                   </tr>
                 )}

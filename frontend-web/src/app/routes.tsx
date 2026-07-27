@@ -19,6 +19,7 @@ import { ReviewModerationPage } from "./pages/admin/ReviewModerationPage";
 import { TaxonomyManagementPage } from "./pages/admin/TaxonomyManagementPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AdminRoute } from "./components/AdminRoute";
 
 export const router = createBrowserRouter([
   {
@@ -48,12 +49,17 @@ export const router = createBrowserRouter([
       { path: "provider/dashboard", Component: ProviderDashboard },
       { path: "provider/offer-space", Component: OfferSpacePage },
 
-      // Admin pages (unguarded for demo access)
-      { path: "admin", Component: AdminDashboard },
-      { path: "admin/dashboard", Component: AdminDashboard },
-      { path: "admin/applications", Component: PendingApplicationsPage },
-      { path: "admin/reviews", Component: ReviewModerationPage },
-      { path: "admin/taxonomy", Component: TaxonomyManagementPage },
+      // Admin pages
+      {
+        element: <AdminRoute />,
+        children: [
+          { path: "admin", Component: AdminDashboard },
+          { path: "admin/dashboard", Component: AdminDashboard },
+          { path: "admin/applications", Component: PendingApplicationsPage },
+          { path: "admin/reviews", Component: ReviewModerationPage },
+          { path: "admin/taxonomy", Component: TaxonomyManagementPage },
+        ],
+      },
 
       { path: "*", Component: NotFoundPage },
     ],

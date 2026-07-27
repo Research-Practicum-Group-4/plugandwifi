@@ -15,6 +15,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "../components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import { Label } from "../components/ui/label";
+import { Textarea } from "../components/ui/textarea";
 import { Calendar, MapPin, Clock, Star, XCircle, Loader2, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../services/api";
@@ -43,6 +53,14 @@ export function BookingsPage() {
   const [pastBookings, setPastBookings] = useState<UserBookingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<UserBookingItem | null>(null);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewScores, setReviewScores] = useState({
+    wifi_score: 5,
+    plug_score: 5,
+    quietness_score: 5,
+  });
+  const [reviewComment, setReviewComment] = useState("");
 
   const fetchBookings = async () => {
     setLoading(true);
@@ -77,6 +95,57 @@ export function BookingsPage() {
       setCancellingId(null);
     }
   };
+
+  const openReviewDialog = (booking: UserBookingItem) => {
+    setReviewTarget(booking);
+    setReviewScores({ wifi_score: 5, plug_score: 5, quietness_score: 5 });
+    setReviewComment("");
+  };
+
+  const handleSubmitReview = async () => {
+    if (!reviewTarget || reviewSubmitting) return;
+
+    setReviewSubmitting(true);
+    try {
+      await api.createReview({
+        booking_id: reviewTarget.booking_id,
+        ...reviewScores,
+        comment: reviewComment.trim() || null,
+      });
+      toast.success("Review submitted successfully.");
+      setReviewTarget(null);
+      await fetchBookings();
+    } catch (err: any) {
+      console.error("Failed to submit review:", err);
+      const errMsg = err.response?.data?.detail || err.message || "Review submission failed.";
+      toast.error("Review failed", { description: errMsg });
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
+  const renderScoreSelect = (
+    id: keyof typeof reviewScores,
+    label: string,
+  ) => (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <select
+        id={id}
+        value={reviewScores[id]}
+        onChange={(event) =>
+          setReviewScores((current) => ({ ...current, [id]: Number(event.target.value) }))
+        }
+        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+      >
+        {[5, 4, 3, 2, 1].map((score) => (
+          <option key={score} value={score}>
+            {score} stars
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -278,9 +347,13 @@ export function BookingsPage() {
                           <Button variant="outline">View Venue</Button>
                         </Link>
                         {booking.status === "completed" && (
-                          <Button style={{ backgroundColor: "#253c50" }}>
+                          <Button
+                            style={{ backgroundColor: "#253c50" }}
+                            disabled={booking.review_submitted}
+                            onClick={() => openReviewDialog(booking)}
+                          >
                             <Star className="size-4 mr-2" />
-                            Submit a Review
+                            {booking.review_submitted ? "Review Submitted" : "Submit a Review"}
                           </Button>
                         )}
                       </div>
@@ -292,6 +365,42 @@ export function BookingsPage() {
           )}
         </TabsContent>
       </Tabs>
+      <Dialog open={reviewTarget !== null} onOpenChange={(open) => !open && setReviewTarget(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Review your workspace</DialogTitle>
+            <DialogDescription>
+              Share feedback for {reviewTarget?.venue_name || "this workspace"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-4 sm:grid-cols-3">
+              {renderScoreSelect("wifi_score", "WiFi")}
+              {renderScoreSelect("plug_score", "Power")}
+              {renderScoreSelect("quietness_score", "Quietness")}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reviewComment">Comment</Label>
+              <Textarea
+                id="reviewComment"
+                value={reviewComment}
+                onChange={(event) => setReviewComment(event.target.value)}
+                maxLength={1000}
+                placeholder="What stood out about this workspace?"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReviewTarget(null)} disabled={reviewSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitReview} disabled={reviewSubmitting} style={{ backgroundColor: "#253c50" }}>
+              {reviewSubmitting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Star className="mr-2 size-4" />}
+              Submit Review
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -16,7 +16,7 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
-from sqlalchemy import func, text
+from sqlalchemy import func, or_, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -53,6 +53,7 @@ from .schemas import (
     LogoutRequest,
     MockPaymentConfirmRequest,
     MockPaymentResponse,
+    ProviderBookingCompletionResponse,
     ProviderArrivalsResponse,
     ProviderDashboardKPIsResponse,
     ProviderVenueListResponse,
@@ -70,6 +71,7 @@ from .schemas import (
     VenueListResponse,
     VenueReviewRequest,
     VenueReviewResponse,
+    VenueReviewsResponse,
     VenueSuggestionsResponse,
     VenueSurveyMetricsResponse,
     VenueSuspensionRequest,
@@ -2822,7 +2824,9 @@ def booking_datetime(booking: Booking):
     return datetime.combine(booking.booking_date, booking.start_time)
 
 
-def serialize_user_booking(booking: Booking, venue: Venue | None, status: str):
+def serialize_user_booking(
+    booking: Booking, venue: Venue | None, status: str, review_submitted: bool = False
+):
     return {
         "booking_id": booking.id,
         "venue_id": booking.venue_id,
@@ -2836,6 +2840,7 @@ def serialize_user_booking(booking: Booking, venue: Venue | None, status: str):
         "payment_status": booking.payment_status,
         "lat": venue.lat if venue else None,
         "lon": venue.lon if venue else None,
+        "review_submitted": review_submitted,
     }
 
 
@@ -3997,6 +4002,56 @@ def get_venue_survey_metrics(venue_id: str, db: Session = Depends(get_db)):
     }
 
 
+@app.get("/api/venues/{venue_id}/reviews", response_model=VenueReviewsResponse)
+def get_venue_reviews(venue_id: str, db: Session = Depends(get_db)):
+    venue = db.query(Venue).filter(Venue.venue_id == venue_id).first()
+
+    if venue is None:
+        raise HTTPException(status_code=404, detail="Venue not found")
+
+    rows = (
+        db.query(PostBookingReview, User)
+        .join(Booking, PostBookingReview.booking_id == Booking.id)
+        .outerjoin(User, PostBookingReview.user_id == User.id)
+        .filter(PostBookingReview.venue_id == venue_id)
+        .filter(PostBookingReview.verified.is_(True))
+        .filter(func.lower(Booking.status) == "completed")
+        .order_by(PostBookingReview.created_at.desc(), PostBookingReview.id.desc())
+        .all()
+    )
+
+    items = []
+    ratings = []
+
+    for review, user in rows:
+        rating = calculate_review_star_rating(review)
+        if rating is not None:
+            ratings.append(rating)
+
+        items.append(
+            {
+                "id": review.id,
+                "booking_id": review.booking_id,
+                "user_id": review.user_id,
+                "reviewer_name": user.full_name if user else None,
+                "venue_id": review.venue_id,
+                "rating": round(rating, 2) if rating is not None else None,
+                "wifi_score": review.wifi_score,
+                "plug_score": review.plug_score,
+                "quietness_score": review.quietness_score,
+                "comment": review.comment,
+                "verified": review.verified,
+                "created_at": review.created_at,
+            }
+        )
+
+    return {
+        "items": items,
+        "total_items": len(items),
+        "average_rating": round(sum(ratings) / len(ratings), 2) if ratings else None,
+    }
+
+
 @app.post("/api/reviews", response_model=ReviewResponse)
 def create_review(
     payload: ReviewCreate,
@@ -4039,6 +4094,7 @@ def create_review(
         wifi_score=payload.wifi_score,
         plug_score=payload.plug_score,
         quietness_score=payload.quietness_score,
+        comment=payload.comment.strip() if payload.comment else None,
         verified=True,
     )
 
@@ -4058,6 +4114,7 @@ def create_review(
         "wifi_score": review.wifi_score,
         "plug_score": review.plug_score,
         "quietness_score": review.quietness_score,
+        "comment": review.comment,
         "verified": review.verified,
         "venue_rating": venue_rating,
     }
@@ -4385,6 +4442,52 @@ def get_admin_dashboard_overview(
     }
 
 
+@app.get("/api/admin/venues", response_model=VenueListResponse)
+def get_admin_venues(
+    query: str | None = None,
+    state: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    page: int = Query(1, ge=1),
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
+):
+    venues_query = db.query(Venue)
+
+    search_text = query.strip().lower() if query else ""
+    if search_text:
+        pattern = f"%{search_text}%"
+        venues_query = venues_query.filter(
+            or_(
+                func.lower(Venue.name).like(pattern),
+                func.lower(Venue.venue_id).like(pattern),
+                func.lower(Venue.borough).like(pattern),
+            )
+        )
+
+    normalized_state = state.strip().lower() if state else ""
+    if normalized_state and normalized_state != "all":
+        venues_query = venues_query.filter(func.lower(Venue.state) == normalized_state)
+
+    total_items = venues_query.count()
+    total_pages = (total_items + limit - 1) // limit
+    offset = (page - 1) * limit
+    venues = (
+        venues_query.order_by(Venue.name, Venue.venue_id)
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "items": [build_venue_response(venue) for venue in venues],
+        "page": page,
+        "limit": limit,
+        "total_items": total_items,
+        "total_pages": total_pages,
+        "has_more": page < total_pages,
+    }
+
+
 @app.patch(
     "/api/admin/venues/{venue_id}/suspension", response_model=VenueSuspensionResponse
 )
@@ -4505,7 +4608,8 @@ def get_provider_dashboard_arrivals(
     arrival_rows = (
         db.query(Booking, User, Venue)
         .join(User, Booking.user_id == User.id)
-        .outerjoin(Venue, Booking.venue_id == Venue.venue_id)
+        .join(Venue, Booking.venue_id == Venue.venue_id)
+        .filter(Venue.partner == current_user.id)
         .filter(Booking.booking_date >= current_datetime.date())
         .filter(
             func.coalesce(func.lower(Booking.status), "confirmed").notin_(
@@ -4527,6 +4631,90 @@ def get_provider_dashboard_arrivals(
             serialize_provider_arrival(booking, user, venue)
             for booking, user, venue in upcoming_rows
         ]
+    }
+
+
+@app.get("/api/provider/dashboard/bookings/history", response_model=ProviderArrivalsResponse)
+def get_provider_booking_history(
+    current_user: User = Depends(require_roles("provider")),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    current_datetime = get_current_local_datetime()
+
+    booking_rows = (
+        db.query(Booking, User, Venue)
+        .join(User, Booking.user_id == User.id)
+        .join(Venue, Booking.venue_id == Venue.venue_id)
+        .filter(Venue.partner == current_user.id)
+        .filter(
+            func.coalesce(func.lower(Booking.status), "confirmed").notin_(
+                {"cancelled", "canceled", "payment_failed"}
+            )
+        )
+        .order_by(Booking.booking_date.desc(), Booking.start_time.desc())
+        .all()
+    )
+
+    historical_rows = [
+        (booking, user, venue)
+        for booking, user, venue in booking_rows
+        if booking.status == "completed" or booking_datetime(booking) < current_datetime
+    ][:limit]
+
+    return {
+        "items": [
+            serialize_provider_arrival(booking, user, venue)
+            for booking, user, venue in historical_rows
+        ]
+    }
+
+
+@app.patch(
+    "/api/provider/bookings/{booking_id}/complete",
+    response_model=ProviderBookingCompletionResponse,
+)
+def complete_provider_booking(
+    booking_id: int,
+    current_user: User = Depends(require_roles("provider")),
+    db: Session = Depends(get_db),
+):
+    row = (
+        db.query(Booking, Venue)
+        .join(Venue, Booking.venue_id == Venue.venue_id)
+        .filter(Booking.id == booking_id)
+        .with_for_update()
+        .first()
+    )
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    booking, venue = row
+
+    if venue.partner != current_user.id:
+        raise HTTPException(status_code=403, detail="Booking does not belong to this provider")
+
+    current_status = (booking.status or "").lower()
+
+    if current_status == "completed":
+        raise HTTPException(status_code=409, detail="Booking is already completed")
+
+    if current_status in {"cancelled", "canceled", "payment_failed"}:
+        raise HTTPException(status_code=409, detail="Booking cannot be completed")
+
+    if current_status == "pending_payment":
+        raise HTTPException(status_code=409, detail="Booking payment is not confirmed")
+
+    booking.status = "completed"
+
+    db.commit()
+    db.refresh(booking)
+
+    return {
+        "booking_id": booking.id,
+        "status": booking.status,
+        "message": "Booking marked as completed",
     }
 
 
@@ -4575,8 +4763,9 @@ def get_user_bookings(
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     booking_rows = (
-        db.query(Booking, Venue)
+        db.query(Booking, Venue, PostBookingReview.id)
         .outerjoin(Venue, Booking.venue_id == Venue.venue_id)
+        .outerjoin(PostBookingReview, PostBookingReview.booking_id == Booking.id)
         .filter(Booking.user_id == current_user.id)
         .all()
     )
@@ -4584,9 +4773,9 @@ def get_user_bookings(
     current_datetime = get_current_local_datetime()
     grouped_rows = {"upcoming": [], "completed": [], "cancelled": []}
 
-    for booking, venue in booking_rows:
+    for booking, venue, review_id in booking_rows:
         category = get_booking_category(booking, current_datetime)
-        grouped_rows[category].append((booking, venue))
+        grouped_rows[category].append((booking, venue, review_id is not None))
 
     grouped_rows["upcoming"].sort(key=lambda row: booking_datetime(row[0]))
     grouped_rows["completed"].sort(
@@ -4598,7 +4787,8 @@ def get_user_bookings(
 
     return {
         category: [
-            serialize_user_booking(booking, venue, category) for booking, venue in rows
+            serialize_user_booking(booking, venue, category, review_submitted)
+            for booking, venue, review_submitted in rows
         ]
         for category, rows in grouped_rows.items()
     }

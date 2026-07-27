@@ -1,4 +1,5 @@
 from datetime import date as date_type
+from datetime import datetime as datetime_type
 from datetime import time as time_type
 from enum import Enum
 from typing import Literal
@@ -560,6 +561,8 @@ class ReviewCreate(BaseModel):
 
     quietness_score: float = Field(ge=1, le=5)
 
+    comment: str | None = Field(default=None, max_length=1000)
+
 
 class ReviewResponse(BaseModel):
     id: int
@@ -576,9 +579,45 @@ class ReviewResponse(BaseModel):
 
     quietness_score: float | None = None
 
+    comment: str | None = None
+
     verified: bool
 
     venue_rating: float | None = None
+
+
+class VenueReviewItem(BaseModel):
+    id: int
+
+    booking_id: int
+
+    user_id: int
+
+    reviewer_name: str | None = None
+
+    venue_id: str
+
+    rating: float | None = None
+
+    wifi_score: float | None = None
+
+    plug_score: float | None = None
+
+    quietness_score: float | None = None
+
+    comment: str | None = None
+
+    verified: bool
+
+    created_at: datetime_type
+
+
+class VenueReviewsResponse(BaseModel):
+    items: list[VenueReviewItem]
+
+    total_items: int
+
+    average_rating: float | None = None
 
 
 class UserBookingItem(BaseModel):
@@ -605,6 +644,8 @@ class UserBookingItem(BaseModel):
     lat: float | None = None
 
     lon: float | None = None
+
+    review_submitted: bool = False
 
 
 class UserBookingsResponse(BaseModel):
@@ -695,6 +736,14 @@ class ProviderArrivalItem(BaseModel):
 
 class ProviderArrivalsResponse(BaseModel):
     items: list[ProviderArrivalItem]
+
+
+class ProviderBookingCompletionResponse(BaseModel):
+    booking_id: int
+
+    status: str
+
+    message: str
 
 
 class VenueSurveyMetricsResponse(BaseModel):

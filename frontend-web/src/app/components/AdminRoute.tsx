@@ -1,9 +1,10 @@
-import { Navigate, Outlet } from "react-router";
+import { Navigate, Outlet, useLocation } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 
 export function AdminRoute() {
   const { isAuthenticated, user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -13,7 +14,17 @@ export function AdminRoute() {
     );
   }
 
-  if (!isAuthenticated || user?.role !== "admin") {
+  if (!isAuthenticated) {
+    return (
+      <Navigate
+        to="/login?portal=admin"
+        state={{ from: location.pathname }}
+        replace
+      />
+    );
+  }
+
+  if (user?.role !== "admin") {
     return <Navigate to="/" replace />;
   }
 

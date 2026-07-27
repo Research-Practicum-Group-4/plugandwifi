@@ -197,6 +197,7 @@ export interface UserBookingItem {
   payment_status: string;
   lat: number | null;
   lon: number | null;
+  review_submitted?: boolean;
 }
 
 export interface UserBookingsResponse {
@@ -211,6 +212,48 @@ export interface BookingCancellationResponse {
   payment_status: string;
   released_seats: number;
   message: string;
+}
+
+export interface ReviewCreateRequest {
+  booking_id: number;
+  wifi_score: number;
+  plug_score: number;
+  quietness_score: number;
+  comment?: string | null;
+}
+
+export interface ReviewResponse {
+  id: number;
+  booking_id: number;
+  user_id: number;
+  venue_id: string;
+  wifi_score: number | null;
+  plug_score: number | null;
+  quietness_score: number | null;
+  comment: string | null;
+  verified: boolean;
+  venue_rating: number | null;
+}
+
+export interface VenueReviewItem {
+  id: number;
+  booking_id: number;
+  user_id: number;
+  reviewer_name: string | null;
+  venue_id: string;
+  rating: number | null;
+  wifi_score: number | null;
+  plug_score: number | null;
+  quietness_score: number | null;
+  comment: string | null;
+  verified: boolean;
+  created_at: string;
+}
+
+export interface VenueReviewsResponse {
+  items: VenueReviewItem[];
+  total_items: number;
+  average_rating: number | null;
 }
 
 export interface Provider {
@@ -266,6 +309,12 @@ export interface ProviderArrivalItem {
 
 export interface ProviderArrivalsResponse {
   items: ProviderArrivalItem[];
+}
+
+export interface ProviderBookingCompletionResponse {
+  booking_id: number;
+  status: string;
+  message: string;
 }
 
 export interface VenueSuggestion {

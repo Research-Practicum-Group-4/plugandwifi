@@ -12,7 +12,7 @@ import { Label } from "../components/ui/label";
 import { Star, MapPin, Wifi, Zap, Clock, Heart, Share2, LogIn, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../services/api";
-import { VenueDetail, AvailabilitySlot } from "../../types/api";
+import { VenueDetail, AvailabilitySlot, VenueReviewItem } from "../../types/api";
 import { enrichVenue, EnrichedVenue, venueImage } from "../utils/venueEnrichment";
 import { calculateDistanceKm, formatDistance, LandmarkContext } from "../utils/distance";
 import { useAuth } from "../contexts/AuthContext";
@@ -84,6 +84,18 @@ function formatDateKey(date: Date): string {
 
 function formatVenueTypeLabel(osmType: string | null | undefined): string {
   return (osmType || "workspace").replace(/_/g, " ");
+}
+
+function formatReviewDate(value: string): string {
+  try {
+    return new Date(value).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return value;
+  }
 }
 
 function buildCalendarDays(monthDate: Date): Array<{ dateKey: string; dayNumber: number; inMonth: boolean }> {
@@ -222,6 +234,7 @@ export function VenueDetailPage() {
 
   const [venue, setVenue] = useState<(VenueDetail & EnrichedVenue) | null>(null);
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
+  const [reviews, setReviews] = useState<VenueReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [storedLandmark, setStoredLandmark] = useState<LandmarkContext | null>(null);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
@@ -258,13 +271,18 @@ export function VenueDetailPage() {
     setLoading(true);
     Promise.all([
       api.getVenueDetail(id),
+      api.getVenueReviews(id).catch((e) => {
+        console.warn("Could not load reviews:", e);
+        return { items: [], total_items: 0, average_rating: null };
+      }),
       api.getAvailability(id).catch((e) => {
         console.warn("Could not load slots:", e);
         return { venue_id: id, available_slots: [] };
       }),
     ])
-      .then(([venueData, availabilityData]) => {
+      .then(([venueData, reviewData, availabilityData]) => {
         setVenue(enrichVenue(venueData) as VenueDetail & EnrichedVenue);
+        setReviews(reviewData.items);
         setSlots(availabilityData.available_slots);
         setLoading(false);
       })
@@ -523,6 +541,17 @@ export function VenueDetailPage() {
 
   const venueTypeLabel = formatVenueTypeLabel(venue.osm_type);
   const venueImageType = venue.osm_type || "workspace";
+  const hasRealReviews = reviews.length > 0;
+  const displayedReviews = hasRealReviews
+    ? reviews.map((review) => ({
+        id: review.id,
+        author: review.reviewer_name || "Verified guest",
+        rating: review.rating ?? 0,
+        date: formatReviewDate(review.created_at),
+        comment: review.comment || "No written comment provided.",
+      }))
+    : defaultReviews;
+  const reviewCount = hasRealReviews ? reviews.length : defaultReviews.length;
 
   return (
     <><div className="container mx-auto px-4 py-8">
@@ -564,7 +593,7 @@ export function VenueDetailPage() {
                 <Star className="size-5 fill-yellow-400 stroke-yellow-400" />
                 <span>{venue.rating}</span>
               </div>
-              <span className="text-muted-foreground">(142 reviews)</span>
+              <span className="text-muted-foreground">({reviewCount} reviews)</span>
               <Badge>{venueTypeLabel}</Badge>
             </div>
 
@@ -654,7 +683,7 @@ export function VenueDetailPage() {
             </TabsList>
 
             <TabsContent value="reviews" className="space-y-4 mt-6">
-              {defaultReviews.map((review) => (
+              {displayedReviews.map((review) => (
                 <Card key={review.id}>
                   <CardContent className="pt-6">
                     <div className="flex items-start justify-between mb-2">
