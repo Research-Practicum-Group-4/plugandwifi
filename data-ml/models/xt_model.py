@@ -69,7 +69,7 @@ train_df = df.drop(test_df.index).copy()
 
 train_stations = train_df[["station_complex_id", "latitude", "longitude"]].drop_duplicates().reset_index(drop=True)
 
-feat = ["lat", "lon", "day_type", "nearest_mta_line_count", "hour_sin", "hour_cos",]
+feat = ["lat", "lon", "day_type", "nearest_mta_line_count", "hour_sin", "hour_cos"]
 
 x_train = train_df[feat]
 y_train = train_df["log_avg_ridership"]
@@ -82,7 +82,7 @@ from sklearn.ensemble import ExtraTreesRegressor
 xt_model = ExtraTreesRegressor(
     n_estimators=500,
     max_features=5,
-    random_state=1,
+    random_state=1
 )
 xt_model.fit(x_train, y_train)
 xt_pred = xt_model.predict(x_test)
@@ -90,7 +90,7 @@ xt_pred = xt_model.predict(x_test)
 final_model = ExtraTreesRegressor(
     n_estimators=500,
     max_features=5,
-    random_state=1,
+    random_state=1
 )
 final_model.fit(df[feat], df["log_avg_ridership"])
 
@@ -102,10 +102,10 @@ busyness_predictor = BusynessPredictor(
     feature_names=feat,
     day_type_mapping={
         "weekday": 0,
-        "weekend": 1,
+        "weekend": 1
     },
     score_low=score_low,
-    score_high=score_high,
+    score_high=score_high
 )
 
 print("Extra Trees Regressor")
@@ -115,7 +115,7 @@ print(f"r2: {r2_score(y_true=np.exp(y_test), y_pred=np.exp(xt_pred))}")
 
 joblib.dump({"model": final_model, "feature_names": feat, "target":"log_avg_ridership", "pred_transform": "np.exp", "day_type_mapping": {
             "weekday": 0,
-            "weekend": 1,
+            "weekend": 1
         },}, "data-ml/models/extra_trees_model.joblib")
 
 joblib.dump(busyness_predictor, "data-ml/models/busyness_predictor.joblib")

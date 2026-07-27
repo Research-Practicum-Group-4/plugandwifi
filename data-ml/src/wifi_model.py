@@ -8,7 +8,7 @@ wifi_inferred = {
     "cafe": True,
     "hotel": True,
     "bakery": None,
-    "restaurant": None,
+    "restaurant": None
 }
 
 

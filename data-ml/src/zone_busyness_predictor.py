@@ -6,9 +6,15 @@ import pandas as pd
 class ZoneBusynessPredictor:
     def __init__(self,  model_path="data-ml/models/zone_busyness_model.joblib"):
         saved = joblib.load(model_path)
+        if "zone_baselines" not in saved:
+            raise RuntimeError(
+                "This model artifact predates zone-mean encoding. "
+                "Run data-ml/models/rf_zone_busyness_model.py to retrain it."
+            )
+
         self.model = saved["model"]
         self.feature_names = saved["feature_names"]
-        self.known_zone_ids = set(saved["known_zone_ids"])
+        self.zone_baselines = saved["zone_baselines"]
 
     def predict_many(self, venues, date, hour):
         if isinstance(venues, dict):
@@ -26,8 +32,9 @@ class ZoneBusynessPredictor:
         venues["day_cos"] = np.cos(2 * np.pi * date.dayofweek / 7)
         venues["month_sin"] = np.sin(2 * np.pi * date.month / 12)
         venues["month_cos"] = np.cos(2 * np.pi * date.month / 12)
+        venues["zone_baseline"] = venues["zone_id"].map(self.zone_baselines)
 
-        valid = (venues["zone_id"].notna() & venues["zone_id"].isin(self.known_zone_ids))
+        valid = venues["zone_id"].notna() & venues["zone_baseline"].notna()
         venues["busyness_score"] = pd.NA
 
         if valid.any():

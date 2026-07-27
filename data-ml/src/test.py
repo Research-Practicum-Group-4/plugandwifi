@@ -57,7 +57,7 @@ def predict_venue_busyness(venue_id, hour, day_type):
         venue,
         hour=hour,
         day_type=day_type,
-        day_type_mapping=day_type_mapping,
+        day_type_mapping=day_type_mapping
     )
 
     x = pd.DataFrame([venue])[feature_names]
@@ -70,7 +70,7 @@ def predict_venue_busyness(venue_id, hour, day_type):
     return {
         "venue_id": venue_id,
         "busyness_score": score,
-        "busyness_label": busyness_label(score),
+        "busyness_label": busyness_label(score)
     }
 
 
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     result = predict_venue_busyness(
         venue_id="osm_357620442",
         hour=9,
-        day_type="weekday",
+        day_type="weekday"
     )
 
     print(json.dumps(result, indent=2))

@@ -6,7 +6,7 @@ base_level= {
     "cafe": 0.55,
     "bakery": 0.5,
     "hotel": 0.3,
-    "restaurant": 0.65,
+    "restaurant": 0.65
     }
 
 default_noise= 0.5 
@@ -35,7 +35,7 @@ hourly_factor = {
     20: 0.9,
     21: 0.7,
     22: 0.5,
-    23: 0.25,
+    23: 0.25
 }
 
 
@@ -59,7 +59,7 @@ hourly_overrides = {
         20: 1.2, 
         21: 0.9,
         22: 0.6, 
-        23: 0.3,
+        23: 0.3
     },
     "hotel": {
         **{h: 0.15 for h in range(0, 6)},
@@ -80,8 +80,8 @@ hourly_overrides = {
         20: 0.5,
         21: 0.35, 
         22: 0.25, 
-        23: 0.15,
-    },
+        23: 0.15
+    }
 }
 
 

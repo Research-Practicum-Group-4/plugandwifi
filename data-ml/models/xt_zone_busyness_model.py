@@ -24,8 +24,13 @@ df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
 train_df = df[df["date"] < "2025-01-01"].copy()
 test_df = df[(df["date"] >= "2025-01-01") & (df["date"] < "2026-01-01")].copy()
 
+train_zone_baselines = train_df.groupby("zone_id")["busyness_score"].mean()
+
+train_df["zone_baseline"] = train_df["zone_id"].map(train_zone_baselines)
+test_df["zone_baseline"] = test_df["zone_id"].map(train_zone_baselines)
+
 feat = [
-    "zone_id",
+    "zone_baseline",
     "is_weekend",
     "hour_sin",
     "hour_cos",

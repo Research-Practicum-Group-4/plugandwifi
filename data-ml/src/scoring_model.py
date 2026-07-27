@@ -12,7 +12,7 @@ def score_venue(venue, weights, hour):
         "noise": noise_norm,
         "rating": venue["rating_norm"],
         "bus": venue["bus_norm"],
-        "train": venue["train_norm"],
+        "train": venue["train_norm"]
     }
 
     total = sum(weights.values())

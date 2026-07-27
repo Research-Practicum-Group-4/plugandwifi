@@ -80,8 +80,9 @@ def fetch_month(taxi_type, month):
 def fetch_taxi_data():
     monthly_activity = []
 
-    for month in pd.period_range("2024-01", "2026-04", freq="M"):
+    for month in pd.period_range("2023-01", "2023-12", freq="M"):
         for taxi_type in ["yellow", "green"]:
+            print(f"Loading {taxi_type} taxi data for {month}")
             monthly_activity.append(fetch_month(taxi_type, month))
 
     activity = pd.concat(monthly_activity)
@@ -116,7 +117,7 @@ def fetch_taxi_data():
     )
 
     activity = activity.sort_values(["timestamp", "zone_id"])
-    activity.to_csv("data/processed/taxi_data.csv", index=False)
+    activity.to_csv("data/processed/taxi_activity_hourly.csv", mode="a", header=False, index=False)
 
     return activity
 

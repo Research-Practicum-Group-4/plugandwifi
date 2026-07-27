@@ -4,13 +4,13 @@ from sodapy import Socrata
 
 client = Socrata("data.ny.gov", None, timeout=300)
 
-output = "data/processed/mta_ridership_hourly.csv"
+output = "data/processed/mta_ridership_2023_hourly.csv"
 first_month = True
 
-for month in pd.period_range("2024-01", "2026-04", freq="M"):
+for month in pd.period_range("2023-01", "2023-12", freq="M"):
     start = month.start_time.strftime("%Y-%m-%dT%H:%M:%S")
     end = (month + 1).start_time.strftime("%Y-%m-%dT%H:%M:%S")
-    dataset_id = "wujg-7c2s" if month.year == 2024 else "5wq4-mkjj"
+    dataset_id = "wujg-7c2s" if month.year <= 2024 else "5wq4-mkjj"
 
     print(f"Downloading MTA ridership for {month}")
 

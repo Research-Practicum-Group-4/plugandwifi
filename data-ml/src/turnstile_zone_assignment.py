@@ -4,7 +4,7 @@ import geopandas as gpd
 import pandas as pd
 
 
-mta_file = Path("data/processed/mta_ridership_hourly.csv")
+mta_file = Path("data/processed/mta_ridership_2023_hourly.csv")
 mta = pd.read_csv(mta_file)
 mta = mta.drop(columns=["zone_id"], errors="ignore")
 
@@ -19,7 +19,7 @@ station_locations = gpd.GeoDataFrame(
     station_locations,
     geometry=gpd.points_from_xy(
         station_locations["longitude"],
-        station_locations["latitude"],
+        station_locations["latitude"]
     ),
     crs="EPSG:4326"
 ).to_crs(zones.crs)
@@ -45,9 +45,14 @@ mta_by_zone = (
 )
 mta_by_zone.to_csv(
     "data/processed/mta_zone_hourly.csv",
+    mode="a",
+    header=False,
     index=False
 )
 
-temporary_file = mta_file.with_suffix(".temporary.csv")
-mta.to_csv(temporary_file, index=False)
-temporary_file.replace(mta_file)
+mta.to_csv(
+    "data/processed/mta_ridership_hourly.csv",
+    mode="a",
+    header=False,
+    index=False
+)
