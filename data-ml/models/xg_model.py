@@ -55,7 +55,7 @@ train_df = df.drop(test_df.index).copy()
 
 train_stations = train_df[["station_complex_id", "latitude", "longitude"]].drop_duplicates().reset_index(drop=True)
 
-feat = ["latitude", "longitude", "day_type", "line_count", "is_morning_peak", "is_evening_peak", "is_late_night", "hour_sin", "hour_cos",]
+feat = ["latitude", "longitude", "day_type", "line_count", "is_morning_peak", "is_evening_peak", "is_late_night", "hour_sin", "hour_cos"]
 
 x_train = train_df[feat]
 y_train = train_df["log_avg_ridership"]
@@ -70,7 +70,7 @@ xg_model = XGBRegressor(
     subsample=0.9,
     colsample_bytree=0.9,
     objective="reg:squarederror",
-    random_state=2,
+    random_state=2
 )
 
 xg_model.fit(x_train, y_train)

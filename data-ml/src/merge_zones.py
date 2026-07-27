@@ -14,14 +14,14 @@ taxi = pd.read_csv(
         "day_type",
         "taxi_pickups",
         "taxi_dropoffs",
-        "taxi_activity",
-    ],
+        "taxi_activity"
+    ]
 )
 
 zone_activity = taxi.merge(
     mta,
     on=["zone_id", "date", "hour", "day_type"],
-    how="outer",
+    how="outer"
 )
 
 zone_activity[
@@ -29,14 +29,14 @@ zone_activity[
         "mta_ridership",
         "taxi_pickups",
         "taxi_dropoffs",
-        "taxi_activity",
+        "taxi_activity"
     ]
 ] = zone_activity[
     [
         "mta_ridership",
         "taxi_pickups",
         "taxi_dropoffs",
-        "taxi_activity",
+        "taxi_activity"
     ]
 ].fillna(0)
 
@@ -77,8 +77,8 @@ zone_activity["taxi_net_arrivals_score"] = (
 
 zone_activity["busyness_score"] = (
     (
-        0.5 * zone_activity["mta_score"]
-        + 0.5 * zone_activity["taxi_activity_score"]
+        0.75 * zone_activity["mta_score"]
+        + 0.2 * zone_activity["taxi_activity_score"]
         + 0.05 * zone_activity["taxi_net_arrivals_score"]
     ).clip(0, 1)
     * 100
@@ -86,5 +86,5 @@ zone_activity["busyness_score"] = (
 
 zone_activity.to_csv(
     "data/processed/zone_activity_hourly.csv",
-    index=False,
+    index=False
 )

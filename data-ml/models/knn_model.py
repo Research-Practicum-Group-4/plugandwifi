@@ -24,7 +24,7 @@ train_stations = train_df[["station_complex_id", "latitude", "longitude"]].drop_
 
 K=1
 
-knn = NearestNeighbors(n_neighbors=K).fit(train_stations[["latitude", "longitude"]])
+knn = NearestNeighbors(n_neighbors=K).fit(train_stations[["latitude", "longitude"]].to_numpy())
 
 lookup = train_df.set_index(["station_complex_id", "hour", "day_type"])["log_avg_ridership"]
 
@@ -67,4 +67,3 @@ y_pred = test_df.loc[valid, "pred_knn"]
 
 print(round(math.sqrt(mean_squared_error(y_true, y_pred)), 1))
 print(round(r2_score(y_true, y_pred), 3))
-

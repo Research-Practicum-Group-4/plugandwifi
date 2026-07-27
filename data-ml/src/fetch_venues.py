@@ -76,7 +76,7 @@ def parse_elements(elements):
             "has_wifi": has_wifi,
             "best_hours_for_work": None,
             "hourly_profile": None,
-            "partner": False,
+            "partner": False
         })
 
     df = pd.DataFrame(rows)

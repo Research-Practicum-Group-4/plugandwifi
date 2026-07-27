@@ -51,7 +51,7 @@ def load_mta_stations():
                 "station_complex_id",
                 "station_complex",
                 "latitude",
-                "longitude",
+                "longitude"
             ]
         ]
         .drop_duplicates()
@@ -79,7 +79,7 @@ def nearest_mta_info(lat, lon, tree, stations):
                 lat,
                 lon,
                 nearest["latitude"],
-                nearest["longitude"],
+                nearest["longitude"]
             )
         )
     )
@@ -88,7 +88,7 @@ def nearest_mta_info(lat, lon, tree, stations):
         nearest["station_complex_id"],
         nearest["station_complex"],
         dist,
-        nearest["mta_line_count"],
+        nearest["mta_line_count"]
     )
 
 
@@ -104,17 +104,17 @@ def apply_to_venues(db_path: str = "data/processed/venues.db"):
             "nearest_mta_station_id",
             "nearest_mta_station",
             "nearest_mta_station_m",
-            "nearest_mta_line_count",
+            "nearest_mta_line_count"
         ]
     ] = venues.apply(
         lambda r: nearest_mta_info(
             r["lat"],
             r["lon"],
             tree,
-            stations,
+            stations
         ),
         axis=1,
-        result_type="expand",
+        result_type="expand"
     )
 
     venues["nearest_mta_station_m"] = venues["nearest_mta_station_m"].astype(int)
