@@ -63,15 +63,11 @@ class BusynessPredictor:
                 {
                     "venue_id": venue_id,
                     "busyness_score": score,
-                    "busyness_label": self._label(score),
+                    "busyness_label": self._label(score)
                 }
             )
 
         return results
-
-    def predict_one(self, venue, hour, day_type):
-        return self.predict_many(venue, hour, day_type)[0]
-
 
 def load_busyness_predictor(
     model_path="data-ml/models/busyness_predictor.joblib"):
