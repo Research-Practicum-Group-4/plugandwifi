@@ -144,6 +144,12 @@ def get_free_cancellation_hours():
 
 FREE_CANCELLATION_HOURS = get_free_cancellation_hours()
 
+BOOKING_CAPACITY_EXCLUDED_STATUSES = (
+    "cancelled",
+    "canceled",
+    "payment_failed",
+)
+
 Base.metadata.create_all(bind=engine)
 
 
@@ -3162,6 +3168,150 @@ def has_required_contiguous_seats(
 
     return True
 
+def validate_and_lock_booking_inventory(
+    db: Session,
+    venue_id: str,
+    requested_date: date,
+    requested_start_time: time,
+    requested_end_time: time,
+    seats_required: int,
+):
+    """
+    Lock and validate every availability slot required by one booking.
+
+    A single booking may span multiple contiguous availability slots.
+    For example, an 08:00-11:00 booking may be covered by:
+
+    08:00-09:00
+    09:00-10:00
+    10:00-11:00
+    """
+
+    if requested_start_time >= requested_end_time:
+        raise HTTPException(
+            status_code=400,
+            detail="End time must be later than start time",
+        )
+
+    if seats_required < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one seat must be reserved",
+        )
+
+    # Lock all available inventory slots that overlap the requested period.
+    # The deterministic ordering reduces the risk of concurrent deadlocks.
+    slots = (
+        db.query(AvailabilitySlot)
+        .filter(AvailabilitySlot.venue_id == venue_id)
+        .filter(AvailabilitySlot.date == requested_date)
+        .filter(AvailabilitySlot.available.is_(True))
+        .filter(AvailabilitySlot.end_time > requested_start_time)
+        .filter(AvailabilitySlot.start_time < requested_end_time)
+        .order_by(
+            AvailabilitySlot.start_time,
+            AvailabilitySlot.end_time,
+            AvailabilitySlot.id,
+        )
+        .with_for_update()
+        .all()
+    )
+
+    if not slots:
+        raise HTTPException(
+            status_code=400,
+            detail="Requested time slot not available",
+        )
+
+    # Query bookings that already occupy any part of the requested period.
+    # Pending-payment bookings are intentionally included so that two users
+    # cannot reserve the same final seat at the same time.
+    overlapping_bookings = (
+        db.query(Booking)
+        .filter(Booking.venue_id == venue_id)
+        .filter(Booking.booking_date == requested_date)
+        .filter(Booking.end_time > requested_start_time)
+        .filter(Booking.start_time < requested_end_time)
+        .filter(
+            func.coalesce(func.lower(Booking.status), "confirmed").notin_(
+                BOOKING_CAPACITY_EXCLUDED_STATUSES
+            )
+        )
+        .all()
+    )
+
+    # Divide the requested period wherever a slot or existing booking begins
+    # or ends. Each resulting segment is validated independently.
+    boundaries = {
+        requested_start_time,
+        requested_end_time,
+    }
+
+    for slot in slots:
+        if requested_start_time < slot.start_time < requested_end_time:
+            boundaries.add(slot.start_time)
+
+        if requested_start_time < slot.end_time < requested_end_time:
+            boundaries.add(slot.end_time)
+
+    for booking in overlapping_bookings:
+        if requested_start_time < booking.start_time < requested_end_time:
+            boundaries.add(booking.start_time)
+
+        if requested_start_time < booking.end_time < requested_end_time:
+            boundaries.add(booking.end_time)
+
+    sorted_boundaries = sorted(boundaries)
+
+    for index in range(len(sorted_boundaries) - 1):
+        segment_start = sorted_boundaries[index]
+        segment_end = sorted_boundaries[index + 1]
+
+        if segment_start >= segment_end:
+            continue
+
+        covering_slots = [
+            slot
+            for slot in slots
+            if (
+                slot.start_time <= segment_start
+                and slot.end_time >= segment_end
+            )
+        ]
+
+        # No active slot covers this part of the requested booking.
+        # This catches gaps such as having 08:00-09:00 and 10:00-11:00
+        # but no 09:00-10:00 slot.
+        if not covering_slots:
+            raise HTTPException(
+                status_code=400,
+                detail="Requested time slot not available",
+            )
+
+        # Normally only one slot covers each segment. Using the minimum makes
+        # the capacity check conservative if duplicate/overlapping slots exist.
+        segment_capacity = min(
+            slot.available_seats or 0
+            for slot in covering_slots
+        )
+
+        reserved_seats = sum(
+            booking.seats_reserved or 0
+            for booking in overlapping_bookings
+            if (
+                booking.start_time < segment_end
+                and booking.end_time > segment_start
+            )
+        )
+
+        if reserved_seats + seats_required > segment_capacity:
+            raise HTTPException(
+                status_code=409,
+                detail="Venue capacity exceeded for the requested time",
+            )
+
+    return slots
+
 
 # CORS Whitelist
 origins = [
@@ -4126,43 +4276,32 @@ def create_booking(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    venue = db.query(Venue).filter(Venue.venue_id == payload.venue_id).first()
-
-    if not venue:
-        raise HTTPException(status_code=404, detail="Venue not found")
-
-    slot = (
-        db.query(AvailabilitySlot)
-        .filter(AvailabilitySlot.venue_id == payload.venue_id)
-        .filter(AvailabilitySlot.date == payload.booking_date)
-        .filter(AvailabilitySlot.start_time <= payload.start_time)
-        .filter(AvailabilitySlot.end_time >= payload.end_time)
-        .filter(AvailabilitySlot.available.is_(True))
-        .with_for_update()
+    venue = (
+        db.query(Venue)
+        .filter(Venue.venue_id == payload.venue_id)
         .first()
     )
 
-    if not slot:
-        raise HTTPException(status_code=400, detail="Requested time slot not available")
-
-    reserved_seats = (
-        db.query(func.coalesce(func.sum(Booking.seats_reserved), 0))
-        .filter(Booking.venue_id == payload.venue_id)
-        .filter(Booking.booking_date == payload.booking_date)
-        .filter(Booking.start_time < payload.end_time)
-        .filter(Booking.end_time > payload.start_time)
-        .filter(
-            func.coalesce(func.lower(Booking.status), "confirmed").notin_(
-                {"cancelled", "canceled", "payment_failed"}
-            )
-        )
-        .scalar()
-    )
-
-    if reserved_seats + payload.seats_reserved > slot.available_seats:
+    if venue is None:
         raise HTTPException(
-            status_code=409, detail="Venue capacity exceeded for the requested time"
+            status_code=404,
+            detail="Venue not found",
         )
+
+    # This validates and locks every hourly availability slot needed by
+    # the complete booking period.
+    #
+    # Example:
+    # One 08:00-11:00 booking can use three contiguous hourly slots:
+    # 08:00-09:00, 09:00-10:00 and 10:00-11:00.
+    validate_and_lock_booking_inventory(
+        db=db,
+        venue_id=payload.venue_id,
+        requested_date=payload.booking_date,
+        requested_start_time=payload.start_time,
+        requested_end_time=payload.end_time,
+        seats_required=payload.seats_reserved,
+    )
 
     booking = Booking(
         order_id=f"ORD-{uuid.uuid4().hex[:8]}",
@@ -4177,9 +4316,7 @@ def create_booking(
     )
 
     db.add(booking)
-
     db.commit()
-
     db.refresh(booking)
 
     return booking
@@ -4247,20 +4384,33 @@ def cancel_booking(
     )
 
     if booking is None:
-        raise HTTPException(status_code=404, detail="Booking not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Booking not found",
+        )
 
     current_status = (booking.status or "").lower()
 
     if current_status in {"cancelled", "canceled"}:
-        raise HTTPException(status_code=409, detail="Booking is already cancelled")
+        raise HTTPException(
+            status_code=409,
+            detail="Booking is already cancelled",
+        )
 
     if current_status == "completed":
         raise HTTPException(
-            status_code=409, detail="Completed bookings cannot be cancelled"
+            status_code=409,
+            detail="Completed bookings cannot be cancelled",
         )
 
-    booking_start = datetime.combine(booking.booking_date, booking.start_time)
-    cancellation_deadline = booking_start - timedelta(hours=FREE_CANCELLATION_HOURS)
+    booking_start = datetime.combine(
+        booking.booking_date,
+        booking.start_time,
+    )
+
+    cancellation_deadline = booking_start - timedelta(
+        hours=FREE_CANCELLATION_HOURS
+    )
 
     if get_current_local_datetime() > cancellation_deadline:
         raise HTTPException(
@@ -4271,21 +4421,9 @@ def cancel_booking(
             ),
         )
 
-    slot = (
-        db.query(AvailabilitySlot)
-        .filter(AvailabilitySlot.venue_id == booking.venue_id)
-        .filter(AvailabilitySlot.date == booking.booking_date)
-        .filter(AvailabilitySlot.start_time <= booking.start_time)
-        .filter(AvailabilitySlot.end_time >= booking.end_time)
-        .with_for_update()
-        .first()
-    )
-
-    if slot is None:
-        raise HTTPException(
-            status_code=409, detail="Booking inventory slot could not be restored"
-        )
-
+    # Capacity is calculated dynamically from active bookings.
+    # Therefore, changing the booking status to cancelled automatically
+    # releases its seats across every hourly slot it overlaps.
     booking.status = "cancelled"
     booking.payment_status = "refund_pending"
 
