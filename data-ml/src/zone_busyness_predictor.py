@@ -66,8 +66,6 @@ class ZoneBusynessPredictor:
 
         return results
 
-    def predict_one(self, venue, date, hour):
-        return self.predict_many(venue, date, hour)[0]
 
 
 def load_zone_busyness_predictor():
