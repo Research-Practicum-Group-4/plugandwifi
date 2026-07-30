@@ -71,6 +71,7 @@ The main planning artefacts are stored under `docs/`:
 | Product backlog | `docs\Plug&Wifi — Product Backlog.md` |
 | Sprint backlog | `docs\Plug & Wifi – Final Sprint Backlog.csv` |
 | Sprint Timeline | `docs\Plug_and_Wifi_Story_Timeline.png` |
+| Project Budget Table | `docs\Plug_and_Wifi_Jira_Actual_Hours.xlsx` |
 
 Use these files as the source for feature scope, sprint commitments, and
 planning traceability.
