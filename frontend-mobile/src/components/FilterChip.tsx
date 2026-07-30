@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
-import { colors } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 
 type FilterChipProps = {
@@ -9,34 +9,24 @@ type FilterChipProps = {
 };
 
 export function FilterChip({ label, selected = false, onPress }: FilterChipProps) {
+  const { colors: tc } = useTheme();
   return (
     <Pressable
-      style={[styles.chip, selected && styles.chipSelected]}
+      style={[S.chip, { borderColor: tc.border, backgroundColor: tc.white }, selected && { borderColor: tc.primary, backgroundColor: '#e8f5ef' }]}
       onPress={onPress}>
-      <Text style={[styles.label, selected && styles.labelSelected]}>{label}</Text>
+      <Text style={[S.label, { color: tc.text }, selected && { color: tc.primary, fontWeight: '600' }]}>{label}</Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const S = StyleSheet.create({
   chip: {
     borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: 999,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.white,
-  },
-  chipSelected: {
-    borderColor: colors.primary,
-    backgroundColor: '#e8f5ef',
   },
   label: {
-    color: colors.text,
     fontSize: 13,
-  },
-  labelSelected: {
-    color: colors.primary,
-    fontWeight: '600',
   },
 });

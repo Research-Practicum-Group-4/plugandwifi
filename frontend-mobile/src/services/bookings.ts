@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './api';
+import { apiPost, apiGet, apiPatch } from './api';
 
 export interface BookingPayload {
   venue_id: string;
@@ -21,14 +21,6 @@ export interface BookingResponse {
   payment_status: string;
 }
 
-export interface MockPaymentResponse {
-  booking_id: number;
-  order_id: string;
-  status: string;
-  payment_status: string;
-  message: string;
-}
-
 export interface UserBookingItem {
   booking_id: number;
   venue_id: string;
@@ -42,6 +34,7 @@ export interface UserBookingItem {
   payment_status: string;
   lat: number | null;
   lon: number | null;
+  review_submitted?: boolean;
 }
 
 export interface UserBookingsResponse {
@@ -54,24 +47,14 @@ export async function createBooking(payload: BookingPayload, token?: string): Pr
   return apiPost<BookingResponse>('/api/bookings', payload, token);
 }
 
-export async function confirmMockPayment(
-  payload: { booking_id: number; card_number: string },
-  token?: string,
-): Promise<MockPaymentResponse> {
-  return apiPost<MockPaymentResponse>('/api/payments/mock-confirm', payload, token);
-}
-
 export async function fetchUserBookings(token?: string): Promise<UserBookingsResponse> {
   return apiGet<UserBookingsResponse>('/api/users/me/bookings', token);
 }
 
-export async function cancelBooking(
-  bookingId: number,
-  token?: string,
-): Promise<{ booking_id: number; status: string; message: string }> {
-  return apiPost<{ booking_id: number; status: string; message: string }>(
-    `/api/bookings/${bookingId}/cancel`,
-    {},
-    token,
-  );
+export async function cancelBooking(bookingId: number, token?: string): Promise<{ booking_id: number; status: string; message: string }> {
+  return apiPatch<{ booking_id: number; status: string; message: string }>(`/api/bookings/${bookingId}/cancel`, {}, token);
+}
+
+export async function confirmMockPayment(bookingId: number, cardNumber: string, token?: string): Promise<{ booking_id: number; order_id: string; status: string; payment_status: string }> {
+  return apiPost<{ booking_id: number; order_id: string; status: string; payment_status: string }>('/api/payments/mock-confirm', { booking_id: bookingId, card_number: cardNumber }, token);
 }

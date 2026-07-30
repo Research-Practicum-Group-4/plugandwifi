@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
-import { colors } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 
 type PrimaryButtonProps = {
@@ -15,22 +15,24 @@ export function PrimaryButton({
   variant = 'primary',
   disabled = false,
 }: PrimaryButtonProps) {
+  const { colors: tc } = useTheme();
+
   return (
     <Pressable
       style={[
-        styles.button,
-        variant === 'primary' && styles.primary,
-        variant === 'secondary' && styles.secondary,
-        variant === 'outline' && styles.outline,
-        disabled && styles.disabled,
+        S.button,
+        variant === 'primary' && { backgroundColor: tc.primary },
+        variant === 'secondary' && { backgroundColor: tc.primaryDark },
+        variant === 'outline' && { backgroundColor: tc.white, borderWidth: 1, borderColor: tc.border },
+        disabled && S.disabled,
       ]}
       onPress={onPress}
       disabled={disabled}>
       <Text
         style={[
-          styles.label,
-          variant === 'outline' && styles.outlineLabel,
-          disabled && styles.disabledLabel,
+          S.label,
+          variant === 'outline' && [S.outlineLabel, { color: tc.text }],
+          disabled && S.disabledLabel,
         ]}>
         {label}
       </Text>
@@ -38,36 +40,26 @@ export function PrimaryButton({
   );
 }
 
-const styles = StyleSheet.create({
+const S = StyleSheet.create({
   button: {
     borderRadius: 10,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
   },
-  primary: {
-    backgroundColor: colors.primary,
-  },
-  secondary: {
-    backgroundColor: colors.primaryDark,
-  },
-  outline: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
   disabled: {
     opacity: 0.5,
   },
   label: {
-    color: colors.white,
+    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
   outlineLabel: {
-    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
   },
   disabledLabel: {
-    color: colors.textMuted,
+    color: '#9ca3af',
   },
 });

@@ -15,11 +15,11 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList>;
   VenueDetail: { venueId: string };
-  Checkout: { venueId: string; venueName: string; duration: string; price: number };
+  Checkout: { venueId: string; venueName: string; price: number };
   Login: undefined;
-  Signup: undefined;
-  ProviderDashboard: undefined;
-  OfferSpace: undefined;
+  Signup: { returnToLogin?: boolean } | undefined;
+  Settings: undefined;
+  Chatbot: undefined;
   NotFound: undefined;
 };
 
