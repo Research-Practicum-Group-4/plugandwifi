@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { authStorage } from '../storage/authStorage';
-import { loginUser, registerUser, type RegisterPayload, type LoginPayload } from '../services/auth';
+import { loginUser, registerUser, logoutUser, refreshToken, type RegisterPayload, type LoginPayload } from '../services/auth';
+import { setRefreshHandler } from '../services/api';
 import type { User } from '../types/auth';
 
 type AuthContextType = {
@@ -39,10 +40,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  // Register the auto-refresh handler with the API layer
+  useEffect(() => {
+    setRefreshHandler(async () => {
+      const rt = await authStorage.getRefreshToken();
+      if (!rt) throw new Error('No refresh token');
+      const res = await refreshToken(rt);
+      const newAccess = res.access_token;
+      await authStorage.setToken(newAccess);
+      if (res.refresh_token) {
+        await authStorage.setRefreshToken(res.refresh_token);
+      }
+      setToken(newAccess);
+      return newAccess;
+    });
+    return () => setRefreshHandler(null);
+  }, []);
+
   const login = useCallback(async (payload: LoginPayload) => {
     const response = await loginUser(payload);
     await Promise.all([
-      authStorage.setToken(response.access_token),
+      authStorage.setSession(response.access_token, response.refresh_token),
       authStorage.setUser(JSON.stringify(response.user)),
     ]);
     setToken(response.access_token);
@@ -54,10 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    try { await logoutUser(token ?? undefined); } catch {}
     await authStorage.clear();
     setToken(null);
     setUser(null);
-  }, []);
+  }, [token]);
 
   return (
     <AuthContext.Provider

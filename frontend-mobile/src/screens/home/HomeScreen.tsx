@@ -1,389 +1,392 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  Dimensions,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+  ActivityIndicator, Modal, Pressable, RefreshControl,
+  PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
-import MapView, { Marker, type Region } from 'react-native-maps';
+import MapView, { Marker, Region } from 'react-native-maps';
+import { MapPin, X, Search, Navigation } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search } from 'lucide-react-native';
-import { Logo } from '../../components/Logo';
+import { LogoImage } from '../../components/LogoImage';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { VenueCard } from '../../components/VenueCard';
 import { fetchVenues } from '../../services/venues';
-import { mockVenues } from '../../data/mockVenues';
-import { colors } from '../../theme/colors';
+import { mapVenue } from '../../utils/mapVenue';
+import type { Venue } from '../../types/venue';
+import { useT } from '../../context/LanguageContext';
+import { useTheme } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
 import type { MainTabScreenProps } from '../../types/navigation';
-import type { VenueItem } from '../../types/venue';
 
-const MANHATTAN: Region = {
-  latitude: 40.7831,
-  longitude: -73.9712,
-  latitudeDelta: 0.08,
-  longitudeDelta: 0.08,
+const DEFAULT_REGION: Region = {
+  latitude: 40.7831, longitude: -73.9712,
+  latitudeDelta: 0.08, longitudeDelta: 0.08,
 };
-
-const COLLAPSED_SHEET = 180;
-const SHEET_HANDLE = 28;
+const DEFAULT_LOC_NAME = 'Midtown Manhattan';
+const MANHATTAN_BBOX = 'viewbox=-74.02,40.70,-73.91,40.88&bounded=1';
 
 export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
-  const [venues, setVenues] = useState<VenueItem[]>([]);
+  const { t } = useT();
+  const { colors: tc } = useTheme();
+  const [venues, setVenues] = useState<Venue[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchText, setSearchText] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [filters, setFilters] = useState({ noLoudMusic: false, threeStars: false, fourStars: false });
+  const allActive = !filters.noLoudMusic && !filters.threeStars && !filters.fourStars;
+  const [locName, setLocName] = useState(DEFAULT_LOC_NAME);
+  const [userLoc, setUserLoc] = useState({ lat: DEFAULT_REGION.latitude, lng: DEFAULT_REGION.longitude });
+  const [locModal, setLocModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<Array<{ lat: string; lon: string; display: string }>>([]);
   const mapRef = useRef<MapView>(null);
-  const sheetAnim = useRef(new Animated.Value(COLLAPSED_SHEET)).current;
-  const isExpanded = useRef(false);
+  const [selectedMarker, setSelectedMarker] = useState<{ latitude: number; longitude: number } | null>(null);
+  // Location picked in the modal but not yet confirmed; applied only on Confirm
+  const [pendingName, setPendingName] = useState<string | null>(null);
+  const [canUseDeviceLocation, setCanUseDeviceLocation] = useState(Platform.OS === 'ios');
+  const appliedDeviceLocation = useRef(false);
 
   useEffect(() => {
-    loadVenues();
-  }, []);
+    if (Platform.OS !== 'android') return;
+    void PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      {
+        title: t('home.locationPermissionTitle'),
+        message: t('home.locationPermissionMessage'),
+        buttonPositive: t('common.ok'),
+        buttonNegative: t('common.cancel'),
+      },
+    ).then(result => {
+      setCanUseDeviceLocation(result === PermissionsAndroid.RESULTS.GRANTED);
+    });
+  }, [t]);
 
-  async function loadVenues() {
+  function applyDeviceLocation(latitude: number, longitude: number) {
+    if (appliedDeviceLocation.current || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    appliedDeviceLocation.current = true;
+    setUserLoc({ lat: latitude, lng: longitude });
+    setLocName(t('home.deviceLocation'));
+  }
+
+  const loadVenues = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setLoadError(false);
     try {
-      const response = await fetchVenues({
-        lat: 40.7831,
-        lon: -73.9712,
-        radius: 10,
-        limit: 20,
-      });
-      if (response.items.length > 0) {
-        setVenues(response.items);
-      } else {
-        setVenues(mockVenues);
+      const params: any = { lat: userLoc.lat, lon: userLoc.lng, radius: 5 };
+      if (filters.noLoudMusic) params.noise_level = 'quiet';
+      const r = await fetchVenues(params);
+      // Production inventory is currently concentrated in New York. If the
+      // device location is outside the covered area, return to the default
+      // discovery location instead of replacing the list with an empty state.
+      const isDefaultLocation = userLoc.lat === DEFAULT_REGION.latitude && userLoc.lng === DEFAULT_REGION.longitude;
+      if (r.items.length === 0 && !isDefaultLocation) {
+        setUserLoc({ lat: DEFAULT_REGION.latitude, lng: DEFAULT_REGION.longitude });
+        setLocName(DEFAULT_LOC_NAME);
+        return;
       }
+      setVenues(r.items.map(mapVenue));
     } catch {
-      setVenues(mockVenues);
-      setError(null);
-    } finally {
-      setLoading(false);
+      setVenues([]);
+      setLoadError(true);
     }
+    setLoading(false);
+  }, [filters.noLoudMusic, userLoc.lat, userLoc.lng]);
+
+  useEffect(() => { void loadVenues(); }, [loadVenues]);
+
+  async function refreshVenues() {
+    setRefreshing(true);
+    await loadVenues();
+    setRefreshing(false);
   }
 
-  const handleMarkerPress = useCallback((venue: VenueItem) => {
-    if (venue.lat != null && venue.lon != null) {
-      mapRef.current?.animateToRegion(
-        {
-          latitude: venue.lat,
-          longitude: venue.lon,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
-        },
-        500,
-      );
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
+
+  function toggleFilter(key: keyof typeof filters) {
+    setFilters(f => {
+      if (key === 'threeStars') return { ...f, threeStars: !f.threeStars, fourStars: false };
+      if (key === 'fourStars') return { ...f, fourStars: !f.fourStars, threeStars: false };
+      return { ...f, [key]: !f[key] };
+    });
+  }
+
+  function doSearch(text: string) {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(async () => {
+      const q = text.trim();
+      if (!q) { setSearchResults([]); return; }
+      setSearching(true);
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&${MANHATTAN_BBOX}`,
+          { headers: { 'User-Agent': 'PlugWifiApp/1.0' } },
+        );
+        const data = await res.json();
+        const results = (data as any[]).map((d: any) => ({
+          lat: d.lat, lon: d.lon, display: d.display_name || d.name || q,
+        }));
+        setSearchResults(results);
+      } catch { setSearchResults([]); }
+      setSearching(false);
+    }, 300);
+  }
+
+  function selectResult(item: { lat: string; lon: string; display: string }) {
+    const lat = parseFloat(item.lat);
+    const lon = parseFloat(item.lon);
+    mapRef.current?.animateToRegion({ latitude: lat, longitude: lon, latitudeDelta: 0.03, longitudeDelta: 0.03 }, 500);
+    setSearchResults([]);
+    setSelectedMarker({ latitude: lat, longitude: lon });
+    const shortName = item.display.split(',')[0].trim();
+    setSearchQuery(shortName);
+    setPendingName(shortName);
+  }
+
+  function confirmLocation() {
+    if (selectedMarker && pendingName) {
+      setUserLoc({ lat: selectedMarker.latitude, lng: selectedMarker.longitude });
+      setLocName(pendingName);
     }
-  }, []);
-
-  function toggleSheet() {
-    const screenHeight = Dimensions.get('window').height;
-    const toValue = isExpanded.current
-      ? COLLAPSED_SHEET
-      : screenHeight * 0.55;
-    Animated.spring(sheetAnim, {
-      toValue,
-      useNativeDriver: false,
-      friction: 8,
-    }).start();
-    isExpanded.current = !isExpanded.current;
+    setLocModal(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    setSelectedMarker(null);
+    setPendingName(null);
   }
 
-  function handleSearchSubmit() {
-    navigation.navigate('Search');
-  }
+  const filteredVenues = venues.filter(v => {
+    if (filters.fourStars && v.rating < 4) return false;
+    if (filters.threeStars && v.rating < 3) return false;
+    return true;
+  });
 
   return (
-    <View style={styles.container}>
-      <SafeAreaView edges={['top']} style={styles.header}>
-        <Logo />
+    <View style={[styles.container, { backgroundColor: tc.background }]}>
+      {canUseDeviceLocation && !appliedDeviceLocation.current ? (
+        <MapView
+          pointerEvents="none"
+          style={styles.locationProbe}
+          initialRegion={DEFAULT_REGION}
+          showsUserLocation
+          showsMyLocationButton={false}
+          onUserLocationChange={event => {
+            const coordinate = event.nativeEvent.coordinate;
+            if (coordinate) applyDeviceLocation(coordinate.latitude, coordinate.longitude);
+          }}
+        />
+      ) : null}
+      <SafeAreaView edges={['top']} style={[styles.header, { backgroundColor: tc.white, borderBottomColor: tc.border }]}>
+        <View style={styles.topRow}>
+          <LogoImage />
+          <Pressable style={[styles.locBtn, { backgroundColor: tc.surface }]} onPress={() => { setSelectedMarker({ latitude: userLoc.lat, longitude: userLoc.lng }); setLocModal(true); }}>
+            <MapPin size={14} color={tc.primary} />
+            <Text style={[styles.locLabel, { color: tc.textMuted }]}>{t('home.location')}</Text>
+            <Text style={[styles.locText, { color: tc.text }]} numberOfLines={1}>{locName}</Text>
+          </Pressable>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterContent}>
+          <Pressable
+            style={[styles.filterPill, { borderColor: tc.border }, allActive && { borderColor: tc.primary, backgroundColor: tc.primary }]}
+            onPress={() => setFilters({ noLoudMusic: false, threeStars: false, fourStars: false })}
+          >
+            <Text style={[styles.filterText, { color: tc.textMuted }, allActive && { color: tc.white, fontWeight: '600' }]}>{t('home.all')}</Text>
+          </Pressable>
+          {(['threeStars', 'fourStars', 'noLoudMusic'] as const).map(key => (
+            <Pressable
+              key={key}
+              style={[styles.filterPill, { borderColor: tc.border }, filters[key] && { borderColor: tc.primary, backgroundColor: tc.primary }]}
+              onPress={() => toggleFilter(key)}
+            >
+              <Text style={[styles.filterText, { color: tc.textMuted }, filters[key] && { color: tc.white, fontWeight: '600' }]}>
+                {key === 'threeStars' ? t('home.threeStars') : key === 'fourStars' ? t('home.fourStars') : t('home.noLoudMusic')}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
       </SafeAreaView>
 
-      <View style={styles.searchSection}>
-        <View style={styles.searchRow}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search by city or venue..."
-            placeholderTextColor={colors.textMuted}
-            value={searchText}
-            onChangeText={setSearchText}
-            onSubmitEditing={handleSearchSubmit}
-            returnKeyType="search"
-          />
-          <Pressable style={styles.searchBtn} onPress={handleSearchSubmit}>
-            <Text style={styles.searchBtnText}>Search</Text>
-          </Pressable>
-        </View>
-        <View style={styles.filtersRow}>
-          {['WiFi', 'Plug Access', 'Calls Allowed'].map(label => (
-            <View key={label} style={styles.filterPill}>
-              <Text style={styles.filterText}>{label}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.mapContainer}>
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          initialRegion={MANHATTAN}
-          showsUserLocation={false}
-          showsMyLocationButton={false}
-        >
-          {venues
-            .filter(v => v.lat != null && v.lon != null)
-            .map(venue => (
-              <Marker
-                key={venue.venue_id}
-                coordinate={{ latitude: venue.lat!, longitude: venue.lon! }}
-                title={venue.name}
-                description={venue.rating ? `★ ${venue.rating}` : undefined}
-                onPress={() => handleMarkerPress(venue)}
-              />
-            ))}
-        </MapView>
-
-        {loading ? (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Finding workspaces...</Text>
+      <ScrollView
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={refreshVenues} colors={[tc.primary]} />
+        }
+      >
+        {loading && venues.length === 0 ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color={tc.primary} />
+            <Text style={[styles.loadingText, { color: tc.textMuted }]}>{t('home.finding')}</Text>
           </View>
-        ) : null}
-
-        <Pressable
-          style={styles.floatingSearch}
-          onPress={() => navigation.navigate('Search')}
-        >
-          <Search size={22} color={colors.white} />
-        </Pressable>
-      </View>
-
-      <Animated.View style={[styles.sheet, { height: sheetAnim }]}>
-        <Pressable style={styles.sheetHandle} onPress={toggleSheet}>
-          <View style={styles.handleBar} />
-        </Pressable>
-
-        <View style={styles.sheetHeader}>
-          <Text style={styles.sheetTitle}>
-            {venues.length > 0
-              ? `${venues.length} workspaces nearby`
-              : 'Find Your Workspace'}
-          </Text>
-          <Pressable onPress={toggleSheet}>
-            <Text style={styles.expandLink}>
-              {isExpanded.current ? 'Collapse' : 'See all'}
-            </Text>
-          </Pressable>
-        </View>
-
-        {!loading && venues.length === 0 ? (
-          <View style={styles.noResults}>
-            <Text style={styles.noResultsTitle}>No venues found</Text>
-            <Text style={styles.noResultsText}>
-              Try expanding your search or check back later.
-            </Text>
-            <PrimaryButton label="Refresh" onPress={loadVenues} />
+        ) : filteredVenues.length === 0 ? (
+          <View style={styles.emptyWrap}>
+            <Text style={[styles.emptyTitle, { color: tc.text }]}>{loadError ? t('home.loadErrorTitle') : t('home.noVenuesTitle')}</Text>
+            <Text style={[styles.emptyDesc, { color: tc.textMuted }]}>{loadError ? t('home.loadErrorDesc') : t('home.noVenuesDesc')}</Text>
+            <PrimaryButton label={t('home.refresh')} onPress={loadVenues} />
           </View>
         ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.carouselContent}
-            nestedScrollEnabled
+          <>
+            <Text style={[styles.sectionTitle, { color: tc.text }]}>{t('home.workspacesNear')} {locName}</Text>
+            {filteredVenues.map(v => (
+              <VenueCard key={v.id} venue={v} onPress={() => navigation.navigate('VenueDetail', { venueId: v.id })} />
+            ))}
+          </>
+        )}
+      </ScrollView>
+
+      <Modal visible={locModal} animationType="slide">
+        <View style={[styles.locModal, { backgroundColor: tc.background }]}>
+          <SafeAreaView edges={['top']}>
+            <View style={styles.locModalHeader}>
+              <Pressable onPress={() => { setLocModal(false); setSearchQuery(''); setSearchResults([]); setSelectedMarker(null); setPendingName(null); }} hitSlop={12}>
+                <X size={22} color={tc.text} />
+              </Pressable>
+              <Text style={[styles.locModalTitle, { color: tc.text }]}>{t('home.chooseLocation')}</Text>
+              <View style={{ width: 22 }} />
+            </View>
+            <View style={styles.searchRow}>
+              <View style={[styles.searchInputRow, { borderColor: tc.border, backgroundColor: tc.white }]}>
+                <Search size={16} color={tc.textMuted} style={{ marginLeft: spacing.sm }} />
+                <TextInput
+                  style={[styles.searchInput, { color: tc.text }]}
+                  placeholder={t('home.searchPlaceholder')}
+                  placeholderTextColor={tc.textMuted}
+                  value={searchQuery}
+                  onChangeText={text => { setSearchQuery(text); doSearch(text); }}
+                  onSubmitEditing={() => doSearch(searchQuery)}
+                  returnKeyType="search"
+                />
+              </View>
+              <Pressable style={[styles.searchBtn, { backgroundColor: tc.primary }]} onPress={() => doSearch(searchQuery)}>
+                {searching ? (
+                  <ActivityIndicator size="small" color={tc.white} />
+                ) : (
+                  <Text style={styles.searchBtnText}>{t('home.go')}</Text>
+                )}
+              </Pressable>
+            </View>
+          </SafeAreaView>
+          {searchResults.length > 0 ? (
+            <ScrollView style={[styles.resultList, { backgroundColor: tc.background }]} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+              {searchResults.map((item, i) => (
+                <Pressable key={i} style={[styles.resultItem, { borderColor: tc.border, backgroundColor: tc.white }]} onPress={() => selectResult(item)}>
+                  <View style={[styles.resultIcon, { backgroundColor: tc.primary + '20' }]}>
+                    <MapPin size={16} color={tc.primary} />
+                  </View>
+                  <View style={styles.resultInfo}>
+                    <Text style={[styles.resultName, { color: tc.text }]} numberOfLines={1}>{item.display.split(',')[0].trim()}</Text>
+                    <Text style={[styles.resultDetail, { color: tc.textMuted }]} numberOfLines={1}>{item.display.split(',').slice(1).join(',').trim()}</Text>
+                  </View>
+                  <Navigation size={14} color={tc.textMuted} />
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : null}
+          <MapView
+            ref={mapRef}
+            style={styles.locMap}
+            initialRegion={DEFAULT_REGION}
+            showsUserLocation={canUseDeviceLocation}
+            showsMyLocationButton={canUseDeviceLocation}
+            onUserLocationChange={event => {
+              const coordinate = event.nativeEvent.coordinate;
+              if (coordinate) applyDeviceLocation(coordinate.latitude, coordinate.longitude);
+            }}
+            scrollEnabled zoomEnabled
+            onPress={e => {
+              const { latitude, longitude } = e.nativeEvent.coordinate;
+              setSelectedMarker({ latitude, longitude });
+              setPendingName(t('home.selectedLocation'));
+            }}
           >
-            {venues.map(venue => (
-              <VenueCard
-                key={venue.venue_id}
-                venue={venue}
-                compact
-                onPress={() =>
-                  navigation.navigate('VenueDetail', { venueId: venue.venue_id })
-                }
-                onBook={() =>
-                  navigation.navigate('VenueDetail', { venueId: venue.venue_id })
-                }
+            {selectedMarker ? (<Marker coordinate={selectedMarker} pinColor="#007AFF" title={pendingName ?? locName} />) : null}
+            {searchResults.map((item, i) => (
+              <Marker
+                key={`r-${i}`}
+                coordinate={{ latitude: parseFloat(item.lat), longitude: parseFloat(item.lon) }}
+                pinColor="red"
+                title={item.display.split(',')[0]}
+                onPress={() => selectResult(item)}
               />
             ))}
-          </ScrollView>
-        )}
-      </Animated.View>
+          </MapView>
+          <View style={[styles.locModalFooter, { backgroundColor: tc.white, borderTopColor: tc.border }]}>
+            <View style={styles.locModalFooterInfo}>
+              <MapPin size={14} color={tc.primary} />
+              <Text style={[styles.locModalFooterText, { color: tc.textMuted }]} numberOfLines={1}>{pendingName ?? locName}</Text>
+            </View>
+            <PrimaryButton label={t('home.confirmLocation')} onPress={confirmLocation} />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+  container: { flex: 1 },
+  locationProbe: { position: 'absolute', width: 1, height: 1, opacity: 0.01 },
   header: {
     paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm, borderBottomWidth: 1,
+  },
+  topRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: spacing.sm,
-    backgroundColor: colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
-  searchSection: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    backgroundColor: colors.white,
+  locBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999,
   },
-  searchRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  searchInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: 15,
-    color: colors.text,
-    backgroundColor: colors.background,
-    height: 44,
-  },
-  searchBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingHorizontal: spacing.lg,
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: 44,
-  },
-  searchBtnText: {
-    color: colors.white,
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  filtersRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
+  locLabel: { fontSize: 11 },
+  locText: { fontSize: 12, fontWeight: '500', maxWidth: 80 },
+  filterScroll: { marginTop: spacing.xs },
+  filterContent: { gap: spacing.sm, paddingBottom: spacing.xs },
   filterPill: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 999,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    borderWidth: 1, borderRadius: 999,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
   },
-  filterText: {
-    color: colors.textMuted,
-    fontSize: 13,
+  filterText: { fontSize: 13 },
+  list: { flex: 1 },
+  listContent: { padding: spacing.md, paddingBottom: spacing.xl },
+  loadingWrap: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },
+  loadingText: { fontSize: 15 },
+  emptyWrap: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },
+  emptyTitle: { fontSize: 18, fontWeight: '600' },
+  emptyDesc: { textAlign: 'center', fontSize: 13 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: spacing.md },
+  locModal: { flex: 1 },
+  locModalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
   },
-  mapContainer: {
-    flex: 1,
+  locModalTitle: { fontSize: 18, fontWeight: '600' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
+  searchInputRow: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1, borderRadius: 12, gap: spacing.xs,
   },
-  map: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  searchInput: { flex: 1, paddingVertical: 12, paddingRight: spacing.md, fontSize: 15 },
+  searchBtn: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  searchBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  locMap: { flex: 1 },
+  resultList: { maxHeight: 220 },
+  resultItem: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    marginHorizontal: spacing.md, marginBottom: spacing.xs,
+    padding: spacing.md, borderRadius: 12, borderWidth: 1,
   },
-  loadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
+  resultIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  resultInfo: { flex: 1 },
+  resultName: { fontSize: 15, fontWeight: '600' },
+  resultDetail: { fontSize: 12, marginTop: 2 },
+  locModalFooter: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    padding: spacing.md, paddingBottom: spacing.xl,
+    borderTopWidth: 1, gap: spacing.md,
   },
-  loadingText: {
-    color: colors.textMuted,
-    fontSize: 15,
-  },
-  floatingSearch: {
-    position: 'absolute',
-    bottom: COLLAPSED_SHEET - SHEET_HANDLE + 16,
-    right: 16,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.primaryDark,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 6,
-  },
-  sheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: colors.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
-    overflow: 'hidden',
-  },
-  sheetHandle: {
-    height: SHEET_HANDLE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  handleBar: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  sheetTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  expandLink: {
-    color: colors.primary,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  carouselContent: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
-  },
-  noResults: {
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    gap: spacing.sm,
-  },
-  noResultsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  noResultsText: {
-    color: colors.textMuted,
-    textAlign: 'center',
-    fontSize: 13,
-  },
+  locModalFooterInfo: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
+  locModalFooterText: { fontSize: 13, flex: 1 },
 });

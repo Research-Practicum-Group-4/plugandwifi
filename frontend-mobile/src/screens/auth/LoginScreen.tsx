@@ -1,15 +1,19 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View, Alert } from 'react-native';
-import { Eye, EyeOff } from 'lucide-react-native';
-import { Logo } from '../../components/Logo';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, Alert } from 'react-native';
+import { Eye, EyeOff, ChevronLeft, Mail, Lock } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useT } from '../../context/LanguageContext';
+import { useTheme } from '../../context/ThemeContext';
 import { spacing } from '../../theme/spacing';
+import { localizedApiError } from '../../utils/apiError';
 import type { RootStackScreenProps } from '../../types/navigation';
 
 export function LoginScreen({ navigation }: RootStackScreenProps<'Login'>) {
   const { login } = useAuth();
+  const { colors: tc } = useTheme();
+  const { t } = useT();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -18,14 +22,9 @@ export function LoginScreen({ navigation }: RootStackScreenProps<'Login'>) {
 
   function validate(): boolean {
     const newErrors: { email?: string; password?: string } = {};
-    if (!email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      newErrors.email = 'Invalid email format';
-    }
-    if (!password) {
-      newErrors.password = 'Password is required';
-    }
+    if (!email.trim()) newErrors.email = t('account.emailRequired');
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) newErrors.email = t('account.emailInvalid');
+    if (!password) newErrors.password = t('account.passwordRequired');
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }
@@ -37,188 +36,94 @@ export function LoginScreen({ navigation }: RootStackScreenProps<'Login'>) {
       await login({ email: email.trim(), password });
       navigation.goBack();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Login failed';
-      Alert.alert('Login Failed', message);
-    } finally {
-      setIsSubmitting(false);
-    }
+      Alert.alert(
+        t('account.loginFailed'),
+        localizedApiError(error, t, 'account.loginFailedMessage', {
+          unauthorized: 'account.invalidCredentials',
+          validation: 'account.invalidCredentials',
+        }),
+      );
+    } finally { setIsSubmitting(false); }
   }
 
   return (
-    <View style={styles.root}>
-      <View style={styles.content}>
-        <View style={styles.logoSection}>
-          <Logo />
-          <Text style={styles.title}>Welcome Back</Text>
+    <View style={[styles.container, { backgroundColor: tc.background }]}>
+      <SafeAreaView edges={['top']} style={[styles.headerSafe, { backgroundColor: tc.white, borderBottomColor: tc.border }]}>
+        <View style={styles.header}>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
+            <ChevronLeft size={24} color={tc.text} />
+          </Pressable>
+          <Text style={[styles.headerTitle, { color: tc.text }]}>{t('account.signIn')}</Text>
+          <View style={{ width: 36 }} />
         </View>
+      </SafeAreaView>
+
+      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false}>
+        <Text style={[styles.subtitle, { color: tc.textMuted }]}>{t('account.welcomeBack')}</Text>
 
         <View style={styles.form}>
-          <View>
-            <Text style={styles.label}>Email</Text>
+          <View style={[styles.inputRow, { borderColor: tc.border, backgroundColor: tc.white }, errors.email && { borderColor: tc.danger }]}>
+            <Mail size={18} color={tc.textMuted} style={styles.inputIcon} />
             <TextInput
-              style={[styles.input, errors.email && styles.inputError]}
-              placeholder="you@example.com"
-              placeholderTextColor={colors.textMuted}
+              style={[styles.input, { color: tc.text }]}
+              placeholder={t('account.email')}
+              placeholderTextColor={tc.textMuted}
               keyboardType="email-address"
               autoCapitalize="none"
               value={email}
-              onChangeText={text => {
-                setEmail(text);
-                if (errors.email) setErrors(prev => ({ ...prev, email: undefined }));
-              }}
+              onChangeText={t => { setEmail(t); if (errors.email) setErrors(p => ({ ...p, email: undefined })); }}
             />
-            {errors.email ? <Text style={styles.error}>{errors.email}</Text> : null}
           </View>
+          {errors.email ? <Text style={[styles.errorText, { color: tc.danger }]}>{errors.email}</Text> : null}
 
-          <View>
-            <Text style={styles.label}>Password</Text>
-            <View style={[styles.passwordWrap, errors.password && styles.inputError]}>
-              <TextInput
-                style={styles.passwordInput}
-                placeholder="••••••••"
-                placeholderTextColor={colors.textMuted}
-                secureTextEntry={!showPassword}
-                value={password}
-                onChangeText={text => {
-                  setPassword(text);
-                  if (errors.password) setErrors(prev => ({ ...prev, password: undefined }));
-                }}
-              />
-              <Pressable onPress={() => setShowPassword(v => !v)} style={styles.eyeBtn}>
-                {showPassword ? <EyeOff size={20} color={colors.textMuted} /> : <Eye size={20} color={colors.textMuted} />}
-              </Pressable>
-            </View>
-            {errors.password ? <Text style={styles.error}>{errors.password}</Text> : null}
+          <View style={[styles.inputRow, { borderColor: tc.border, backgroundColor: tc.white }, errors.password && { borderColor: tc.danger }]}>
+            <Lock size={18} color={tc.textMuted} style={styles.inputIcon} />
+            <TextInput
+              style={[styles.input, { color: tc.text }]}
+              placeholder={t('account.password')}
+              placeholderTextColor={tc.textMuted}
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={t => { setPassword(t); if (errors.password) setErrors(p => ({ ...p, password: undefined })); }}
+            />
+            <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn} hitSlop={8}>
+              {showPassword ? <EyeOff size={18} color={tc.textMuted} /> : <Eye size={18} color={tc.textMuted} />}
+            </Pressable>
           </View>
+          {errors.password ? <Text style={[styles.errorText, { color: tc.danger }]}>{errors.password}</Text> : null}
 
-          <Text style={styles.forgot}>Forgot password?</Text>
-
-          <PrimaryButton
-            label={isSubmitting ? 'Signing In...' : 'Sign In'}
-            disabled={isSubmitting}
-            onPress={handleLogin}
-          />
+          <PrimaryButton label={isSubmitting ? t('account.signingIn') : t('account.signIn')} disabled={isSubmitting} onPress={handleLogin} />
         </View>
 
-        <View style={styles.separatorRow}>
-          <View style={styles.separatorLine} />
-          <Text style={styles.separatorText}>or</Text>
-          <View style={styles.separatorLine} />
+        <View style={styles.footer}>
+          <Text style={[styles.footerText, { color: tc.textMuted }]}>{t('account.noAccount')}</Text>
+          <Pressable onPress={() => navigation.navigate('Signup', { returnToLogin: true })}>
+            <Text style={[styles.footerLink, { color: tc.primary }]}>{t('account.signUp')}</Text>
+          </Pressable>
         </View>
-
-        <View style={styles.socialRow}>
-          <PrimaryButton label="Google" variant="outline" disabled />
-          <PrimaryButton label="Apple" variant="outline" disabled />
-        </View>
-      </View>
-
-      <Text style={styles.footer}>
-        Don't have an account?{' '}
-        <Text style={styles.link} onPress={() => navigation.replace('Signup')}>Sign up</Text>
-      </Text>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
+  container: { flex: 1 },
+  headerSafe: { borderBottomWidth: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  headerTitle: { fontSize: 18, fontWeight: '600' },
+  body: { flex: 1 },
+  bodyContent: { padding: spacing.lg, gap: spacing.lg },
+  subtitle: { fontSize: 14, textAlign: 'center' },
+  form: { gap: spacing.sm },
+  inputRow: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1, borderRadius: 12, overflow: 'hidden',
   },
-  content: {
-    alignItems: 'stretch',
-  },
-  logoSection: {
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-    gap: spacing.sm,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  form: {
-    gap: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.text,
-    marginBottom: 6,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: 16,
-    color: colors.text,
-    backgroundColor: colors.white,
-  },
-  inputError: {
-    borderColor: colors.danger,
-  },
-  error: {
-    color: colors.danger,
-    fontSize: 13,
-    marginTop: 4,
-  },
-  passwordWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    backgroundColor: colors.white,
-  },
-  passwordInput: {
-    flex: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: 16,
-    color: colors.text,
-  },
-  eyeBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  forgot: {
-    color: colors.primary,
-    fontWeight: '600',
-    fontSize: 14,
-    textAlign: 'right',
-  },
-  separatorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  separatorLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  separatorText: {
-    color: colors.textMuted,
-    fontSize: 13,
-  },
-  socialRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  footer: {
-    textAlign: 'center',
-    color: colors.textMuted,
-    marginTop: spacing.xl,
-  },
-  link: {
-    color: colors.primary,
-    fontWeight: '600',
-  },
+  inputIcon: { marginLeft: spacing.md },
+  input: { flex: 1, paddingVertical: spacing.md, paddingHorizontal: spacing.sm, fontSize: 15 },
+  eyeBtn: { paddingHorizontal: spacing.md },
+  errorText: { fontSize: 12, marginLeft: 4 },
+  footer: { flexDirection: 'row', justifyContent: 'center', gap: 4 },
+  footerText: { fontSize: 14 },
+  footerLink: { fontSize: 14, fontWeight: '600' },
 });

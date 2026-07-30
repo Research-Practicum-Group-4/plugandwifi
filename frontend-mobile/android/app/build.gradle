@@ -2,6 +2,25 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+// Read sensitive build values from Gradle properties, environment variables, or
+// local.properties. Do not commit any of these values to the repository.
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localProperties.load(new FileInputStream(localPropertiesFile))
+}
+def propertyOrEnvironment = { String key ->
+    project.findProperty(key) ?: System.getenv(key) ?: localProperties.getProperty(key)
+}
+def googleMapsApiKey = propertyOrEnvironment('GOOGLE_MAPS_API_KEY') ?: ''
+def releaseStoreFile = propertyOrEnvironment('PLUGWIFI_RELEASE_STORE_FILE')
+def releaseStorePassword = propertyOrEnvironment('PLUGWIFI_RELEASE_STORE_PASSWORD')
+def releaseKeyAlias = propertyOrEnvironment('PLUGWIFI_RELEASE_KEY_ALIAS')
+def releaseKeyPassword = propertyOrEnvironment('PLUGWIFI_RELEASE_KEY_PASSWORD')
+def hasReleaseSigning = [releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword].every { it }
+def allowInsecureReleaseForTesting = project.hasProperty('allowInsecureReleaseForTesting')
+def isReleaseBuildRequested = gradle.startParameter.taskNames.any { taskName -> taskName.toLowerCase().contains('release') }
+
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
@@ -57,7 +76,7 @@ react {
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -79,12 +98,12 @@ android {
 
     namespace "com.app"
     defaultConfig {
-        applicationId "com.app"
+        applicationId "xyz.plugandwifi"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
-        manifestPlaceholders = [GOOGLE_MAPS_API_KEY: project.findProperty('GOOGLE_MAPS_API_KEY') ?: '']
+        versionCode 2
+        versionName "1.0.0"
+        manifestPlaceholders = [GOOGLE_MAPS_API_KEY: googleMapsApiKey]
     }
     signingConfigs {
         debug {
@@ -93,15 +112,27 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            if (isReleaseBuildRequested && !hasReleaseSigning && !allowInsecureReleaseForTesting) {
+                throw new GradleException('Release signing is required. See android/RELEASE_SIGNING.md. For a local-only smoke build, explicitly pass -PallowInsecureReleaseForTesting.')
+            }
+            if (isReleaseBuildRequested && !googleMapsApiKey && !allowInsecureReleaseForTesting) {
+                throw new GradleException('GOOGLE_MAPS_API_KEY is required for a release build. See android/RELEASE_SIGNING.md.')
+            }
+            signingConfig hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
