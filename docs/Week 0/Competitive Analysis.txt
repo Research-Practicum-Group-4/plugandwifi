@@ -1,0 +1,367 @@
+competitive analysis
+Executive summary
+Our app occupies a distinct and currently unfilled position in the EU market: a dedicated booking platform for tables with power and WiFi in cafés, hotel lobbies, restaurants, and business lounges.. Bookable in 1-hour increments, the tables can be enjoyed by users for focused work and study without adding any service pressure on the venue.
+The five competitors analysed below each address adjacent needs, but none combines instant table booking, verified plug/wifi quality, and an hourly time-slot model across non-coworking hospitality venues.
+Our competitive advantage
+Key differentiators
+Only platform focused on 1­3 hour table bookings in cafés, restaurants and hotel lobbies, not just coworking spaces Verified plug + wifi + ratings + noise data per venue No membership required: instant, frictionless pay-per-session model Venue-side benefit: monetises dead daytime hours with zero capital investment or increased pressure on resources Time-slot management prevents the 'laptop squatter' problem venues hate and guarantees focused time for the user without the need to order Community review layer specific to working conditions, not food/ambiance
+Target market
+Remote workers and hybrid professionals needing 1­3 hours of focused work outside the home office Freelancers and consultants between client meetings
+
+Digital nomads travelling Commuters with dead time between commitments Students needing a quiet, plugged-in environment outside campus SME teams needing informal off-site space without full coworking commitment
+
+Competitor profiles
+Competitor Profile: Dayuse.com / Dayuse.ie
+
+Field Company URL Tagline
+Category Pricing
+
+Detail Dayuse.com / Dayuse.ie https://www.dayuse.ie Experience the hotel during the day, up to 75% off the nightly rate Daytime hotel room booking From 91/session (Dublin examples). Typically 40­75% off overnight rate.
+
+Mission
+Dayuse positions itself as the global leader in daytime hotel bookings, allowing guests to book a hotel room for a few hours during the day at steep discounts vs overnight rates. The mission is to unlock hotel capacity during off-peak hours while giving guests a premium experience.
+Key differentiators
+Global scale: largest daytime hotel booking platform in the world Deep hotel partnerships with significant inventory No credit card required at booking; free cancellation Branded editorial content ('Dayuse Magazine') driving organic SEO App with 4.6/5 rating on iOS and Android
+
+Target market
+Leisure travellers, business travellers between meetings, remote workers wanting a premium environment, couples wanting privacy, transit passengers at airports.
+Product offering
+Full hotel room bookings for daytime use -- includes room, bed, bathroom, and access to hotel amenities (spa, pool, gym). Typically a 4­8 hour block. No café-only or desk-only option.
+Commentary / positioning vs. our app
+Dayuse solves the same 'dead daytime hours in hospitality' problem but at the premium end: you get an entire hotel room. Our app solves a different price point and use case: a 5­15 seat at a café table for 1­3 hours. These are largely complementary.
+Competitor Profile: Dis-loyalty (Ennismore)
+
+Field Company URL Tagline Category Pricing
+
+Detail Dis-loyalty (Ennismore) https://dis-loyalty.com The travel and food membership that spoils you rotten Hotel/restaurant loyalty membership From £12/month (approx. 15). Annual and multi-city plans available.
+
+Mission
+Dis-loyalty is a subscription membership by Ennismore offering perks across 120+ lifestyle hotels (The Hoxton, Mama Shelter, 25hours, SLS, Mondrian, SO/, Hyde, etc.) and 200+ restaurants and bars. Its stated philosophy is 'no points, no tiers, instant savings.'
+Key differentiators
+365 free barista-made drinks per year (one/day) at any partner venue 50% off first stays at newly opened hotels 10% off all food & drink at 200+ restaurants, bars, and cafés Premium brand portfolio (Hoxton lobbies are already popular workspaces)
+
+Target market
+Urban, design-conscious, 25­45 year old lifestyle travellers and local city dwellers who regularly eat out or stay in boutique hotels. Largely leisure-oriented, actively courts remote workers.
+Product offering
+A subscription membership giving percentage discounts and free drinks across Ennismore hotel and restaurant brands. No table booking, no workspace-specific filters, no time-slot management.
+Commentary / positioning vs. our app
+Dis-loyalty is a perk/discount layer, not a workspace booking tool. However, several Dis-loyalty venues (Hoxton hotel lobbies, Mama Shelter communal areas) are exactly the type of venue our app would list.
+Competitor Profile: Working From_ (Hoxton / Ennismore)
+
+Field Company URL Tagline Category Pricing
+
+Detail Working From_ (Hoxton / Ennismore) https://workingfrom.com A coworking space that feels like home Branded boutique coworking space Day pass approx. £35/day; monthly memberships from ~£200/month (London). Brussels and Chicago pricing varies.
+
+Mission
+Working From_ is a branded coworking concept by The Hoxton (Ennismore group). It operates fixed coworking spaces within or adjacent to Hoxton hotels in London (Southwark), Brussels, and Chicago. The concept is inspired by the comfy sofas of Hoxton hotel lobbies.
+Key differentiators
+Fixed, curated spaces in well-designed boutique hotel buildings Flexible membership tiers (hot desk, private studio, day pass) Locations in city-centre, transit-adjacent areas
+
+Access to Hoxton café, bar, and F&B on-site
+Target market
+Freelancers, remote workers, and small teams in London, Brussels, and Chicago who want premium coworking without traditional corporate coworking aesthetics.
+Product offering
+Fixed coworking spaces with hot desks, private studios, meeting rooms, and membership plans. Day passes also available. Not a booking platform, you go to a specific Working From_ location.
+Commentary / positioning vs. our app
+Working From_ is a direct coworking competitor in cities where Hoxton operates, but its geographic footprint is very limited (3 cities). Our app is a platform, not a fixed location, we are an aggregator across dozens of venue types and cities. Working From_ is actually a candidate venue-partner if they allow day-pass bookings through our platform.
+Competitor Profile: Workfrom.co
+
+Field Company URL Tagline
+Category
+Pricing
+
+Detail
+Workfrom.co
+https://workfrom.co
+Flexible coworking for remote workers -- discover work-friendly spaces
+Workspace discovery platform / informal coworking directory
+Free (discovery). Day passes: $35/day or $15/day (advance). Credits: $45 for 3 days.
+
+Mission
+Workfrom.co is a community-driven platform and directory of 16,000+ work-friendly spaces globally, including cafés, coworking spaces, hotel lobbies, libraries, and parks. It also offers a credits-based system to book day passes at partner coworking spaces.
+
+Key objectives
+Build the largest database of laptop-friendly spaces globally Grow the credits/day-pass network as a paid layer on top of free discovery Foster virtual coworking community (focus sessions, lounges) Expand partner venue network via referral incentives
+Key differentiators
+16,000+ venue listings -- broadest discovery database available Crowd-sourced wifi speed, noise level, and outlet data per venue Free to use for discovery; paid credits for coworking day passes Virtual coworking rooms and focus sessions (remote collaboration layer) Referral programme incentivises network growth
+Target market
+Remote workers, digital nomads, and freelancers globally who need to find a work-friendly space, primarily in the US and English-speaking markets. Less EU-focused.
+Product offering
+Free directory of work-friendly spaces with crowd-sourced metadata. Paid tier offers coworking day passes via a credits system ($15/day or $45 for 3 credits). No café/restaurant table booking -- discovery only.
+Commentary / positioning vs. our app
+Workfrom.co is the closest conceptual cousin to our app -- it aggregates non-traditional work venues including cafés. The key gap: it is a discovery tool, not a booking platform. You find a venue, then you show up and hope there's a seat. Our app adds confirmed table booking, timeslot management, and verified real-time data on plug/wifi availability. Workfrom.co's EU coverage is also thin, creating a direct market opportunity.
+Competitor Profile: Spacious / KettleSpace (US precedents)
+
+Field Company URL Tagline
+Category
+Pricing
+
+Detail
+Spacious / KettleSpace (US precedents)
+spacious.com (acquired by WeWork) / kettlespace.com
+Turning underutilised restaurants into coworking spaces during the day
+Restaurant coworking network (now defunct / absorbed)
+Spacious: $129/month. KettleSpace: $25­$99/month (historical).
+
+Mission
+Both Spacious and KettleSpace pioneered the 'restaurant-as-coworking' model in New York City (2016­2019): partnering with restaurants to convert their empty dining rooms into daytime coworking spaces. Spacious was acquired by WeWork in 2019; KettleSpace no longer appears active. These are cautionary tales and proof-of-concept rolled into one.
+Key objectives
+Partner with restaurants to monetise dead daytime hours Offer workers a café-quality experience at coworking reliability Grow membership base in dense urban markets (NYC, SF)
+Key differentiators
+First movers in restaurant coworking concept Validated strong restaurant willingness to participate ('dead hours are free money') Proved user demand for non-coworking-space work environments Low capex: no real estate investment required
+Target market
+NYC and SF-based freelancers and remote workers. Never expanded to EU.
+Product offering
+Monthly memberships giving access to a network of restaurant-turned-coworking-spaces during daytime hours. Spacious: $129/month. KettleSpace: $25­$99/month.
+
+Commentary / positioning vs. our app
+Spacious and KettleSpace validated the exact model our app is built on -- hospitality venues with unused daytime capacity are receptive to workspace partnerships. Crucially, both failed or were absorbed before expanding to EU. The opportunity is wide open. Their failure points (USonly, membership friction, WeWork acquisition chaos) are precisely the areas our app addresses with a per-session booking model and an EU-first strategy.
+
+Product offering comparison
+
+Positioning and category overview
+
+Our app
+
+Dayuse.ie Dis-loyalty Working Workfrom.c
+
+From_
+
+o
+
+Table/seat booking platform
+
+Hotel room booking
+
+Hotel/F&B membership
+
+Fixed coworking
+space
+
+Workspace directory
+
+Cafés, lobbies, restaurants, lounges
+
+Hotels only
+
+Ennismore hotels & restaurants
+
+Hoxton hotels (3 cities)
+
+Cafés, coworks, libraries,
+parks
+
+1­3 hour time slots
+
+Half-day (4­ No booking
+
+8 hr)
+
+layer
+
+Day pass / monthly
+
+No booking -- discovery
+only
+
+5­20 per session (est.)
+
+From 91/session
+
+From £12/month
+
+~£35/day Free / $15­ pass 35/day pass
+
+EU-native focus
+
+Global, strong EU
+
+Global (Ennismore
+cities)
+
+London, Brussels, Chicago
+
+US-primary, limited EU
+
+Core feature comparison
+
+Feature Our app Dayuse.ie
+
+Confirmed 
+
+
+
+seat/table
+
+booking
+
+Hourly
+
+
+
+
+
+time-slot
+
+model (1­3
+
+hr)
+
+Café /
+
+
+
+
+
+restaurant
+
+venues
+
+Hotel
+
+
+
+
+
+lobby
+
+venues
+
+Noise level 
+
+
+
+rating
+
+No
+
+
+
+
+
+membersh
+
+ip required
+
+(pay-as-
+
+you-go)
+
+Mobile
+
+
+
+
+
+app (iOS +
+
+Android)
+
+Free
+
+
+
+
+
+cancellatio
+
+n
+
+Communit 
+
+
+
+y reviews
+
+Loyalty /
+
+~
+
+
+
+subscripti
+
+Disloyalty
+ 
+~
+  
+   
+
+Working Workfrom
+
+From_
+
+.co
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+~
+
+
+
+
+
+
+
+~
+
+
+
+
+
+
+
+
+
+
+
+on tier
+
+SWOT analysis for our app
+
+Strengths
+
+Weaknesses
+
+First as café table booking (plug + wifi focus) Hyper-specific value proposition, not general coworking 1­3 hour time-slot model matches actual worker behaviour
+Venue diversity: cafés, hotel lobbies, restaurants, lounges
+
+No brand recognition at launch Chicken-and-egg: venues need users, users need venues Venue/User compliance risk Requires ongoing database curation across cities with low automation potential
+
+Community-driven ratings for wifi / plugs / noise
+
+Low friction: no membership required for spot bookings
+
+Revenue model aligns venue incentive (fill dead hours)
+
+Opportunities
+
+Threats
+
+Remote / hybrid work is structurally permanent post-2020 Hotel and restaurant dead-hours monetisation is untapped B2B: corporate remote-work benefit packages Partnerships with hotel chains (Hoxton, Mama Shelter, 25h Hotels) Expand to transport hubs (airport lounges, train stations)
+
+Dayuse.com is already at scale with hotel distribution WeWork / IWG adding drop-in options at lower prices Venues may go direct (build their own booking widget) Economic downturn reducing remote-work travel budgets
+Platform fatigue: users don't want another app
+
+White-label for city tourism boards ('work & travel' campaigns)
+AI scheduling: suggest optimal time + venue combos
+
+

@@ -1,39 +1,198 @@
-# Plug & Wifi - Flexible Space Finder
+# Plug & Wifi
 
-## 📖 Project Overview
-Welcome to the repository for **Plug & Wifi**, a flexible space finder platform that acts as an intermediary between space users and space providers. Our platform aims to solve the friction of finding reliable, short-term workspaces (1 to 3 hours) for remote professionals, international business travellers, and students. By leveraging underutilised real estate during off-peak hours, we provide verified environments with guaranteed Wi-Fi and plug access.
+Plug & Wifi is a monorepo for a flexible workspace discovery and booking
+platform. The project combines a React web app, a React Native mobile prototype,
+a FastAPI backend, and data/ML workflows for venue scoring and busyness-aware
+recommendations.
 
-## 🏗️ Project Structure (Monorepo)
-To streamline our development process and ensure API compatibility across all platforms, we use a **Monorepo** architecture. The repository is divided into the following dedicated directories:
+This repository is an active research-practicum project workspace. The web and
+backend services are the most complete development targets; the mobile and
+data/ML directories support prototype, experimentation, and integration work.
 
-* 📁 **`/frontend-web`** - Contains the React codebase for the web application.
-* 📁 **`/frontend-mobile`** - Contains the mobile application codebase.
-* 📁 **`/backend`** - Contains the Python/Flask REST API and database configuration.
-* 📁 **`/data-ml`** - Contains datasets, data cleaning scripts, and machine learning models (Venue ranking/predictions).
-* 📄 **`.gitignore`** - Global git ignore rules.
-* 📄 **`CONTRIBUTING.md`** - Guidelines for our branching strategy and pull request workflows.
+## Current Scope
 
-> **Note for Developers:** Each sub-directory will contain its own specific `README.md` with instructions on how to install dependencies and run that specific service locally.
+- discover venues suitable for remote work and study
+- view venue details, opening information, amenities, ratings, prices, and map location
+- sign up, log in, save favorite venues, and view booking history
+- create bookings and complete a mock payment flow
+- support provider registration, venue submission, dashboard, arrivals, and booking completion
+- support admin review, pending applications, taxonomy, and venue moderation workflows
+- use venue CSV data and ML artifacts for busyness diagnostics and suitability scoring
+- provide mock frontend data paths for UI development without a running backend
 
-## 🛠️ Architecture and Technology Stack
+## Repository Layout
 
-| Component | Technology/Framework | Rationale |
-| :--- | :--- | :--- |
-| **Frontend (Mobile/Web)** | React, JavaScript, HTML, CSS | Reusable, responsive UI development. |
-| **Backend/API** | Python, Flask, REST API, JWT | Lightweight API development and secure login. |
-| **Database** | MySQL, SQLAlchemy ORM | Structured data storage and simpler database access. |
-| **Data & ML** | Python, pandas, scikit-learn | Venue ranking and suitability prediction. |
-| **Hosting/Cloud** | AWS EC2, AWS RDS for MySQL | Scalable hosting and MySQL management. |
-| **DevOps** | Docker | Containerisation for continuous deployment. |
-
-## 🚀 Getting Started
-Before starting any development work, please ensure you have synchronised your local repository with the latest changes from the `main` branch.
-
-1. Clone the repository:
-```bash
-   git clone [Your-Repository-URL]
+```text
+plugandwifi/
+|-- backend/
+|   |-- app/
+|   |-- test/
+|   |-- Dockerfile
+|   `-- README.md
+|-- frontend-web/
+|   |-- src/
+|   |-- public/
+|   |-- Dockerfile
+|   `-- README.md
+|-- frontend-mobile/
+|   |-- src/
+|   |-- android/
+|   |-- ios/
+|   `-- README.md
+|-- data-ml/
+|   |-- src/
+|   |-- models/
+|   |-- notebooks/
+|   `-- requirements.txt
+|-- data/
+|-- docs/
+|-- CONTRIBUTING.md
+`-- README.md
 ```
 
-2. Navigate to your designated team directory (cd frontend-web, cd backend, etc.).
+## Stack
 
-3. Always create a new feature branch from develop before writing any code. Do not push directly to main.
+| Area | Current choice |
+| :--- | :--- |
+| Web frontend | React 18, TypeScript, Vite, Tailwind CSS 4, React Router 7 |
+| Mobile frontend | React Native 0.85, React 19, React Navigation |
+| Backend | FastAPI, SQLAlchemy, Pydantic |
+| Database | PostgreSQL for local development, SQLite in backend tests |
+| Data / ML | Python, pandas, scikit-learn, xgboost, joblib |
+| Testing | Vitest, Testing Library, Jest, pytest |
+| Containers | Dockerfiles for backend and web frontend |
+
+## Project Planning Documents
+
+The main planning artefacts are stored under `docs/`:
+
+| Document | Path |
+| :--- | :--- |
+| Product backlog | `docs\Plug&Wifi — Product Backlog.md` |
+| Sprint backlog | `docs\Plug & Wifi – Final Sprint Backlog.csv` |
+
+Use these files as the source for feature scope, sprint commitments, and
+planning traceability.
+
+## Service Documentation
+
+Each major service has its own setup instructions:
+
+| Area | README |
+| :--- | :--- |
+| Backend API | `backend\README.md` |
+| Web frontend | `frontend-web\README.md` |
+| Mobile frontend | `frontend-mobile\README.md` |
+
+The backend README covers PostgreSQL setup, venue CSV import from
+`data-ml\models\nyc_venues.csv`, one-off migration scripts, busyness model
+artifacts, and Docker usage.
+
+The web README covers mock mode, real backend mode, environment variables,
+Google Maps configuration, tests, Docker usage, and route overview.
+
+## Quick Start
+
+The usual local development path is to run the backend and web frontend
+together.
+
+1. Set up the backend.
+
+```bash
+python -m venv .venv
+python -m pip install -r backend/requirements.txt
+```
+
+Then follow `backend\README.md` for:
+
+- creating the PostgreSQL database
+- creating `backend\.env`
+- downloading the Google Drive ML artifacts
+- placing `nyc_venues.csv` in `data-ml\models\nyc_venues.csv`
+- creating the schema
+- running `backend.app.seed_venues`
+- starting FastAPI on port `8080`
+
+2. Start the backend from the repository root.
+
+```bash
+python -m uvicorn backend.app.main:app --reload --port 8080
+```
+
+Backend docs are available at:
+
+```text
+http://localhost:8080/docs
+```
+
+3. Set up and start the web frontend.
+
+```bash
+cd frontend-web
+npm install
+npm run dev:local
+```
+
+Open:
+
+```text
+http://localhost:5173
+```
+
+For frontend-only work, use mock mode instead:
+
+```bash
+cd frontend-web
+npm install
+npm run dev
+```
+
+## Docker Overview
+
+The backend image must be built from the repository root because it copies both
+`backend/` and `data-ml/src/`:
+
+```bash
+docker build -f backend/Dockerfile -t plugandwifi-backend .
+```
+
+The web frontend image should be built from `frontend-web/` because its
+Dockerfile expects the frontend package files as the build context:
+
+```bash
+cd frontend-web
+docker build -t plugandwifi-frontend .
+```
+
+See the service READMEs for complete Docker run commands, environment
+variables, mounted model files, and local database notes.
+
+## Tests
+
+Backend tests:
+
+```bash
+python -m pytest backend/test
+```
+
+Web frontend tests:
+
+```bash
+cd frontend-web
+npm run test
+```
+
+Mobile tests:
+
+```bash
+cd frontend-mobile
+npm test
+```
+
+## Development Notes
+
+- Follow `CONTRIBUTING.md` for branch, PR, and review workflow.
+- Treat service-specific READMEs as the source of truth for setup details.
+- Keep local secrets and API keys in ignored `.env*` files.
+- The backend and web frontend are the main end-to-end demo path.
+- The data/ML workflow provides the venue CSV and busyness artifacts consumed by the backend.

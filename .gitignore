@@ -4,6 +4,8 @@
 .DS_Store
 .DS_Store?
 ._*
+.AppleDouble
+.LSOverride
 .Spotlight-V100
 .Trashes
 ehthumbs.db
@@ -41,9 +43,10 @@ yarn-error.log*
 /frontend-mobile/.expo/
 /frontend-mobile/web-build/
 *.tsbuildinfo
+.pnp.*
 
 # ==========================================
-# Python & Flask (Backend)
+# FastAPI & Python (Backend)
 # ==========================================
 __pycache__/
 *.py[cod]
@@ -53,6 +56,9 @@ env/
 .venv/
 .Python
 .pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 instance/
 .webassets-cache
 
@@ -62,6 +68,8 @@ instance/
 .ipynb_checkpoints/
 # Ignore large dataset files to prevent repository bloating
 *.csv
+!docs/Plug & Wifi – Final Sprint Backlog.csv
+!data-ml/models/nyc_venues.csv
 *.dat
 *.out
 *.parquet
@@ -77,7 +85,14 @@ instance/
 *.sqlite3
 *.db
 
+~$*.docx
+
+busyness_ml.pptx
+data_quality_report.docx
+response.json
+reports/ridership_skew.png
+
 # ==========================================
-# Docker
+# Local Generated Outputs
 # ==========================================
-.docker-ignore
+output/
