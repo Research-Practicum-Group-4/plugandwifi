@@ -1,0 +1,247 @@
+Issue Type,Issue key,Issue id,Summary,Assignee,Status,Sprint,Sprint,Sprint,Parent,Parent key,Parent summary,Inward issue link (Relates)
+Epic,G4PW-1,10000,User Authentication & Account,,Done,,,,,,,
+Epic,G4PW-2,10001,Venue Discovery & Search,,Done,,,,,,,
+Epic,G4PW-3,10002,Venue Detail,,Done,,,,,,,
+Epic,G4PW-4,10003,Booking & Payments,,Done,,,,,,,
+Epic,G4PW-5,10004,Provider / Venue Management,,Done,,,,,,,
+Epic,G4PW-6,10005,ML Recommendation & AI Features,,Done,,,,,,,
+Task,G4PW-7,10006,Core Product Backlog Structural Creation,Youssef Bouarada,Done,G4RP Sprint 1,,,10052,G4PW-53,Agile Project Management,
+Task,G4PW-8,10007,UI/UX Mockups & Wireframe Generation,Youssef Bouarada,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-10,10009,Environment Setup & Emulator Configuration,Wenfei Song,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-11,10010,Explore Datasets and Identify Quality Issues,Adam Treanor,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-12,10011,Investigate Backend Frameworks & Map APIs,sunmin.lee,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Epic,G4PW-47,10046,Mobile & Responsive UX,,Done,,,,,,,
+Epic,G4PW-48,10047,Landing Page & Navigation,,Done,,,,,,,
+Epic,G4PW-49,10048,Reviews & Ratings,,Done,,,,,,,
+Epic,G4PW-50,10049,Admin / System Operations,,Done,,,,,,,
+Epic,G4PW-51,10050,"DevOps, Infrastructure & CI/CD",,Done,,,,,,,
+Epic,G4PW-52,10051,Quality Assurance & Automated Testing,,Done,,,,,,,
+Epic,G4PW-53,10052,Agile Project Management,,Done,,,,,,,
+Epic,G4PW-54,10053,Academic Deliverables & Presentations,,Done,,,,,,,
+Task,G4PW-55,10054,Local Frontend Environment Configuration,Peiyou Yao,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-56,10055,Frontend Project Initialization (Vite + TS),Peiyou Yao,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-57,10056,Document Unified Formatting Automation Script,Peiyou Yao,Done,G4RP Sprint 1,,,10052,G4PW-53,Agile Project Management,
+Task,G4PW-58,10057,UI-Based Frontend Page Structural Development,Peiyou Yao,Done,G4RP Sprint 1,,,10047,G4PW-48,Landing Page & Navigation,
+Task,G4PW-59,10058,Conditional Mocking & Unified API Fetcher Architecture,Peiyou Yao,Done,G4RP Sprint 1,,,10051,G4PW-52,Quality Assurance & Automated Testing,
+Task,G4PW-60,10059,Frontend UI Layout Scaffold & Skeleton Code,Youssef Bouarada,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-61,10060,User Requirement Interviews & Spec Engineering,Youssef Bouarada,Done,G4RP Sprint 1,,,10052,G4PW-53,Agile Project Management,
+Task,G4PW-62,10061,"Writing, Transcribing & Reviewing Project Docs",Youssef Bouarada,Done,G4RP Sprint 1,,,10053,G4PW-54,Academic Deliverables & Presentations,
+Task,G4PW-63,10062,User Stories Composition & Estimation,Youssef Bouarada,Done,G4RP Sprint 1,,,10052,G4PW-53,Agile Project Management,
+Task,G4PW-64,10063,Backlog Grooming & Requirement Refining,Youssef Bouarada,Done,G4RP Sprint 1,,,10052,G4PW-53,Agile Project Management,
+Task,G4PW-65,10064,Active Cross-Functional Meeting Participation,Youssef Bouarada,Done,G4RP Sprint 1,,,10052,G4PW-53,Agile Project Management,
+Task,G4PW-66,10065,Team Role Allocation & Acceptance Criteria Definition,Youssef Bouarada,Done,G4RP Sprint 1,,,10052,G4PW-53,Agile Project Management,
+Task,G4PW-67,10066,Target User Personas Architecture Definition,Youssef Bouarada,Done,G4RP Sprint 1,,,10052,G4PW-53,Agile Project Management,
+Task,G4PW-68,10067,"Academic Documentation(Team contract, meeting minutes, and sync agendas)",Tzu Yu Chang,Done,G4RP Sprint 1,,,10053,G4PW-54,Academic Deliverables & Presentations,
+Task,G4PW-69,10068,Cloud Hosting Architecture Draft,Tzu Yu Chang,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-70,10069,Conduct automated testing tools investigation,Tzu Yu Chang,Done,G4RP Sprint 1,,,10051,G4PW-52,Quality Assurance & Automated Testing,
+Task,G4PW-71,10070,"Configure automated trigger events, status checks, and branch restriction rules for automated PR builds",Tzu Yu Chang,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-72,10071,Investigate and initialize base GitHub Actions CI/CD workflow YAML pipeline files,Tzu Yu Chang,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-73,10072,"Author, review, and publish the CONTRIBUTING.md file establishing strict team guidelines for Git workflows",Tzu Yu Chang,Done,G4RP Sprint 1,,,10052,G4PW-53,Agile Project Management,
+Task,G4PW-74,10073,Configure the team branching strategy (GitFlow) and setup main/develop branch protections,Tzu Yu Chang,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-75,10074,Initialize the GitHub monorepo repository architecture,Tzu Yu Chang,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-76,10075,"Establish the Jira team board, configure custom workflows",Tzu Yu Chang,Done,G4RP Sprint 1,,,10052,G4PW-53,Agile Project Management,
+Task,G4PW-77,10076,Fetch_Venues API & Data Ingestion Setup,Adam Treanor,Done,G4RP Sprint 1,,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-78,10077,Transport_Model Feature Engineering,Adam Treanor,Done,G4RP Sprint 1,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-79,10078,Noise_Model Acoustic Conditioning Baseline Algorithm,Adam Treanor,Done,G4RP Sprint 1,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-80,10079,Wifi_Model Capacity & Score Weighting Setup,Adam Treanor,Done,G4RP Sprint 1,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-81,10080,Plug_Model Localized Concentration Weighting Setup,Adam Treanor,Done,G4RP Sprint 1,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-82,10081,Ratings_Model Feature Engineering & Aggregate Matrix,Adam Treanor,Done,G4RP Sprint 1,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-83,10082,Flask Architecture Prototype Initialization,sunmin.lee,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-84,10083,FastAPI Core Architecture Prototype Setup,sunmin.lee,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-85,10084,PostgreSQL Local Instance Configuration & Setup,sunmin.lee,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-86,10085,Relational Database Schema Design & Normalization,sunmin.lee,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-87,10086,Map API Routing Capabilities Investigation,sunmin.lee,Done,G4RP Sprint 1,,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-88,10087,Mock API Contract Specification Documentation,sunmin.lee,Done,G4RP Sprint 1,,,10051,G4PW-52,Quality Assurance & Automated Testing,
+Task,G4PW-89,10088,React Native Learning & Practice,Wenfei Song,Done,G4RP Sprint 1,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-90,10089,UI Framework Implementation & Testing,Wenfei Song,Done,G4RP Sprint 1,,,10046,G4PW-47,Mobile & Responsive UX,
+Task,G4PW-91,10090,"Sprint 1 Syncs, Cross-Functional Alignments & Faculty Reviews",Tzu Yu Chang,Done,G4RP Sprint 1,,,10052,G4PW-53,Agile Project Management,
+Task,G4PW-92,10091,"Sprint 2 Syncs, Cross-Functional Alignments & Faculty Reviews",Tzu Yu Chang,Done,G4RP Sprint 2,,,10052,G4PW-53,Agile Project Management,
+Story,G4PW-93,10092,Register Standard User Account,,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10000,G4PW-1,User Authentication & Account,
+Task,G4PW-25,10024,UI Form Implementation & Client-Side Validation,Peiyou Yao,Done,G4RP Sprint 2,,,10000,G4PW-1,User Authentication & Account,G4PW-93
+Task,G4PW-26,10025,User Table Schema Design & Constraints Setup,Adam Treanor,Done,G4RP Sprint 2,G4RP Sprint 3,,10000,G4PW-1,User Authentication & Account,G4PW-93
+Task,G4PW-161,10160,Pass-through Rendering for Suitability Score,Peiyou Yao,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-27,10026,Security & Password Hashing,sunmin.lee,Done,G4RP Sprint 2,,,10000,G4PW-1,User Authentication & Account,G4PW-93
+Task,G4PW-94,10093,App UI Form Implementation & Client-Side Validation,Wenfei Song,Done,G4RP Sprint 2,,,10000,G4PW-1,User Authentication & Account,G4PW-93
+Task,G4PW-96,10095,POST /api/auth/register API Endpoint,sunmin.lee,Done,G4RP Sprint 2,,,10000,G4PW-1,User Authentication & Account,G4PW-93
+Task,G4PW-97,10096,API Integration & Mobile Routing Navigation,Wenfei Song,Done,G4RP Sprint 2,,,10000,G4PW-1,User Authentication & Account,G4PW-93
+Story,G4PW-99,10098,Register Space Provider Account,,Done,G4RP Sprint 3,,,10000,G4PW-1,User Authentication & Account,
+Task,G4PW-100,10099,Registration API Expansion for Provider Role,sunmin.lee,Done,G4RP Sprint 3,,,10000,G4PW-1,User Authentication & Account,G4PW-99
+Task,G4PW-102,10101,Mobile Menu Entry & Provider UI Form,Wenfei Song,Done,G4RP Sprint 3,,,10000,G4PW-1,User Authentication & Account,G4PW-99
+Task,G4PW-103,10102,API Integration & Mobile Onboarding Routing,Wenfei Song,Done,G4RP Sprint 3,,,10000,G4PW-1,User Authentication & Account,G4PW-99
+Story,G4PW-104,10103,Login,,Done,G4RP Sprint 2,G4RP Sprint 3,,10000,G4PW-1,User Authentication & Account,
+Task,G4PW-105,10104,POST /api/auth/login API & JWT Generation,sunmin.lee,Done,G4RP Sprint 2,,,10000,G4PW-1,User Authentication & Account,G4PW-104
+Task,G4PW-106,10105,Login UI Form & Error Handling,Peiyou Yao,Done,G4RP Sprint 2,,,10000,G4PW-1,User Authentication & Account,G4PW-104
+Task,G4PW-107,10106,Login App UI & Error Handling,Wenfei Song,Done,G4RP Sprint 2,,,10000,G4PW-1,User Authentication & Account,G4PW-104
+Story,G4PW-108,10107,Persistent Session (Status Memory),,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10000,G4PW-1,User Authentication & Account,
+Task,G4PW-109,10108,App Initialization & Session Hydration,Peiyou Yao,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10000,G4PW-1,User Authentication & Account,G4PW-108
+Task,G4PW-110,10109,Native Storage & Session Hydration,Wenfei Song,Done,G4RP Sprint 2,,,10000,G4PW-1,User Authentication & Account,G4PW-108
+Task,G4PW-111,10110,GET /api/users/me Endpoint & Token Validation Logic,sunmin.lee,Done,G4RP Sprint 2,,,10000,G4PW-1,User Authentication & Account,G4PW-108
+Story,G4PW-112,10111,Impulse Booking Login Pop-up,,Done,G4RP Sprint 3,G4RP Sprint 4,,10000,G4PW-1,User Authentication & Account,
+Task,G4PW-113,10112,In-Context Auth Modal & Checkout Progression,Peiyou Yao,Done,G4RP Sprint 3,G4RP Sprint 4,,10000,G4PW-1,User Authentication & Account,G4PW-112
+Task,G4PW-114,10113,In-Context Auth Overlay & Checkout Progression,Wenfei Song,Done,G4RP Sprint 3,G4RP Sprint 4,,10000,G4PW-1,User Authentication & Account,G4PW-112
+Story,G4PW-115,10114,Logout,,Done,G4RP Sprint 2,G4RP Sprint 3,,10000,G4PW-1,User Authentication & Account,
+Task,G4PW-117,10116,Native Logout & State Clearance,Wenfei Song,Done,G4RP Sprint 2,,,10000,G4PW-1,User Authentication & Account,
+Task,G4PW-118,10117,POST /api/auth/logout API Endpoint,sunmin.lee,Done,G4RP Sprint 2,,,10000,G4PW-1,User Authentication & Account,G4PW-115
+Story,G4PW-119,10118,Role-based Access Control,,Done,G4RP Sprint 3,G4RP Sprint 4,,10000,G4PW-1,User Authentication & Account,
+Task,G4PW-120,10119,Route Guards & UI Conditional Rendering,Peiyou Yao,Done,G4RP Sprint 3,G4RP Sprint 4,,10000,G4PW-1,User Authentication & Account,G4PW-119
+Task,G4PW-121,10120,Navigation Guards & Conditional UI,Wenfei Song,Done,G4RP Sprint 3,,,10000,G4PW-1,User Authentication & Account,G4PW-119
+Task,G4PW-122,10121,RBAC Middleware & Endpoint Interception,sunmin.lee,Done,G4RP Sprint 3,,,10000,G4PW-1,User Authentication & Account,
+Story,G4PW-123,10122,Location-based search,,Done,G4RP Sprint 2,G4RP Sprint 3,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-124,10123,Grid View Location Search & Distance UI,Peiyou Yao,Done,G4RP Sprint 2,G4RP Sprint 3,,10001,G4PW-2,Venue Discovery & Search,G4PW-123
+Task,G4PW-125,10124,Map View Location Search & Proximity UI,Wenfei Song,Done,G4RP Sprint 2,,,10001,G4PW-2,Venue Discovery & Search,G4PW-123
+Task,G4PW-126,10125,GET /api/venues Geospatial Logic & Proximity Sorting,sunmin.lee,Done,G4RP Sprint 2,,,10001,G4PW-2,Venue Discovery & Search,G4PW-123
+Story,G4PW-127,10126,Search by Date & Availability,,Done,G4RP Sprint 2,G4RP Sprint 3,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-128,10127,Date/Time Picker UI & Availability Integration,Peiyou Yao,Done,G4RP Sprint 2,G4RP Sprint 3,,10001,G4PW-2,Venue Discovery & Search,G4PW-127
+Task,G4PW-129,10128,Native Date/Time Picker & Availability Integration,Wenfei Song,Done,G4RP Sprint 2,,,10001,G4PW-2,Venue Discovery & Search,G4PW-127
+Task,G4PW-130,10129,Availability Filtering Logic & Database Joins,sunmin.lee,Done,G4RP Sprint 2,,,10001,G4PW-2,Venue Discovery & Search,G4PW-127
+Story,G4PW-131,10130,Venue Search Filters,,Done,G4RP Sprint 2,G4RP Sprint 3,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-132,10131,Comprehensive Filter UI & Client-Side Reactivity,Peiyou Yao,Done,G4RP Sprint 2,G4RP Sprint 3,,10001,G4PW-2,Venue Discovery & Search,G4PW-131
+Task,G4PW-133,10132,Native Filter Drawer & Dynamic Rendering,Wenfei Song,Done,G4RP Sprint 2,G4RP Sprint 3,,10001,G4PW-2,Venue Discovery & Search,G4PW-131
+Task,G4PW-134,10133,GET /api/venues Dynamic Query Builder & Duration Logic,sunmin.lee,Done,G4RP Sprint 2,,,10001,G4PW-2,Venue Discovery & Search,G4PW-131
+Story,G4PW-135,10134,Platform-Specific Default Views,,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-136,10135,User-Agent Detection & Default Layout Routing,Peiyou Yao,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10001,G4PW-2,Venue Discovery & Search,G4PW-135
+Task,G4PW-137,10136,Native Map Layout & Carousel Initialization,Wenfei Song,Done,G4RP Sprint 2,,,10001,G4PW-2,Venue Discovery & Search,G4PW-135
+Story,G4PW-138,10137,Venue Card Component,,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-139,10138,Venue Card UI Component (Grid Item),Peiyou Yao,Done,G4RP Sprint 2,,,10001,G4PW-2,Venue Discovery & Search,G4PW-138
+Task,G4PW-150,10149,Native Venue Profile Screen & Bottom Call-to-Action Layout,Wenfei Song,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10002,G4PW-3,Venue Detail,G4PW-148
+Task,G4PW-140,10139,Native Venue Card Component (Carousel Item),Wenfei Song,Done,G4RP Sprint 2,G4RP Sprint 3,,10001,G4PW-2,Venue Discovery & Search,G4PW-138
+Task,G4PW-141,10140,API Payload Verification (Venue Summary DTO),sunmin.lee,Done,G4RP Sprint 2,,,10001,G4PW-2,Venue Discovery & Search,G4PW-138
+Story,G4PW-142,10141,"Grid Mode ""Available Near You"" Loading & Pagination",,Done,G4RP Sprint 2,G4RP Sprint 3,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-143,10142,"Grid Initializer & ""More Venues"" Pagination Logic",Peiyou Yao,Done,G4RP Sprint 2,G4RP Sprint 3,,10001,G4PW-2,Venue Discovery & Search,G4PW-142
+Task,G4PW-144,10143,Pagination Support for GET /api/venues,sunmin.lee,Done,G4RP Sprint 2,,,10001,G4PW-2,Venue Discovery & Search,G4PW-142
+Story,G4PW-145,10144,Toggle grid/map view,,Done,G4RP Sprint 3,,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-146,10145,Layout Toggle Controls & Global State Preservation,Peiyou Yao,Done,G4RP Sprint 3,,,10001,G4PW-2,Venue Discovery & Search,G4PW-145
+Task,G4PW-221,10252,Integrate OpenStreetMap & Render Venue Pins,Peiyou Yao,Done,G4RP Sprint 3,,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-116,10115,Logout Logic & State Clearance,Peiyou Yao,Done,G4RP Sprint 2,G4RP Sprint 3,,10000,G4PW-1,User Authentication & Account,G4PW-115
+Task,G4PW-95,10094,API Integration & Auto-Login Routing,Peiyou Yao,Done,G4RP Sprint 2,G4RP Sprint 3,,10000,G4PW-1,User Authentication & Account,G4PW-93
+Task,G4PW-101,10100,API Integration & Onboarding Workspace Routing,Peiyou Yao,Done,G4RP Sprint 3,,,10000,G4PW-1,User Authentication & Account,
+Task,G4PW-147,10146,Native View Toggle & Shared Controller,Wenfei Song,Done,G4RP Sprint 3,,,10001,G4PW-2,Venue Discovery & Search,G4PW-145
+Story,G4PW-148,10147,Foundational Venue Detail Page & Sections,,Done,G4RP Sprint 2,G4RP Sprint 3,,10002,G4PW-3,Venue Detail,
+Task,G4PW-149,10148,Foundational Venue Detail Page & Sections Implementation,Peiyou Yao,Done,G4RP Sprint 2,,,10002,G4PW-3,Venue Detail,G4PW-148
+Task,G4PW-151,10150,GET /api/venues/{venue_id} Profile Endpoint Development,sunmin.lee,Done,G4RP Sprint 2,,,10002,G4PW-3,Venue Detail,G4PW-148
+Story,G4PW-152,10151,Inline Booking Panel & Dynamic Pricing Breakdown,,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10003,G4PW-4,Booking & Payments,
+Task,G4PW-153,10152,Booking Panel Widget & Price Calculator UI,Peiyou Yao,Done,G4RP Sprint 2,,,10003,G4PW-4,Booking & Payments,G4PW-152
+Task,G4PW-154,10153,Native Booking Bottom Sheet & State Binding,Wenfei Song,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10003,G4PW-4,Booking & Payments,G4PW-152
+Story,G4PW-156,10155,Virtual Mock Checkout & Successful Booking Receipt,,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10003,G4PW-4,Booking & Payments,
+Task,G4PW-155,10154,POST /api/bookings Endpoint & State Modification Logic,sunmin.lee,Done,G4RP Sprint 2,,,10003,G4PW-4,Booking & Payments,G4PW-156
+Task,G4PW-157,10156,Order Confirmation Routing & Receipt View,Peiyou Yao,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10003,G4PW-4,Booking & Payments,G4PW-156
+Task,G4PW-158,10157,Native Confirmation Screen Navigation,Wenfei Song,Done,G4RP Sprint 2,,,10003,G4PW-4,Booking & Payments,G4PW-156
+Story,G4PW-159,10158,Rule-Based Venue Suitability Scoring & Ranking Baseline,,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-160,10159,Develop Deterministic Rule-Based Suitability Scoring Engine & Seed Weights,Adam Treanor,Done,G4RP Sprint 2,G4RP Sprint 3,,10005,G4PW-6,ML Recommendation & AI Features,G4PW-159
+Task,G4PW-240,10271,Build MTA Ridership Data Pipeline,Adam Treanor,Done,G4RP Sprint 3,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-162,10161,Pass-through Rendering for Suitability Score,Peiyou Yao,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10005,G4PW-6,ML Recommendation & AI Features,G4PW-159
+Task,G4PW-163,10162,Render Suitability Score Badge on Map Carousel,Wenfei Song,Done,G4RP Sprint 2,G4RP Sprint 3,,10005,G4PW-6,ML Recommendation & AI Features,
+Story,G4PW-164,10163,Mobile-Responsive Layout & Touch-Friendly UI Boundaries,,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10046,G4PW-47,Mobile & Responsive UX,
+Task,G4PW-165,10164,Global RWD Breakpoints & CSS Media Queries Optimization,Peiyou Yao,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10046,G4PW-47,Mobile & Responsive UX,G4PW-164
+Task,G4PW-166,10165,Refactor Global Interactivity Tap Target Dimensions,Peiyou Yao,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10046,G4PW-47,Mobile & Responsive UX,G4PW-164
+Story,G4PW-167,10166,Search Landing Page & Empty State Placeholders,,Done,G4RP Sprint 2,,,10047,G4PW-48,Landing Page & Navigation,
+Task,G4PW-168,10167,Search Hub UI & Conditional Empty State Implementation,Peiyou Yao,Done,G4RP Sprint 2,,,10047,G4PW-48,Landing Page & Navigation,G4PW-167
+Task,G4PW-169,10168,Native App Initial Landing Screen & No-Results Overlay,Wenfei Song,Done,G4RP Sprint 2,,,10047,G4PW-48,Landing Page & Navigation,G4PW-167
+Story,G4PW-170,10169,Database Proximity Seeding for Discovery Validation,,Done,G4RP Sprint 2,G4RP Sprint 3,,10004,G4PW-5,Provider / Venue Management,
+Task,G4PW-171,10170,Develop PostgreSQL Database Seed Script,sunmin.lee,Done,G4RP Sprint 2,,,10004,G4PW-5,Provider / Venue Management,G4PW-170
+Task,G4PW-172,10171,Automate Seed Execution on Staging Deployments,Tzu Yu Chang,Done,G4RP Sprint 2,,,10004,G4PW-5,Provider / Venue Management,G4PW-170
+Story,G4PW-173,10172,Staging Environment Deployment & CI/CD Pipeline Setup,,Done,G4RP Sprint 2,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-174,10173,FastAPI Backend Staging Deployment & Managed Database,Tzu Yu Chang,Done,G4RP Sprint 2,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",G4PW-173
+Task,G4PW-175,10174,API Gateway CORS Configuration & Frontend Environment Setup,Tzu Yu Chang,Done,G4RP Sprint 2,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",G4PW-173
+Task,G4PW-184,10183,React Frontend Staging Deployment & Multi-Stage Dockerization,Tzu Yu Chang,Done,G4RP Sprint 2,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",G4PW-173
+Task,G4PW-176,10175,Expand GitHub Actions CI Pipeline,Tzu Yu Chang,Done,G4RP Sprint 2,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",G4PW-173
+Story,G4PW-177,10176,Core API Unit Testing & Post-Deployment Health Validation,,Done,G4RP Sprint 2,G4RP Sprint 3,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-178,10177,Implement Pytest Suite for Core S2 APIs,Tzu Yu Chang,Done,G4RP Sprint 2,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",G4PW-177
+Task,G4PW-179,10178,FastAPI Health Check Endpoint & Post-Deployment CD Ping,Tzu Yu Chang,Done,G4RP Sprint 2,G4RP Sprint 3,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",G4PW-177
+Task,G4PW-180,10179,Cloud Staging CORS & JWT Cross-Origin Verification,Tzu Yu Chang,Done,G4RP Sprint 2,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",G4PW-177
+Story,G4PW-181,10180,"Agile Operations, Business UAT & Demo Orchestration",,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10052,G4PW-53,Agile Project Management,
+Task,G4PW-182,10181,Sprint 2 Time Budget Monitoring & S3 Backlog Grooming,Youssef Bouarada,Done,G4RP Sprint 2,G4RP Sprint 3,,10052,G4PW-53,Agile Project Management,G4PW-181
+Task,G4PW-183,10182,User Acceptance Testing,Youssef Bouarada,Done,G4RP Sprint 2,G4RP Sprint 3,G4RP Sprint 4,10052,G4PW-53,Agile Project Management,G4PW-181
+Story,G4PW-186,10217,"Booking History, Verification & Cancellations",,Done,G4RP Sprint 3,G4RP Sprint 4,,10003,G4PW-4,Booking & Payments,
+Task,G4PW-192,10223,Develop User Bookings API Endpoint,sunmin.lee,Done,G4RP Sprint 3,,,10003,G4PW-4,Booking & Payments,G4PW-186
+Task,G4PW-193,10224,"Build ""My Bookings"" Dashboard & Tabs UI",Peiyou Yao,Done,G4RP Sprint 3,,,10003,G4PW-4,Booking & Payments,G4PW-186
+Task,G4PW-98,10097,Provider Portal Navigation & UI Form,Peiyou Yao,Done,G4RP Sprint 3,,,10000,G4PW-1,User Authentication & Account,G4PW-99
+Task,G4PW-194,10225,Implement Cancellation Logic & Inventory Deallocation,sunmin.lee,Done,G4RP Sprint 3,,,10003,G4PW-4,Booking & Payments,G4PW-186
+Story,G4PW-187,10218,Seamless Payment Gateway Integration,,Won't do,G4RP Sprint 4,,,10003,G4PW-4,Booking & Payments,
+Task,G4PW-195,10226,Develop Cancellation Intercept Modal & API Binding,Peiyou Yao,Done,G4RP Sprint 3,,,10003,G4PW-4,Booking & Payments,G4PW-186
+Task,G4PW-196,10227,Develop Cancellation Intercept Drawer & API Binding,Wenfei Song,Done,G4RP Sprint 3,G4RP Sprint 4,,10003,G4PW-4,Booking & Payments,G4PW-186
+Story,G4PW-188,10219,Multi-Step Space Provider Listing Wizard,,Done,G4RP Sprint 3,G4RP Sprint 4,,10004,G4PW-5,Provider / Venue Management,
+Task,G4PW-215,10246,Build Venue Listing Creation API & Database Schema Integration,sunmin.lee,Done,G4RP Sprint 3,,,10004,G4PW-5,Provider / Venue Management,G4PW-188
+Task,G4PW-197,10228,Design & Implement Multi-Step Form UI Wizard,Peiyou Yao,Done,G4RP Sprint 3,G4RP Sprint 4,,10004,G4PW-5,Provider / Venue Management,G4PW-188
+Task,G4PW-199,10230,Implement Final Step Verification & T&Cs Lock(Web),Peiyou Yao,Done,G4RP Sprint 3,G4RP Sprint 4,,10004,G4PW-5,Provider / Venue Management,G4PW-188
+Task,G4PW-200,10231,Implement Final Step Verification & T&Cs Lock(App),Wenfei Song,Done,G4RP Sprint 3,,,10004,G4PW-5,Provider / Venue Management,G4PW-188
+Story,G4PW-189,10220,Provider Inventory & Capacity Constraints,,Done,G4RP Sprint 3,G4RP Sprint 4,,10004,G4PW-5,Provider / Venue Management,
+Task,G4PW-202,10233,Build Capacity-Checking Inventory Booking Logic,sunmin.lee,Done,G4RP Sprint 3,,,10004,G4PW-5,Provider / Venue Management,G4PW-189
+Task,G4PW-203,10234,Implement Slot Modification Guard Rails,sunmin.lee,Done,G4RP Sprint 3,,,10004,G4PW-5,Provider / Venue Management,G4PW-189
+Task,G4PW-204,10235,Build Host Capacity/Policy Config UI & Validation,Peiyou Yao,Done,G4RP Sprint 3,G4RP Sprint 4,,10004,G4PW-5,Provider / Venue Management,G4PW-189
+Story,G4PW-190,10221,Provider Operational Dashboard,,Done,G4RP Sprint 3,G4RP Sprint 4,,10004,G4PW-5,Provider / Venue Management,
+Task,G4PW-206,10237,Build Live Aggregation KPI Metrics Endpoint,sunmin.lee,Done,G4RP Sprint 3,,,10004,G4PW-5,Provider / Venue Management,G4PW-190
+Task,G4PW-207,10238,Implement Real-Time Feed for Upcoming Arrivals,sunmin.lee,Done,G4RP Sprint 3,,,10004,G4PW-5,Provider / Venue Management,G4PW-190
+Task,G4PW-208,10239,Build Host KPI & Dynamic Booking List Grid,Peiyou Yao,Done,G4RP Sprint 3,,,10004,G4PW-5,Provider / Venue Management,G4PW-190
+Story,G4PW-191,10222,Verified Rating Engine & Score Aggregation,,Done,G4RP Sprint 3,G4RP Sprint 4,,10048,G4PW-49,Reviews & Ratings,
+Task,G4PW-201,10232,Enforce Search Filter Security & Vetting Logic Testing,sunmin.lee,Done,G4RP Sprint 4,,,10004,G4PW-5,Provider / Venue Management,G4PW-188
+Task,G4PW-210,10241,Build Verified Survey Metrics & Aggregation Engine,sunmin.lee,Done,G4RP Sprint 3,,,10048,G4PW-49,Reviews & Ratings,G4PW-191
+Task,G4PW-211,10242,Post-Review Callback Pipeline & Real-Time Star Rating Synchronization,sunmin.lee,Done,G4RP Sprint 3,,,10048,G4PW-49,Reviews & Ratings,G4PW-191
+Task,G4PW-212,10243,Implement Deterministic Rule-Based Suitability Weight Equations,Adam Treanor,Done,G4RP Sprint 3,G4RP Sprint 4,,10048,G4PW-49,Reviews & Ratings,G4PW-191
+Task,G4PW-213,10244,Render Verified Metrics & Match Badges on Web,Tzu Yu Chang,Done,G4RP Sprint 3,G4RP Sprint 4,,10048,G4PW-49,Reviews & Ratings,G4PW-191
+Task,G4PW-214,10245,Render Verified Metrics & Match Badges on Mobile,Wenfei Song,Done,G4RP Sprint 3,G4RP Sprint 4,,10048,G4PW-49,Reviews & Ratings,G4PW-191
+Story,G4PW-216,10247,Admin Control Panel & Infrastructure Operations,,Done,G4RP Sprint 3,G4RP Sprint 4,,10049,G4PW-50,Admin / System Operations,
+Task,G4PW-217,10248,Build Admin Overview Aggregations & RBAC Protections,sunmin.lee,Done,G4RP Sprint 3,,,10049,G4PW-50,Admin / System Operations,G4PW-216
+Task,G4PW-218,10249,Implement Venue Suspension & Emergency Cancellation API,sunmin.lee,Done,G4RP Sprint 3,,,10049,G4PW-50,Admin / System Operations,G4PW-216
+Task,G4PW-219,10250,Build Minimalist Web Admin Dashboard Grid,Peiyou Yao,Done,G4RP Sprint 3,G4RP Sprint 4,,10049,G4PW-50,Admin / System Operations,G4PW-216
+Task,G4PW-220,10251,Implement Administrative Intercept Modals,Peiyou Yao,Done,G4RP Sprint 3,G4RP Sprint 4,,10049,G4PW-50,Admin / System Operations,G4PW-216
+Task,G4PW-222,10253,Implement Location Search and OSM Geocoding Alignment,Peiyou Yao,Done,G4RP Sprint 3,G4RP Sprint 4,,10001,G4PW-2,Venue Discovery & Search,
+Story,G4PW-224,10255,Refresh Token Authentication Flow & Session Extension,,Done,G4RP Sprint 3,G4RP Sprint 4,,10000,G4PW-1,User Authentication & Account,
+Task,G4PW-225,10256,Build POST /api/auth/refresh Endpoint & Security Schema,sunmin.lee,Done,G4RP Sprint 3,,,10000,G4PW-1,User Authentication & Account,G4PW-224
+Task,G4PW-226,10257,Implement Axios/Fetch Token Silent Refresh Interceptors,Peiyou Yao,Done,G4RP Sprint 3,G4RP Sprint 4,,10000,G4PW-1,User Authentication & Account,G4PW-224
+Task,G4PW-227,10258,Build Native Secure Storage Token Rotation Controller,Wenfei Song,Done,G4RP Sprint 3,,,10000,G4PW-1,User Authentication & Account,
+Story,G4PW-228,10259,Remove Venue from Favorites Management,,Done,G4RP Sprint 3,G4RP Sprint 4,,10003,G4PW-4,Booking & Payments,
+Task,G4PW-229,10260,Develop DELETE /api/favorites/{venue_id} Endpoint,sunmin.lee,Done,G4RP Sprint 3,,,10003,G4PW-4,Booking & Payments,G4PW-228
+Task,G4PW-230,10261,Integrate Toggle Heart Icon Mechanics on Web Venue Cards,Peiyou Yao,Done,G4RP Sprint 3,G4RP Sprint 4,,10003,G4PW-4,Booking & Payments,G4PW-228
+Task,G4PW-231,10262,Implement Deletion Action Bindings on Mobile Map Carousel,Wenfei Song,Done,G4RP Sprint 3,,,10003,G4PW-4,Booking & Payments,G4PW-228
+Story,G4PW-232,10263,Cloud SQL Production Database Migration & Environment Segregation,,Done,G4RP Sprint 3,G4RP Sprint 4,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-233,10264,Database Configuration Refactoring & Driver Tuning,sunmin.lee,Done,G4RP Sprint 3,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",G4PW-232
+Task,G4PW-234,10265,"Secrets Abstraction, .gitignore Enforcements, and Blueprints",Tzu Yu Chang,Done,G4RP Sprint 3,G4RP Sprint 4,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",G4PW-232
+Task,G4PW-235,10266,Test Architecture Isolation & SQLite Pipeline Preservation,Tzu Yu Chang,Done,G4RP Sprint 3,G4RP Sprint 4,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",G4PW-232
+Story,G4PW-236,10267,Implement Traditional Numbered Pagination for Venue List,,Done,G4RP Sprint 4,,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-237,10268,Calculate Total Items and Update VenueListResponse Schema,sunmin.lee,Done,G4RP Sprint 4,,,10001,G4PW-2,Venue Discovery & Search,G4PW-236
+Task,G4PW-241,10272,Derive Busyness Training Features from MTA Data,Adam Treanor,Done,G4RP Sprint 3,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-242,10273,Implement KNN Area Busyness Prediction Model,Adam Treanor,Done,G4RP Sprint 3,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-243,10274,Evaluate Area Busyness Model with Error Metrics,Adam Treanor,Done,G4RP Sprint 3,G4RP Sprint 4,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-244,10275,Explore Random Forest Alternative for Busyness Prediction,Adam Treanor,Done,G4RP Sprint 3,G4RP Sprint 4,,10005,G4PW-6,ML Recommendation & AI Features,
+Story,G4PW-245,10276,End-to-End Booking Flow Stabilisation,,Done,G4RP Sprint 4,,,10003,G4PW-4,Booking & Payments,
+Task,G4PW-255,10286,Implement backend venue availability endpoint /api/venues/{venue_id}/availability,sunmin.lee,Done,G4RP Sprint 4,,,10003,G4PW-4,Booking & Payments,
+Task,G4PW-256,10287,Refactor POST /api/bookings to use authenticated user context instead of client user_id,sunmin.lee,Done,G4RP Sprint 4,,,10003,G4PW-4,Booking & Payments,G4PW-245
+Task,G4PW-257,10288,Update web checkout to match final booking API contract,Peiyou Yao,Done,G4RP Sprint 4,,,10003,G4PW-4,Booking & Payments,G4PW-245
+Task,G4PW-258,10289,Remove checkout hardcoded fallback booking data,Peiyou Yao,Done,G4RP Sprint 4,,,10003,G4PW-4,Booking & Payments,G4PW-245
+Task,G4PW-259,10290,Integrate mobile checkout with real booking API,Wenfei Song,Done,G4RP Sprint 4,,,10003,G4PW-4,Booking & Payments,G4PW-245
+Task,G4PW-260,10291,Test full booking flow,Tzu Yu Chang,Done,G4RP Sprint 4,,,10003,G4PW-4,Booking & Payments,G4PW-245
+Story,G4PW-246,10277,Advanced Venue Search & Availability Filtering,,Done,G4RP Sprint 4,,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-262,10293,Add backend venue name suggestion endpoint for web search autocomplete,sunmin.lee,Done,G4RP Sprint 4,,,10001,G4PW-2,Venue Discovery & Search,G4PW-246
+Task,G4PW-263,10294,Refactor web SearchPage state for separate Map and List venue datasets,Peiyou Yao,Done,G4RP Sprint 4,,,10001,G4PW-2,Venue Discovery & Search,G4PW-246
+Task,G4PW-264,10295,Render all landmark-radius venues on Web Map View independent of pagination,Peiyou Yao,Done,G4RP Sprint 4,,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-265,10296,Implement web search autocomplete for venues and landmarks,Peiyou Yao,Done,G4RP Sprint 4,,,10001,G4PW-2,Venue Discovery & Search,G4PW-246
+Story,G4PW-247,10278,Numbered Pagination & Venue Loading Performance,,Done,G4RP Sprint 4,,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-238,10269,Implement Numbered Pagination UI for Venue Search,Peiyou Yao,Done,G4RP Sprint 4,,,10001,G4PW-2,Venue Discovery & Search,G4PW-247
+Task,G4PW-239,10270,Implement Mobile Pagination Control for Venue Search,Wenfei Song,Done,G4RP Sprint 4,,,10001,G4PW-2,Venue Discovery & Search,G4PW-247
+Task,G4PW-261,10292,Validate paginated venue loading and filter persistence,Tzu Yu Chang,Done,G4RP Sprint 4,,,10001,G4PW-2,Venue Discovery & Search,G4PW-247
+Story,G4PW-248,10279,Weighted Suitability Recommendation System,,Done,G4RP Sprint 4,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-266,10297,Integrate weighted suitability scoring into backend venue APIs,sunmin.lee,Done,G4RP Sprint 4,,,10005,G4PW-6,ML Recommendation & AI Features,G4PW-248
+Task,G4PW-267,10298,Display suitability ranking and recommendation badges on Web Search results,Peiyou Yao,Done,G4RP Sprint 4,,,10005,G4PW-6,ML Recommendation & AI Features,G4PW-248
+Story,G4PW-249,10280,Busyness Score ML Integration,,Done,G4RP Sprint 4,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-268,10299,Integrate area busyness score into backend venue API response,sunmin.lee,Done,G4RP Sprint 4,,,10005,G4PW-6,ML Recommendation & AI Features,G4PW-249
+Task,G4PW-269,10300,Display area busyness score on Web venue cards and map view,Peiyou Yao,Done,G4RP Sprint 4,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-270,10301,Validate area busyness score across search and discovery flows,Tzu Yu Chang,Done,G4RP Sprint 4,,,10005,G4PW-6,ML Recommendation & AI Features,G4PW-249
+Story,G4PW-250,10281,AI Chatbot / Conversational Workspace Matchmaker,,Done,G4RP Sprint 4,,,10005,G4PW-6,ML Recommendation & AI Features,
+Story,G4PW-254,10285,Final Integration Testing & Demo Readiness,,Done,G4RP Sprint 5,,,10050,G4PW-51,"DevOps, Infrastructure & CI/CD",
+Task,G4PW-271,10302,Integrate Google Gemini API for chatbot backend service,sunmin.lee,Done,G4RP Sprint 4,,,10005,G4PW-6,ML Recommendation & AI Features,G4PW-250
+Task,G4PW-272,10303,Convert chatbot venue requests into structured search parameters,sunmin.lee,Done,G4RP Sprint 4,,,10005,G4PW-6,ML Recommendation & AI Features,G4PW-250
+Task,G4PW-273,10304,Build web chatbot UI with venue recommendation results,Peiyou Yao,Done,G4RP Sprint 4,,,10005,G4PW-6,ML Recommendation & AI Features,G4PW-250
+Task,G4PW-274,10305,Build mobile app chatbot UI with venue recommendation results,Wenfei Song,Done,G4RP Sprint 4,,,10005,G4PW-6,ML Recommendation & AI Features,G4PW-250
+Task,G4PW-275,10306,Add backend API to create user favorite venue,sunmin.lee,Done,G4RP Sprint 4,,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-276,10307,Align Missing Venue Fields and API Contract Across All Platforms,sunmin.lee,Done,G4RP Sprint 5,,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-277,10308,Complete Search and Availability Filters,sunmin.lee,Done,G4RP Sprint 5,,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-278,10309,Integrate Shared Suitability Score into Venue APIs,sunmin.lee,Done,G4RP Sprint 5,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-279,10310,Finalise Shared Suitability Scoring Logic,Adam Treanor,Done,G4RP Sprint 5,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-280,10311,Integrate Existing Busyness Model into Venue APIs,sunmin.lee,Done,G4RP Sprint 5,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-281,10312,"Optimize Search Results, List Loading, and Map Marker Density",Peiyou Yao,Done,G4RP Sprint 5,,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-282,10313,Upgrade Web Map View to Google Maps,Peiyou Yao,Done,G4RP Sprint 5,,,10001,G4PW-2,Venue Discovery & Search,
+Task,G4PW-283,10314,Remove Mock Venue Images and Redesign Image-Free Layouts,Peiyou Yao,Done,G4RP Sprint 5,,,10002,G4PW-3,Venue Detail,
+Task,G4PW-284,10315,Connect the AI Chatbot to the Venue Database,sunmin.lee,Done,G4RP Sprint 5,,,10005,G4PW-6,ML Recommendation & AI Features,
+Task,G4PW-285,10316,Complete Favorites Frontend Integration,Peiyou Yao,Done,G4RP Sprint 5,,,10000,G4PW-1,User Authentication & Account,
+Task,G4PW-286,10317,Connect the Provider Offer Space Form to the Venue API,Peiyou Yao,Done,G4RP Sprint 5,,,10004,G4PW-5,Provider / Venue Management,

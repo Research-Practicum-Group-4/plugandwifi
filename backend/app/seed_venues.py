@@ -9,7 +9,7 @@ from .database import SessionLocal
 from .models import Venue
 
 DEFAULT_CSV_PATH = (
-    Path(__file__).resolve().parents[1] / "data" / "raw" / "nyc_venues.csv"
+    Path(__file__).resolve().parents[2] / "data-ml" / "models" / "nyc_venues.csv"
 )
 
 CSV_COLUMNS = (
