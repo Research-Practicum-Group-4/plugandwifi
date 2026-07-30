@@ -1513,6 +1513,10 @@ def test_known_landmarks_resolve_without_database_lookup():
 
 @pytest.fixture(autouse=True)
 def setup_and_seed_database():
+    main_module.BUSYNESS_PREDICTION_CACHE.clear()
+    main_module.BUSYNESS_ZONE_LOOKUP_CACHE.update(
+        {"source_id": None, "zone_by_venue_id": {}, "candidate_arrays": None}
+    )
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
     try:
