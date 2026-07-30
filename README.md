@@ -9,6 +9,12 @@ This repository is an active research-practicum project workspace. The web and
 backend services are the most complete development targets; the mobile and
 data/ML directories support prototype, experimentation, and integration work.
 
+## Production URL
+
+Production site: https://plugandwifi.xyz/
+
+This URL is valid until 25 August 2026.
+
 ## Current Scope
 
 - discover venues suitable for remote work and study
