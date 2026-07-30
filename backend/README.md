@@ -507,13 +507,76 @@ updated independently from the backend source image.
 
 ## Running Tests
 
+The backend test suite uses pytest and FastAPI `TestClient`.
+
+Install the backend dependencies first:
+
+```bash
+python -m pip install -r backend/requirements.txt
+```
+
 Run from the repository root:
 
 ```bash
 python -m pytest backend/test
 ```
 
-The test suite covers a large part of the route behavior, including authentication, bookings, favorites, refresh tokens, provider/admin access control, and busyness-related flows.
+You can also run a single test file:
+
+```bash
+python -m pytest backend/test/test_main.py
+```
+
+Run one specific test by name:
+
+```bash
+python -m pytest backend/test/test_main.py -k "busyness"
+```
+
+Use verbose output when debugging failures:
+
+```bash
+python -m pytest backend/test -v
+```
+
+### Test database behavior
+
+The tests do **not** use your local PostgreSQL database. At the top of
+`backend/test/test_main.py`, the test process sets:
+
+```env
+DATABASE_URL=sqlite:///:memory:
+SECRET_KEY=secret_key_for_testing
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+```
+
+The test suite then overrides FastAPI's `get_db` dependency with an in-memory
+SQLite session. This means:
+
+- you do not need PostgreSQL running to execute pytest;
+- you do not need to run the migration scripts before pytest;
+- you do not need to run `seed_venues.py` before pytest;
+- the tests create their own temporary schema and seed data;
+- test data is discarded when the pytest process exits.
+
+The busyness-related tests monkeypatch the model and CSV behavior where needed,
+so they do not require the Google Drive `zone_busyness_model.joblib` artifact.
+
+### Windows PowerShell note
+
+If `pytest` is not found or script execution is restricted, prefer the module
+form:
+
+```powershell
+python -m pytest backend/test
+```
+
+This avoids relying on a shell script shim.
+
+The test suite covers a large part of the route behavior, including
+authentication, bookings, favorites, refresh tokens, provider/admin access
+control, chatbot recommendation behavior, and busyness-related flows.
 
 ## Useful Endpoints
 
