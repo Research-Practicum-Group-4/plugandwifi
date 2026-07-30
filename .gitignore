@@ -69,6 +69,7 @@ instance/
 # Ignore large dataset files to prevent repository bloating
 *.csv
 !docs/Plug & Wifi – Final Sprint Backlog.csv
+!data-ml/models/nyc_venues.csv
 *.dat
 *.out
 *.parquet

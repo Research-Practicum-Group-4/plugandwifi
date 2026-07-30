@@ -12,19 +12,19 @@ settings. The available settings are `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`,
 
 ## Venue Data Import
 
-Run the importer from the `backend` directory. Its default mode validates
-`data/raw/nyc_venues.csv` and reports expected inserts and updates without
-changing the database.
+Run the importer from the repository root. Its default mode validates the
+Google Drive venue file at `data-ml/models/nyc_venues.csv` and reports expected
+inserts and updates without changing the database.
 
 ```bash
-python -m app.seed_venues
+python -m backend.app.seed_venues
 ```
 
 After reviewing the dry-run result, explicitly enable the migration and batched
 upsert with:
 
 ```bash
-python -m app.seed_venues --apply
+python -m backend.app.seed_venues --apply
 ```
 
 The importer adds missing normalized venue columns and uses `venue_id` as the
