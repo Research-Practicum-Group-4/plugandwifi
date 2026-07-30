@@ -68,6 +68,7 @@ instance/
 .ipynb_checkpoints/
 # Ignore large dataset files to prevent repository bloating
 *.csv
+!docs/Plug & Wifi – Final Sprint Backlog.csv
 *.dat
 *.out
 *.parquet
