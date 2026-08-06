@@ -77,10 +77,19 @@ The main planning artefacts are stored under `docs/`:
 | Product backlog | `docs\Plug&Wifi — Product Backlog.md` |
 | Sprint backlog | `docs\Plug & Wifi – Final Sprint Backlog.csv` |
 | Sprint Timeline | `docs\Plug_and_Wifi_Story_Timeline.png` |
-| Project Budget Table | `docs\Plug_and_Wifi_Jira_Actual_Hours.xlsx` |
+| Interview documentation | `docs\P&W_interviews.pdf` |
+| Project budget table | `docs\Plug_and_Wifi_Jira_Actual_Hours_Budget.xlsx` |
+| Sprint burndown chart | `docs\sprint_burndown_chart.pdf` |
 
 Use these files as the source for feature scope, sprint commitments, and
 planning traceability.
+
+## Design Mockups
+
+| Mockup | Link |
+| :--- | :--- |
+| Web mockup | https://feast-prove-58453607.figma.site/ |
+| Mobile mockup | https://drive.google.com/drive/folders/1c0srv0GCkpuj1dDKU6rwPnKIvlWnH4fk?usp=sharing |
 
 ## Service Documentation
 
